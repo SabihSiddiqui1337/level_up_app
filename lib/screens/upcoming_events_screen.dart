@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/theme_service.dart';
 import '../widgets/custom_app_bar.dart';
 import 'main_navigation_screen.dart';
 
@@ -16,36 +15,21 @@ class UpcomingEventsScreen extends StatefulWidget {
 }
 
 class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
-  final _themeService = ThemeService();
   bool _isCopying = false; // Add flag to prevent rapid copying
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _themeService,
-      builder: (context, child) {
-        final isDark = _themeService.isDarkMode;
-        return Scaffold(
-          backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
-          appBar: CustomAppBar(onHomePressed: widget.onHomePressed),
-          body: Container(
-            decoration: BoxDecoration(
-              gradient:
-                  isDark
-                      ? LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          const Color(0xFF1E1E1E),
-                          const Color(0xFF121212),
-                        ],
-                      )
-                      : LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [const Color(0xFFE3F2FD), Colors.white],
-                      ),
-            ),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: CustomAppBar(onHomePressed: widget.onHomePressed),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFE3F2FD), Colors.white],
+          ),
+        ),
             child: SafeArea(
               child: Column(
                 children: [
@@ -91,8 +75,6 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
             ),
           ),
         );
-      },
-    );
   }
 
   Widget _buildSimpleEventCard(

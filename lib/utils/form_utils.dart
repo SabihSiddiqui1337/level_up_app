@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/theme_service.dart';
 
 class FormUtils {
   // Common form field builder
@@ -16,59 +15,48 @@ class FormUtils {
     List<TextInputFormatter>? inputFormatters,
     TextCapitalization textCapitalization = TextCapitalization.none,
   }) {
-    final themeService = ThemeService();
-    return AnimatedBuilder(
-      animation: themeService,
-      builder: (context, child) {
-        final isDark = themeService.isDarkMode;
-        return TextFormField(
-          controller: controller,
-          keyboardType: keyboardType,
-          autocorrect: false,
-          enableSuggestions: false,
-          validator: validator,
-          onChanged: onChanged,
-          obscureText: obscureText,
-          maxLength: maxLength,
-          inputFormatters: inputFormatters,
-          textCapitalization: textCapitalization,
-          style: TextStyle(color: isDark ? Colors.white : Colors.black),
-          decoration: InputDecoration(
-            labelText: label,
-            labelStyle: TextStyle(
-              color: isDark ? Colors.white70 : Colors.black54,
-            ),
-            prefixIcon: Icon(icon, color: const Color(0xFF2196F3)),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: isDark ? const Color(0xFF404040) : Colors.grey[300]!,
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: isDark ? const Color(0xFF404040) : Colors.grey[300]!,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF2196F3), width: 2),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE53E3E), width: 2),
-            ),
-            focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE53E3E), width: 2),
-            ),
-            filled: true,
-            fillColor: isDark ? const Color(0xFF2A2A2A) : Colors.white,
-            counterText: maxLength != null ? '' : null,
-          ),
-        );
-      },
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      autocorrect: false,
+      enableSuggestions: false,
+      validator: validator,
+      onChanged: onChanged,
+      obscureText: obscureText,
+      maxLength: maxLength,
+      inputFormatters: inputFormatters,
+      textCapitalization: textCapitalization,
+      style: const TextStyle(color: Colors.black),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(
+          color: Colors.black54,
+        ),
+        prefixIcon: Icon(icon, color: const Color(0xFF2196F3)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF2196F3), width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE53E3E), width: 2),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE53E3E), width: 2),
+        ),
+        filled: true,
+        fillColor: Colors.white,
+        counterText: maxLength != null ? '' : null,
+      ),
     );
   }
 

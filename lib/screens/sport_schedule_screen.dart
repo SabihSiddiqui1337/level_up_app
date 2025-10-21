@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../widgets/custom_app_bar.dart';
-import '../services/theme_service.dart';
 import '../models/match.dart';
 import '../models/standing.dart';
 import '../models/playoff_match.dart';
@@ -23,7 +22,6 @@ class SportScheduleScreen extends StatefulWidget {
 
 class _SportScheduleScreenState extends State<SportScheduleScreen>
     with SingleTickerProviderStateMixin {
-  final ThemeService _themeService = ThemeService();
   late TabController _tabController;
   bool _isSemiFinalsSelected = true;
 
@@ -257,21 +255,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: CustomAppBar(onHomePressed: widget.onHomePressed),
-      body: AnimatedBuilder(
-        animation: _themeService,
-        builder: (context, child) {
-          final isDark = _themeService.isDarkMode;
-          return Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors:
-                    isDark
-                        ? [const Color(0xFF1E1E1E), const Color(0xFF2A2A2A)]
-                        : [Colors.grey[50]!, Colors.white],
-              ),
-            ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.grey[50]!, Colors.white],
+          ),
+        ),
             child: SafeArea(
               child: Column(
                 children: [
@@ -286,15 +277,12 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           child: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color:
-                                  isDark
-                                      ? const Color(0xFF2A2A2A)
-                                      : Colors.grey[200],
+                              color: Colors.grey[200],
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Icon(
                               Icons.arrow_back,
-                              color: isDark ? Colors.white : Colors.black87,
+                              color: Colors.black87,
                               size: 20,
                             ),
                           ),
@@ -307,7 +295,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : Colors.black87,
+                              color: Colors.black87,
                             ),
                           ),
                         ),
@@ -323,15 +311,15 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // Preliminary Rounds
-                          _buildPreliminaryRounds(isDark),
+                          _buildPreliminaryRounds(),
                           const SizedBox(height: 24),
 
                           // Standings
-                          _buildStandings(isDark),
+                          _buildStandings(),
                           const SizedBox(height: 24),
 
                           // Playoffs
-                          _buildPlayoffs(isDark),
+                          _buildPlayoffs(),
                           const SizedBox(height: 24), // Extra padding at bottom
                         ],
                       ),
@@ -340,13 +328,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 ],
               ),
             ),
-          );
-        },
-      ),
+          )
     );
   }
 
-  Widget _buildPreliminaryRounds(bool isDark) {
+  Widget _buildPreliminaryRounds() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -374,7 +360,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             itemBuilder: (context, index) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: _buildMatchCard(_preliminaryMatches[index], isDark),
+                child: _buildMatchCard(_preliminaryMatches[index]),
               );
             },
           ),
@@ -383,7 +369,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     );
   }
 
-  Widget _buildMatchCard(Match match, bool isDark) {
+  Widget _buildMatchCard(Match match) {
     return Container(
       height: 50,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -517,7 +503,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     );
   }
 
-  Widget _buildStandings(bool isDark) {
+  Widget _buildStandings() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -680,7 +666,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     );
   }
 
-  Widget _buildPlayoffs(bool isDark) {
+  Widget _buildPlayoffs() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -768,14 +754,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
         // Playoff Matches
         if (_isSemiFinalsSelected)
-          ..._semiFinals.map((match) => _buildPlayoffMatch(match, isDark))
+          ..._semiFinals.map((match) => _buildPlayoffMatch(match))
         else
-          ..._finals.map((match) => _buildPlayoffMatch(match, isDark)),
+          ..._finals.map((match) => _buildPlayoffMatch(match)),
       ],
     );
   }
 
-  Widget _buildPlayoffMatch(PlayoffMatch match, bool isDark) {
+  Widget _buildPlayoffMatch(PlayoffMatch match) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: Row(

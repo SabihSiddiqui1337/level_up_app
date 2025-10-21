@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/team_service.dart';
-import '../services/theme_service.dart';
 import '../models/team.dart';
 import 'team_detail_screen.dart';
 
@@ -17,7 +16,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _authService = AuthService();
-  final _themeService = ThemeService();
 
   @override
   void initState() {
@@ -67,31 +65,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final user = _authService.currentUser;
 
-    return AnimatedBuilder(
-      animation: _themeService,
-      builder: (context, child) {
-        final isDark = _themeService.isDarkMode;
-        return Scaffold(
-          backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
-          body: Container(
-            decoration: BoxDecoration(
-              gradient:
-                  isDark
-                      ? LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          const Color(0xFF1E1E1E),
-                          const Color(0xFF121212),
-                        ],
-                      )
-                      : LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [const Color(0xFFE3F2FD), Colors.white],
-                      ),
-            ),
-            child: SafeArea(
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFE3F2FD), Colors.white],
+          ),
+        ),
+        child: SafeArea(
               child: Column(
                 children: [
                   // Header
@@ -211,8 +195,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         );
-      },
-    );
   }
 
   Widget _buildStatCard(
@@ -249,7 +231,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildEmptyState() {
-    final isDark = _themeService.isDarkMode;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32.0),
@@ -265,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(
               'No Teams Yet',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                color: isDark ? Colors.white70 : Colors.grey[600],
+                color: Colors.grey[600],
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -274,7 +255,7 @@ class _HomeScreenState extends State<HomeScreen> {
               'Start by registering your first basketball team!\nGo to the Registration tab to get started.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: isDark ? Colors.white54 : Colors.grey[500],
+                color: Colors.grey[500],
               ),
             ),
           ],
@@ -284,11 +265,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTeamCard(Team team) {
-    final isDark = _themeService.isDarkMode;
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 4,
-      color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+      color: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () => _navigateToTeamDetail(team),
@@ -301,10 +281,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor:
-                        isDark
-                            ? const Color(0xFF0D47A1)
-                            : const Color(0xFFE3F2FD),
+                    backgroundColor: const Color(0xFFE3F2FD),
                     radius: 25,
                     child: Icon(
                       Icons.sports_basketball,
@@ -331,7 +308,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: Theme.of(
                             context,
                           ).textTheme.bodyMedium?.copyWith(
-                            color: isDark ? Colors.white70 : Colors.grey[600],
+                            color: Colors.grey[600],
                           ),
                         ),
                       ],

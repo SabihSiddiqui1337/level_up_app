@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/team.dart';
 import '../models/event.dart';
-import '../services/theme_service.dart';
+import '../services/team_service.dart';
 
 class ProcessRegistrationScreen extends StatefulWidget {
   final Team team;
@@ -20,8 +20,8 @@ class ProcessRegistrationScreen extends StatefulWidget {
 }
 
 class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
-  final _themeService = ThemeService();
   final _discountCodeController = TextEditingController();
+  final _teamService = TeamService();
 
   // Registration fees
   final double _registrationFee = 350.0;
@@ -58,42 +58,28 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _themeService,
-      builder: (context, child) {
-        final isDark = _themeService.isDarkMode;
-        return Scaffold(
-          backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
-          appBar: AppBar(
-            title: const Text(
-              'Process Registration',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            backgroundColor: const Color(0xFF2196F3),
-            elevation: 0,
-            iconTheme: const IconThemeData(color: Colors.white),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text(
+          'Process Registration',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
           ),
-          body: Container(
-            decoration: BoxDecoration(
-              gradient:
-                  isDark
-                      ? LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          const Color(0xFF1E1E1E),
-                          const Color(0xFF121212),
-                        ],
-                      )
-                      : LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [const Color(0xFFE3F2FD), Colors.white],
-                      ),
-            ),
+        ),
+        backgroundColor: const Color(0xFF2196F3),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFE3F2FD), Colors.white],
+          ),
+        ),
             child: SafeArea(
               child: Column(
                 children: [
@@ -368,8 +354,6 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
             ),
           ),
         );
-      },
-    );
   }
 
   Widget _buildPaymentRow(String label, String amount, bool isBold) {
@@ -483,11 +467,14 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
   }
 
   void _processPayment() {
+    // Add the team to the TeamService
+    _teamService.addTeam(widget.team);
+    
     // Handle payment processing
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Payment processed for \$${_getPayableAmount().toStringAsFixed(2)}',
+          'Payment processed for \$${_getPayableAmount().toStringAsFixed(2)}. Team registered successfully!',
         ),
         backgroundColor: const Color(0xFF38A169),
       ),

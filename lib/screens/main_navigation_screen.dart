@@ -7,7 +7,6 @@ import 'game_selection_screen.dart';
 import 'schedule_screen.dart';
 import 'settings_screen.dart';
 import '../services/team_service.dart';
-import '../services/theme_service.dart';
 import '../models/team.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -22,7 +21,6 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late int _currentIndex;
   final TeamService _teamService = TeamService();
-  final ThemeService _themeService = ThemeService();
 
   @override
   void initState() {
@@ -79,49 +77,40 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         // Instead, you could show a confirmation dialog or do nothing
         return false;
       },
-      child: AnimatedBuilder(
-        animation: _themeService,
-        builder: (context, child) {
-          return Scaffold(
-            body: _getCurrentScreen(),
-            bottomNavigationBar: BottomNavigationBar(
-              currentIndex: _currentIndex,
-              onTap: (index) {
-                setState(() {
-                  _currentIndex = index;
-                });
-              },
-              type: BottomNavigationBarType.fixed,
-              backgroundColor:
-                  _themeService.isDarkMode
-                      ? const Color(0xFF1E1E1E)
-                      : Colors.white,
-              selectedItemColor: const Color(0xFF2196F3),
-              unselectedItemColor:
-                  _themeService.isDarkMode ? Colors.white54 : Colors.grey[600],
-              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-              items: const [
-                BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Home'),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.app_registration),
-                  label: 'Registration',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.group),
-                  label: 'My Team',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.schedule),
-                  label: 'Schedule',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.settings),
-                  label: 'Settings',
-                ),
-              ],
+      child: Scaffold(
+        body: _getCurrentScreen(),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF2196F3),
+          unselectedItemColor: Colors.grey[600],
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Home'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.app_registration),
+              label: 'Registration',
             ),
-          );
-        },
+            BottomNavigationBarItem(
+              icon: Icon(Icons.group),
+              label: 'My Team',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.schedule),
+              label: 'Schedule',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings),
+              label: 'Settings',
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/team_service.dart';
-import '../services/theme_service.dart';
 import '../models/team.dart';
 import '../widgets/custom_app_bar.dart';
 import 'team_detail_screen.dart';
@@ -24,7 +23,6 @@ class MyTeamScreen extends StatefulWidget {
 
 class _MyTeamScreenState extends State<MyTeamScreen> {
   final _authService = AuthService();
-  final _themeService = ThemeService();
 
   @override
   void initState() {
@@ -70,31 +68,17 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
   Widget build(BuildContext context) {
     final user = _authService.currentUser;
 
-    return AnimatedBuilder(
-      animation: _themeService,
-      builder: (context, child) {
-        final isDark = _themeService.isDarkMode;
-        return Scaffold(
-          backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
-          appBar: CustomAppBar(onHomePressed: widget.onHomePressed),
-          body: Container(
-            decoration: BoxDecoration(
-              gradient:
-                  isDark
-                      ? LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          const Color(0xFF1E1E1E),
-                          const Color(0xFF121212),
-                        ],
-                      )
-                      : LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [const Color(0xFFE3F2FD), Colors.white],
-                      ),
-            ),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: CustomAppBar(onHomePressed: widget.onHomePressed),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFE3F2FD), Colors.white],
+          ),
+        ),
             child: SafeArea(
               child: Column(
                 children: [
@@ -215,8 +199,6 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
             ),
           ),
         );
-      },
-    );
   }
 
   Widget _buildStatCard(
@@ -278,8 +260,6 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
   }
 
   Widget _buildTeamCard(Team team) {
-    final isDark = _themeService.isDarkMode;
-
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 4,
@@ -317,7 +297,7 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
                             context,
                           ).textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : Colors.black87,
+                            color: Colors.black87,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -326,7 +306,7 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
                           style: Theme.of(
                             context,
                           ).textTheme.bodyMedium?.copyWith(
-                            color: isDark ? Colors.white70 : Colors.grey[600],
+                            color: Colors.grey[600],
                           ),
                         ),
                       ],

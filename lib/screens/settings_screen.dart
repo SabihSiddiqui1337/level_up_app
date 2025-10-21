@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
-import '../services/theme_service.dart';
 import '../widgets/custom_app_bar.dart';
 import 'login_screen.dart';
 import 'team_registration_screen.dart';
@@ -19,32 +18,17 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _authService = AuthService();
-  final _themeService = ThemeService();
-  late String _selectedTheme;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedTheme = _themeService.selectedTheme;
-  }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = _themeService.isDarkMode;
-
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
+      backgroundColor: Colors.white,
       appBar: CustomAppBar(onHomePressed: widget.onHomePressed),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Theme
-            _buildSettingsCard([_buildThemeItem()]),
-
-            const SizedBox(height: 24),
-
             // Person Information
             _buildSettingsCard([
               _buildSettingsItem(
@@ -64,7 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Text(
                 'v1.0.0 + 1',
                 style: TextStyle(
-                  color: isDark ? Colors.white54 : Colors.grey[600],
+                  color: Colors.grey[600],
                   fontSize: 14,
                 ),
               ),
@@ -101,20 +85,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildSettingsCard(List<Widget> children) {
-    final isDark = _themeService.isDarkMode;
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDark ? const Color(0xFF404040) : Colors.grey[200]!,
+          color: Colors.grey[200]!,
         ),
         boxShadow: [
           BoxShadow(
-            color:
-                isDark
-                    ? Colors.black.withOpacity(0.3)
-                    : Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withOpacity(0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -130,20 +110,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     VoidCallback onTap, {
     IconData? trailing,
   }) {
-    final isDark = _themeService.isDarkMode;
     return ListTile(
       leading: Icon(icon, color: const Color(0xFF2196F3), size: 20),
       title: Text(
         title,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w500,
-          color: isDark ? Colors.white : Colors.black87,
+          color: Colors.black87,
         ),
       ),
       trailing: Icon(
         trailing ?? Icons.keyboard_arrow_right,
-        color: isDark ? Colors.white54 : Colors.grey[400],
+        color: Colors.grey[400],
         size: 20,
       ),
       onTap: onTap,
@@ -151,63 +130,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildThemeItem() {
-    final isDark = _themeService.isDarkMode;
-    return ListTile(
-      leading: Icon(Icons.palette, color: const Color(0xFF2196F3), size: 20),
-      title: Text(
-        'Theme',
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-          color: isDark ? Colors.white : Colors.black87,
-        ),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildThemeOption('Light'),
-          const SizedBox(width: 8),
-          _buildThemeOption('Dark'),
-        ],
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-    );
-  }
-
-  Widget _buildThemeOption(String theme) {
-    final isSelected = _selectedTheme == theme;
-    final isDark = _themeService.isDarkMode;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedTheme = theme;
-        });
-        _themeService.setTheme(theme);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color:
-              isSelected
-                  ? const Color(0xFF2196F3)
-                  : (isDark ? const Color(0xFF404040) : Colors.grey[100]),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Text(
-          theme,
-          style: TextStyle(
-            color:
-                isSelected
-                    ? Colors.white
-                    : (isDark ? Colors.white70 : Colors.grey[600]),
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
 
   void _navigateToProfile() async {
     await Navigator.push(
@@ -264,7 +186,6 @@ class ProfileEditScreen extends StatefulWidget {
 
 class _ProfileEditScreenState extends State<ProfileEditScreen> {
   final _authService = AuthService();
-  final _themeService = ThemeService();
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -347,9 +268,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = _themeService.isDarkMode;
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Profile Information'),
         backgroundColor: const Color(0xFF2196F3),
@@ -368,16 +288,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color:
-                      isDark
-                          ? const Color(0xFF2C2C2C)
-                          : const Color(0xFFE3F2FD),
+                  color: const Color(0xFFE3F2FD),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color:
-                        isDark
-                            ? const Color(0xFF404040)
-                            : const Color(0xFF90CAF9),
+                    color: const Color(0xFF90CAF9),
                   ),
                 ),
                 child: Column(
@@ -401,10 +315,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                       _nameController.text.isNotEmpty
                           ? _nameController.text
                           : 'User',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black87,
+                        color: Colors.black87,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -413,7 +327,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                           ? _emailController.text
                           : 'user@example.com',
                       style: TextStyle(
-                        color: isDark ? Colors.white70 : Colors.grey[600],
+                        color: Colors.grey[600],
                         fontSize: 14,
                       ),
                     ),
@@ -501,7 +415,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Widget _buildPhoneField() {
-    final isDark = _themeService.isDarkMode;
     return TextFormField(
       controller: _phoneController,
       keyboardType: TextInputType.phone,
@@ -524,30 +437,26 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         }
         return null;
       },
-      style: TextStyle(color: isDark ? Colors.white : Colors.black),
+      style: const TextStyle(color: Colors.black),
       decoration: InputDecoration(
         labelText: 'Phone Number',
         hintText: 'XXX-XXX-XXXX',
-        labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+        labelStyle: const TextStyle(color: Colors.black54),
         prefixIcon: const Icon(Icons.phone, color: Color(0xFF2196F3)),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: isDark ? const Color(0xFF404040) : Colors.grey[300]!,
-          ),
+          borderSide: BorderSide(color: Colors.grey[300]!),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: isDark ? const Color(0xFF404040) : Colors.grey[300]!,
-          ),
+          borderSide: BorderSide(color: Colors.grey[300]!),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFF2196F3), width: 2),
         ),
         filled: true,
-        fillColor: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+        fillColor: Colors.white,
         counterText: '', // Hide character counter
       ),
     );
@@ -560,36 +469,31 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     TextInputType? keyboardType,
     String? Function(String?)? validator,
   }) {
-    final isDark = _themeService.isDarkMode;
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       autocorrect: false,
       enableSuggestions: false,
       validator: validator,
-      style: TextStyle(color: isDark ? Colors.white : Colors.black),
+      style: const TextStyle(color: Colors.black),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+        labelStyle: const TextStyle(color: Colors.black54),
         prefixIcon: Icon(icon, color: const Color(0xFF2196F3)),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: isDark ? const Color(0xFF404040) : Colors.grey[300]!,
-          ),
+          borderSide: BorderSide(color: Colors.grey[300]!),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: isDark ? const Color(0xFF404040) : Colors.grey[300]!,
-          ),
+          borderSide: BorderSide(color: Colors.grey[300]!),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFF2196F3), width: 2),
         ),
         filled: true,
-        fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey[50],
+        fillColor: Colors.grey[50],
       ),
     );
   }

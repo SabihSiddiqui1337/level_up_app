@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../widgets/custom_app_bar.dart';
-import '../services/theme_service.dart';
 import 'sport_schedule_screen.dart';
 
 class ScheduleScreen extends StatefulWidget {
@@ -13,28 +12,20 @@ class ScheduleScreen extends StatefulWidget {
 }
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
-  final ThemeService _themeService = ThemeService();
   bool _isExpanded = false;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: CustomAppBar(onHomePressed: widget.onHomePressed),
-      body: AnimatedBuilder(
-        animation: _themeService,
-        builder: (context, child) {
-          final isDark = _themeService.isDarkMode;
-          return Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors:
-                    isDark
-                        ? [const Color(0xFF1E1E1E), const Color(0xFF2A2A2A)]
-                        : [Colors.grey[50]!, Colors.white],
-              ),
-            ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.grey[50]!, Colors.white],
+          ),
+        ),
             child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -72,8 +63,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.w600,
-                                    color:
-                                        isDark ? Colors.white : Colors.black87,
+                                    color: Colors.black87,
                                   ),
                                 ),
                                 const SizedBox(width: 4),
@@ -82,10 +72,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                   duration: const Duration(milliseconds: 200),
                                   child: Icon(
                                     Icons.keyboard_arrow_down,
-                                    color:
-                                        isDark
-                                            ? Colors.white70
-                                            : Colors.black54,
+                                    color: Colors.black54,
                                   ),
                                 ),
                               ],
@@ -107,7 +94,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                             const Color(0xFFE67E22), // Orange
                                             Icons.sports_basketball,
                                             'BasketBall Tournament 2025',
-                                            isDark,
                                           ),
                                           const SizedBox(height: 16),
                                           _buildSportCard(
@@ -115,7 +101,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                             const Color(0xFF38A169), // Green
                                             Icons.sports_tennis,
                                             'Thanksgiving Picketball Tournament',
-                                            isDark,
                                           ),
                                         ],
                                       ),
@@ -129,9 +114,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ),
               ),
             ),
-          );
-        },
-      ),
+          )
     );
   }
 
@@ -140,7 +123,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     Color color,
     IconData icon,
     String tournamentTitle,
-    bool isDark,
   ) {
     return GestureDetector(
       onTap: () {
