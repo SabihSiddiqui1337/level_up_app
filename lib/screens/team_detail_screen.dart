@@ -331,7 +331,9 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               backgroundColor: const Color(0xFFE3F2FD),
               radius: 20,
               child: Text(
-                player.jerseyNumber.toString(),
+                player.name.isNotEmpty 
+                    ? player.name.substring(0, 1).toUpperCase()
+                    : 'P',
                 style: TextStyle(
                   color: const Color(0xFF1976D2),
                   fontWeight: FontWeight.bold,

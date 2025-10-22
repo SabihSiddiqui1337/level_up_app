@@ -724,7 +724,10 @@ class _PlayerDialogState extends State<_PlayerDialog> {
                     border: OutlineInputBorder(),
                   ),
                   keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(2),
+                  ],
                   onChanged: (value) {
                     if (value.isNotEmpty) {
                       _formKey.currentState?.validate();
@@ -737,6 +740,9 @@ class _PlayerDialogState extends State<_PlayerDialog> {
                     final age = int.tryParse(value);
                     if (age == null) {
                       return 'Invalid age';
+                    }
+                    if (age < 1 || age > 99) {
+                      return 'Age must be between 1 and 99';
                     }
                     return null;
                   },

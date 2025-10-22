@@ -22,7 +22,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey[50],
       appBar: CustomAppBar(onHomePressed: widget.onHomePressed),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -36,6 +36,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Icons.person,
                 () {
                   _navigateToProfile();
+                },
+                trailing: Icons.keyboard_arrow_right,
+              ),
+            ]),
+
+            const SizedBox(height: 16),
+
+            // App Feedback
+            _buildSettingsCard([
+              _buildSettingsItem(
+                'App Feedback',
+                Icons.feedback,
+                () {
+                  _navigateToAppFeedback();
+                },
+                trailing: Icons.keyboard_arrow_right,
+              ),
+            ]),
+
+            const SizedBox(height: 16),
+
+            // About
+            _buildSettingsCard([
+              _buildSettingsItem(
+                'About',
+                Icons.info,
+                () {
+                  _navigateToAbout();
                 },
                 trailing: Icons.keyboard_arrow_right,
               ),
@@ -138,6 +166,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     // Refresh the screen when returning from profile edit
     setState(() {});
+  }
+
+  void _navigateToAppFeedback() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AppFeedbackScreen()),
+    );
+  }
+
+  void _navigateToAbout() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AboutScreen()),
+    );
   }
 
   void _logout() {
@@ -495,6 +537,236 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         filled: true,
         fillColor: Colors.grey[50],
       ),
+    );
+  }
+}
+
+class AppFeedbackScreen extends StatefulWidget {
+  const AppFeedbackScreen({super.key});
+
+  @override
+  State<AppFeedbackScreen> createState() => _AppFeedbackScreenState();
+}
+
+class _AppFeedbackScreenState extends State<AppFeedbackScreen> {
+  final _feedbackController = TextEditingController();
+
+  @override
+  void dispose() {
+    _feedbackController.dispose();
+    super.dispose();
+  }
+
+  void _submitFeedback() {
+    if (_feedbackController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your feedback'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Thank you for your feedback!'),
+        backgroundColor: Colors.green,
+      ),
+    );
+
+    // Navigate back to settings
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        title: const Text('App Feedback'),
+        backgroundColor: const Color(0xFF2196F3),
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Summarize your feedback for the Level Up Sports App',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 24),
+            TextField(
+              controller: _feedbackController,
+              maxLines: 8,
+              decoration: InputDecoration(
+                hintText: 'Enter your feedback here...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _submitFeedback,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2196F3),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Submit',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AboutScreen extends StatelessWidget {
+  const AboutScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        title: const Text('About'),
+        backgroundColor: const Color(0xFF2196F3),
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+              // App Icon
+              Center(
+                child: Container(
+                  width: 85,
+                  height: 85,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.2),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Image.asset(
+                      'assets/level_up_sport.png',
+                      width: 85,
+                      height: 85,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 15),
+            
+            // Version
+            Center(
+              child: Text(
+                'Version: v1.0.0 + 1',  
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            
+            // Rate Us as a settings row
+            _buildSettingsCard([
+              _buildSettingsItem(
+                'Rate Us',
+                Icons.star,
+                () {
+                  // Handle rate us functionality
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Thank you for rating our app!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                },
+                trailing: Icons.keyboard_arrow_right,
+              ),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsCard(List<Widget> children) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.grey[200]!,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(children: children),
+    );
+  }
+
+  Widget _buildSettingsItem(
+    String title,
+    IconData icon,
+    VoidCallback onTap, {
+    IconData? trailing,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: const Color(0xFF2196F3), size: 20),
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          color: Colors.black87,
+        ),
+      ),
+      trailing: Icon(
+        trailing ?? Icons.keyboard_arrow_right,
+        color: Colors.grey[400],
+        size: 20,
+      ),
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     );
   }
 }
