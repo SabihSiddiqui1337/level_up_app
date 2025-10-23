@@ -7,7 +7,9 @@ import 'game_selection_screen.dart';
 import 'schedule_screen.dart';
 import 'settings_screen.dart';
 import '../services/team_service.dart';
+import '../services/pickleball_team_service.dart';
 import '../models/team.dart';
+import '../models/pickleball_team.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   final int initialIndex;
@@ -21,6 +23,7 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late int _currentIndex;
   final TeamService _teamService = TeamService();
+  final PickleballTeamService _pickleballTeamService = PickleballTeamService();
 
   @override
   void initState() {
@@ -33,6 +36,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       'Main navigation received team: ${team.name} with ${team.players.length} players',
     ); // Debug print
     _teamService.addTeam(team);
+    setState(() {
+      _currentIndex = 2; // Switch to My Team screen (now at index 2)
+    });
+    print('Switched to My Team screen'); // Debug print
+  }
+
+  void _addPickleballTeam(PickleballTeam team) {
+    print(
+      'Main navigation received pickleball team: ${team.name} with ${team.players.length} players',
+    ); // Debug print
+    _pickleballTeamService.addTeam(team);
     setState(() {
       _currentIndex = 2; // Switch to My Team screen (now at index 2)
     });
@@ -52,11 +66,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       case 1:
         return GameSelectionScreen(
           onSave: _addTeam,
+          onSavePickleball: _addPickleballTeam,
           onHomePressed: _navigateToHome,
         );
       case 2:
         return MyTeamScreen(
           teamService: _teamService,
+          pickleballTeamService: _pickleballTeamService,
           onHomePressed: _navigateToHome,
         );
       case 3:
@@ -97,10 +113,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               icon: Icon(Icons.app_registration),
               label: 'Registration',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.group),
-              label: 'My Team',
-            ),
+            BottomNavigationBarItem(icon: Icon(Icons.group), label: 'My Team'),
             BottomNavigationBarItem(
               icon: Icon(Icons.schedule),
               label: 'Schedule',

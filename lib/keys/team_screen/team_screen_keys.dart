@@ -15,7 +15,7 @@ class TeamScreenKeys {
   static const String registerFirstTeam = 'Register Your First Team';
 
   // Team Details
-  static const String coachPrefix = 'Coach:';
+  static const String coachPrefix = 'Team Captain:';
   static const String playersCount = 'players';
   static const String registeredPrefix = 'Registered:';
 

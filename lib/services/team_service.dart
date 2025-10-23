@@ -107,7 +107,7 @@ class TeamService {
           coachEmail: 'coach@levelup.com',
           players: [],
           registrationDate: DateTime.now().subtract(const Duration(days: 5)),
-          division: 'Adult (18-35)',
+          division: 'Adult 18+',
         ),
       ]);
     }

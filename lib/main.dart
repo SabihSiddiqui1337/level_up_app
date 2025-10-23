@@ -3,9 +3,18 @@ import 'screens/login_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'services/auth_service.dart';
 import 'services/team_service.dart';
+import 'services/pickleball_team_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Add global error handling to prevent keyboard event crashes
+  FlutterError.onError = (FlutterErrorDetails details) {
+    // Log the error but don't crash the app
+    print('Flutter Error: ${details.exception}');
+    print('Stack trace: ${details.stack}');
+  };
+
   runApp(const LevelUpApp());
 }
 
@@ -87,6 +96,7 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final AuthService _authService = AuthService();
   final TeamService _teamService = TeamService();
+  final PickleballTeamService _pickleballTeamService = PickleballTeamService();
   bool _isLoading = true;
 
   @override
@@ -98,6 +108,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<void> _initializeServices() async {
     await _authService.initialize();
     await _teamService.loadTeams();
+    await _pickleballTeamService.loadTeams();
     setState(() {
       _isLoading = false;
     });

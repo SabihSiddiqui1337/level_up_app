@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'team_registration_screen.dart';
+import 'pickleball_team_registration_screen.dart';
 import '../models/team.dart';
+import '../models/pickleball_team.dart';
 import '../widgets/custom_app_bar.dart';
 
 class GameSelectionScreen extends StatelessWidget {
   final Function(Team) onSave;
+  final Function(PickleballTeam)? onSavePickleball;
   final VoidCallback? onHomePressed;
 
   const GameSelectionScreen({
     super.key,
     required this.onSave,
+    this.onSavePickleball,
     this.onHomePressed,
   });
 
@@ -48,7 +52,7 @@ class GameSelectionScreen extends StatelessWidget {
                     'Pickleball',
                     Icons.sports_tennis,
                     const Color(0xFF38A169),
-                    () => _showComingSoon(context),
+                    () => _navigateToPickleballRegistration(context),
                   ),
                 ],
               ),
@@ -128,23 +132,20 @@ class GameSelectionScreen extends StatelessWidget {
     );
   }
 
-  void _showComingSoon(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Coming Soon'),
-          content: const Text(
-            'Pickleball registration will be available soon!',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
+  void _navigateToPickleballRegistration(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (context) => PickleballTeamRegistrationScreen(
+              onSave: (team) {
+                if (onSavePickleball != null) {
+                  onSavePickleball!(team);
+                }
+                Navigator.pop(context); // Go back to home screen
+              },
             ),
-          ],
-        );
-      },
+      ),
     );
   }
 }

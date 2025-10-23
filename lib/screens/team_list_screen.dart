@@ -255,7 +255,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
                           ),
                         ),
                         Text(
-                          '${TeamScreenKeys.coachPrefix} ${team.coachName}',
+                          'Team Captain: ${team.coachName}',
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(color: Colors.grey[600]),
                         ),

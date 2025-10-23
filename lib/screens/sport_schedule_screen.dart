@@ -4,6 +4,7 @@ import '../models/match.dart';
 import '../models/standing.dart';
 import '../models/playoff_match.dart';
 import '../services/team_service.dart';
+import '../services/pickleball_team_service.dart';
 import '../keys/schedule_screen/schedule_screen_keys.dart';
 
 class SportScheduleScreen extends StatefulWidget {
@@ -26,11 +27,68 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
   final TeamService _teamService = TeamService();
+  final PickleballTeamService _pickleballTeamService = PickleballTeamService();
+
+  // Division selection state
+  String? _selectedDivision;
+  List<String> _availableDivisions = [];
+
+  // Cache for stable match generation
+  final Map<String, List<Match>> _matchesCache = {};
+
+  // Get teams based on sport type and selected division
+  List<dynamic> get _teams {
+    List<dynamic> allTeams = [];
+    if (widget.sportName.toLowerCase().contains('basketball')) {
+      allTeams = _teamService.teams;
+    } else if (widget.sportName.toLowerCase().contains('pickleball')) {
+      allTeams = _pickleballTeamService.teams;
+    }
+
+    // Filter by selected division if one is selected
+    if (_selectedDivision != null) {
+      return allTeams
+          .where((team) => team.division == _selectedDivision)
+          .toList();
+    }
+
+    return allTeams;
+  }
+
+  // Update available divisions
+  void _updateDivisions() {
+    List<dynamic> allTeams = [];
+    if (widget.sportName.toLowerCase().contains('basketball')) {
+      allTeams = _teamService.teams;
+    } else if (widget.sportName.toLowerCase().contains('pickleball')) {
+      allTeams = _pickleballTeamService.teams;
+    }
+
+    Set<String> divisions =
+        allTeams.map((team) => team.division as String).toSet();
+    _availableDivisions = divisions.toList()..sort();
+
+    // If no division is selected or selected division is not available, select first one
+    if (_selectedDivision == null ||
+        !_availableDivisions.contains(_selectedDivision)) {
+      _selectedDivision =
+          _availableDivisions.isNotEmpty ? _availableDivisions.first : null;
+    }
+  }
 
   // Get teams from service instead of hardcoded data
   List<Match> get _preliminaryMatches {
-    final teams = _teamService.teams;
+    final teams = _teams;
     if (teams.isEmpty) return [];
+
+    // Create a cache key based on teams and division
+    String cacheKey =
+        '${widget.sportName}_${_selectedDivision ?? 'all'}_${teams.map((t) => t.id).join('_')}';
+
+    // Return cached matches if available
+    if (_matchesCache.containsKey(cacheKey)) {
+      return _matchesCache[cacheKey]!;
+    }
 
     // Generate matches from registered teams
     List<Match> matches = [];
@@ -38,55 +96,132 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     int courtNumber = 1;
     int timeSlot = 10; // Start at 10 AM
 
-    if (teams.length == 1) {
-      // If only 1 team, show them as waiting for opponent
-      matches.add(
-        Match(
-          id: '${matchId++}',
-          day: 'Day 1',
-          court: 'Court $courtNumber',
-          time: '$timeSlot:00 AM',
-          team1: teams[0].name,
-          team2: 'Waiting for Opponent',
-          team1Status: 'Ready',
-          team2Status: 'TBD',
-          team1Score: 0,
-          team2Score: 0,
-        ),
-      );
-    } else {
-      // Create matches between all teams (round-robin style)
-      for (int i = 0; i < teams.length; i++) {
-        for (int j = i + 1; j < teams.length; j++) {
-          matches.add(
-            Match(
-              id: '${matchId++}',
-              day: 'Day 1',
-              court: 'Court $courtNumber',
-              time: '$timeSlot:00 AM',
-              team1: teams[i].name,
-              team2: teams[j].name,
-              team1Status: 'Not Checked-in',
-              team2Status: 'Not Checked-in',
-              team1Score: 0,
-              team2Score: 0,
-            ),
-          );
+    // Group teams by division
+    Map<String, List<dynamic>> teamsByDivision = {};
+    for (var team in teams) {
+      String division = team.division;
+      if (!teamsByDivision.containsKey(division)) {
+        teamsByDivision[division] = [];
+      }
+      teamsByDivision[division]!.add(team);
+    }
 
-          // Alternate courts and time slots
-          courtNumber = (courtNumber % 3) + 1; // 3 courts max
-          if (courtNumber == 1) {
-            timeSlot += 1; // Move to next hour
+    // Generate matches for each division separately
+    for (String division in teamsByDivision.keys) {
+      List<dynamic> divisionTeams = teamsByDivision[division]!;
+
+      if (divisionTeams.length == 1) {
+        // If only 1 team in division, show them as waiting for opponent
+        matches.add(
+          Match(
+            id: '${matchId++}',
+            day: 'Day 1',
+            court: 'Court $courtNumber',
+            time: '$timeSlot:00 AM',
+            team1: divisionTeams[0].name,
+            team2: 'Waiting for Opponent',
+            team1Status: 'Ready',
+            team2Status: 'TBD',
+            team1Score: 0,
+            team2Score: 0,
+          ),
+        );
+        courtNumber = (courtNumber % 3) + 1;
+        if (courtNumber == 1) timeSlot += 1;
+      } else {
+        // Use deterministic sorting instead of random shuffle for stability
+        List<dynamic> sortedTeams = List.from(divisionTeams);
+        sortedTeams.sort(
+          (a, b) => a.name.compareTo(b.name),
+        ); // Sort by name for consistency
+
+        // Create a list to track which teams have played each other
+        Map<String, Set<String>> playedAgainst = {};
+        for (var team in sortedTeams) {
+          playedAgainst[team.name] = <String>{};
+        }
+
+        // Generate exactly 3 games per team, ensuring no team plays the same opponent twice
+        Map<String, int> gamesPlayed = {};
+        for (var team in sortedTeams) {
+          gamesPlayed[team.name] = 0;
+        }
+
+        int maxAttempts = 100; // Prevent infinite loops
+        int attempts = 0;
+
+        while (attempts < maxAttempts) {
+          // Find teams that need more games
+          List<dynamic> teamsNeedingGames =
+              sortedTeams.where((team) => gamesPlayed[team.name]! < 3).toList();
+
+          if (teamsNeedingGames.isEmpty) break;
+
+          // Try to create a match between two teams that haven't played each other
+          bool matchCreated = false;
+          for (int i = 0; i < teamsNeedingGames.length && !matchCreated; i++) {
+            for (
+              int j = i + 1;
+              j < teamsNeedingGames.length && !matchCreated;
+              j++
+            ) {
+              String team1Name = teamsNeedingGames[i].name;
+              String team2Name = teamsNeedingGames[j].name;
+
+              // Check if these teams haven't played each other yet
+              if (!playedAgainst[team1Name]!.contains(team2Name) &&
+                  !playedAgainst[team2Name]!.contains(team1Name)) {
+                // Create the match
+                matches.add(
+                  Match(
+                    id: '${matchId++}',
+                    day: 'Day 1',
+                    court: 'Court $courtNumber',
+                    time: '$timeSlot:00 AM',
+                    team1: team1Name,
+                    team2: team2Name,
+                    team1Status: 'Not Checked-in',
+                    team2Status: 'Not Checked-in',
+                    team1Score: 0,
+                    team2Score: 0,
+                  ),
+                );
+
+                // Update tracking
+                playedAgainst[team1Name]!.add(team2Name);
+                playedAgainst[team2Name]!.add(team1Name);
+                gamesPlayed[team1Name] = gamesPlayed[team1Name]! + 1;
+                gamesPlayed[team2Name] = gamesPlayed[team2Name]! + 1;
+
+                // Alternate courts and time slots
+                courtNumber = (courtNumber % 3) + 1; // 3 courts max
+                if (courtNumber == 1) {
+                  timeSlot += 1; // Move to next hour
+                }
+
+                matchCreated = true;
+              }
+            }
           }
+
+          if (!matchCreated) {
+            // If we can't create more matches with current constraints, break
+            break;
+          }
+
+          attempts++;
         }
       }
     }
+
+    // Cache the matches for stability
+    _matchesCache[cacheKey] = matches;
     return matches;
   }
 
   // Get standings from registered teams
   List<Standing> get _standings {
-    final teams = _teamService.teams;
+    final teams = _teams;
     if (teams.isEmpty) return [];
 
     // Generate standings from registered teams with initial stats
@@ -107,10 +242,16 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       );
     }
 
-    // Sort by points (descending), then by wins (descending)
+    // Sort by points (descending), then by wins (descending), then by losses (ascending)
     standings.sort((a, b) {
+      // First priority: Points (higher is better)
       if (b.points != a.points) return b.points.compareTo(a.points);
-      return b.wins.compareTo(a.wins);
+
+      // Second priority: Wins (higher is better)
+      if (b.wins != a.wins) return b.wins.compareTo(a.wins);
+
+      // Third priority: Losses (lower is better)
+      return a.losses.compareTo(b.losses);
     });
 
     // Update ranks after sorting
@@ -133,7 +274,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   // Get semi-finals from registered teams
   List<PlayoffMatch> get _semiFinals {
-    final teams = _teamService.teams;
+    final teams = _teams;
     if (teams.length < 4) return [];
 
     return [
@@ -162,7 +303,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   // Get finals from registered teams
   List<PlayoffMatch> get _finals {
-    final teams = _teamService.teams;
+    final teams = _teams;
     if (teams.length < 2) return [];
 
     return [
@@ -186,10 +327,19 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     _loadTeams();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload teams when screen becomes visible
+    _loadTeams();
+  }
+
   Future<void> _loadTeams() async {
     await _teamService.loadTeams();
+    await _pickleballTeamService.loadTeams();
     if (mounted) {
       setState(() {
+        _updateDivisions();
         // Trigger rebuild to show updated teams
       });
     }
@@ -253,6 +403,80 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 ),
               ),
 
+              // Division Dropdown
+              if (_availableDivisions.isNotEmpty) ...[
+                Container(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFF2196F3),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedDivision,
+                      isExpanded: true,
+                      icon: const Icon(
+                        Icons.keyboard_arrow_down,
+                        color: Color(0xFF2196F3),
+                        size: 20,
+                      ),
+                      hint: const Text(
+                        'Select Division',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      items:
+                          _availableDivisions.map((String division) {
+                            return DropdownMenuItem<String>(
+                              value: division,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                                child: Text(
+                                  division,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          _selectedDivision = newValue;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+              ],
+
               // Tab Bar
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -273,16 +497,47 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                   unselectedLabelColor: Colors.grey[600],
                   labelStyle: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    fontSize: 12,
                   ),
                   unselectedLabelStyle: const TextStyle(
                     fontWeight: FontWeight.w500,
-                    fontSize: 14,
+                    fontSize: 12,
                   ),
+                  isScrollable: false,
                   tabs: const [
-                    Tab(text: 'Preliminary Rounds'),
-                    Tab(text: 'Standings'),
-                    Tab(text: 'Playoffs'),
+                    Tab(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: Text(
+                          'Preliminary',
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    Tab(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: Text(
+                          'Standings',
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    Tab(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: Text(
+                          'Playoffs',
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -328,11 +583,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       height: 50,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFF2196F3),
+        color: Colors.grey[600],
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2196F3).withOpacity(0.2),
+            color: Colors.grey[600]!.withOpacity(0.2),
             blurRadius: 2,
             offset: const Offset(0, 1),
           ),
@@ -399,7 +654,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 Text(
                   '${ScheduleScreenKeys.scorePrefix} ${match.team1Score}',
                   style: const TextStyle(
-                    color: Color(0xFFE67E22), // Orange
+                    color: Colors.white,
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
                   ),
@@ -414,7 +669,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             child: Text(
               ScheduleScreenKeys.vsText,
               style: TextStyle(
-                color: Color(0xFFFFFF00), // Bright yellow
+                color: Colors.white,
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
               ),
@@ -444,7 +699,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 Text(
                   '${ScheduleScreenKeys.scorePrefix} ${match.team2Score}',
                   style: const TextStyle(
-                    color: Color(0xFFE67E22), // Orange
+                    color: Colors.white,
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
                   ),
@@ -465,7 +720,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               ? _buildEmptyStandingsState()
               : Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2196F3),
+                  color: Colors.grey[600],
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
@@ -473,9 +728,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     // Header Row
                     Container(
                       padding: const EdgeInsets.all(12),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF1976D2),
-                        borderRadius: BorderRadius.only(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[700],
+                        borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(8),
                           topRight: Radius.circular(8),
                         ),
@@ -506,10 +761,30 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   }
 
   Widget _buildTableHeader(String text, int flex) {
+    // For stats columns (W, L, D, PTS), use fixed width
+    if (flex == 1) {
+      return SizedBox(
+        width: 30,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    // For team name column, use Expanded
     return Expanded(
       flex: flex,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
         child: Text(
           text,
           style: const TextStyle(
@@ -525,7 +800,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   Widget _buildStandingRow(Standing standing) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(color: Colors.white.withOpacity(0.1), width: 1),
@@ -535,8 +810,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         children: [
           // Rank
           Container(
-            width: 28,
-            height: 28,
+            width: 24,
+            height: 24,
             decoration: const BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
@@ -544,27 +819,27 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             child: Center(
               child: Text(
                 '${standing.rank}',
-                style: const TextStyle(
-                  color: Color(0xFF2196F3),
+                style: TextStyle(
+                  color: Colors.grey[800],
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: 11,
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
 
           // Team Logo (placeholder)
           Container(
-            width: 28,
-            height: 28,
+            width: 24,
+            height: 24,
             decoration: const BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.sports, color: Color(0xFF2196F3), size: 16),
+            child: Icon(Icons.sports, color: Colors.grey[800], size: 14),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
 
           // Team Name
           Expanded(
@@ -574,36 +849,62 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w600,
-                fontSize: 13,
+                fontSize: 12,
               ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
 
-          // Stats - only W, L, D, PTS
-          _buildStatText('${standing.wins}', 1),
-          _buildStatText('${standing.losses}', 1),
-          _buildStatText('${standing.draws}', 1),
-          _buildStatText('${standing.points}', 1),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatText(String text, int flex) {
-    return Expanded(
-      flex: flex,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-        child: Text(
-          text,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
+          // Stats - only W, L, D, PTS with consistent width
+          SizedBox(
+            width: 30,
+            child: Text(
+              '${standing.wins}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ),
-          textAlign: TextAlign.center,
-        ),
+          SizedBox(
+            width: 30,
+            child: Text(
+              '${standing.losses}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          SizedBox(
+            width: 30,
+            child: Text(
+              '${standing.draws}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          SizedBox(
+            width: 30,
+            child: Text(
+              '${standing.points}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
       ),
     );
   }

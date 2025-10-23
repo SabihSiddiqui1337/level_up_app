@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import '../models/team.dart';
-import 'team_registration_screen.dart';
+import '../models/pickleball_team.dart';
+import 'pickleball_team_registration_screen.dart';
 
-class TeamDetailScreen extends StatefulWidget {
-  final Team team;
-  final Function(Team) onUpdate;
+class PickleballTeamDetailScreen extends StatefulWidget {
+  final PickleballTeam team;
+  final Function(PickleballTeam) onUpdate;
   final Function(String) onDelete;
 
-  const TeamDetailScreen({
+  const PickleballTeamDetailScreen({
     super.key,
     required this.team,
     required this.onUpdate,
@@ -15,11 +15,13 @@ class TeamDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<TeamDetailScreen> createState() => _TeamDetailScreenState();
+  State<PickleballTeamDetailScreen> createState() =>
+      _PickleballTeamDetailScreenState();
 }
 
-class _TeamDetailScreenState extends State<TeamDetailScreen> {
-  late Team _currentTeam;
+class _PickleballTeamDetailScreenState
+    extends State<PickleballTeamDetailScreen> {
+  late PickleballTeam _currentTeam;
 
   @override
   void initState() {
@@ -32,7 +34,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_currentTeam.name),
-        backgroundColor: const Color(0xFF1976D2),
+        backgroundColor: const Color(0xFF4CAF50),
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -66,7 +68,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [const Color(0xFFE3F2FD), Colors.white],
+            colors: [const Color(0xFFE8F5E8), Colors.white],
           ),
         ),
         child: SingleChildScrollView(
@@ -85,11 +87,11 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   child: Column(
                     children: [
                       CircleAvatar(
-                        backgroundColor: const Color(0xFFE3F2FD),
+                        backgroundColor: const Color(0xFFE8F5E8),
                         radius: 40,
                         child: Icon(
-                          Icons.sports_basketball,
-                          color: const Color(0xFF1976D2),
+                          Icons.sports_tennis,
+                          color: const Color(0xFF4CAF50),
                           size: 50,
                         ),
                       ),
@@ -100,7 +102,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                           context,
                         ).textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1976D2),
+                          color: const Color(0xFF4CAF50),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -110,13 +112,13 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE3F2FD),
+                          color: const Color(0xFFE8F5E8),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
                           _currentTeam.division,
                           style: TextStyle(
-                            color: const Color(0xFF1976D2),
+                            color: const Color(0xFF4CAF50),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -140,7 +142,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.person, color: const Color(0xFF1976D2)),
+                          Icon(Icons.person, color: const Color(0xFF4CAF50)),
                           const SizedBox(width: 8),
                           Text(
                             'Team Captain Information',
@@ -148,7 +150,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                               context,
                             ).textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1976D2),
+                              color: const Color(0xFF4CAF50),
                             ),
                           ),
                         ],
@@ -188,7 +190,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.people, color: const Color(0xFF1976D2)),
+                          Icon(Icons.people, color: const Color(0xFF4CAF50)),
                           const SizedBox(width: 8),
                           Text(
                             'Players (${_currentTeam.players.length})',
@@ -196,7 +198,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                               context,
                             ).textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1976D2),
+                              color: const Color(0xFF4CAF50),
                             ),
                           ),
                         ],
@@ -246,7 +248,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                         children: [
                           Icon(
                             Icons.calendar_today,
-                            color: const Color(0xFF1976D2),
+                            color: const Color(0xFF4CAF50),
                           ),
                           const SizedBox(width: 8),
                           Text(
@@ -255,7 +257,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                               context,
                             ).textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1976D2),
+                              color: const Color(0xFF4CAF50),
                             ),
                           ),
                         ],
@@ -323,14 +325,14 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: const Color(0xFFE3F2FD),
+              backgroundColor: const Color(0xFFE8F5E8),
               radius: 20,
               child: Text(
                 player.name.isNotEmpty
                     ? player.name.substring(0, 1).toUpperCase()
                     : 'P',
                 style: TextStyle(
-                  color: const Color(0xFF1976D2),
+                  color: const Color(0xFF4CAF50),
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                 ),
@@ -352,15 +354,6 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                 ],
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  'Age: ${player.age}',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                ),
-              ],
-            ),
           ],
         ),
       ),
@@ -372,7 +365,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
       context,
       MaterialPageRoute(
         builder:
-            (context) => TeamRegistrationScreen(
+            (context) => PickleballTeamRegistrationScreen(
               team: _currentTeam,
               onSave: (updatedTeam) {
                 widget.onUpdate(updatedTeam);

@@ -61,25 +61,41 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
   final _coachEmailController = TextEditingController();
 
   final List<Player> _players = [];
-  String _selectedDivision = 'Adult (18-35)';
+  String _selectedDivision = 'Adult 18+';
   bool _hasUnsavedChanges = false;
   bool _isSaving = false; // Add flag to prevent rapid saving
 
-  final List<String> _divisions = [
-    'Youth (Under 18)',
-    'Adult (18-35)',
-    'Senior (35+)',
-  ];
+  final List<String> _divisions = ['Youth (18 or under)', 'Adult 18+'];
 
   @override
   void initState() {
     super.initState();
+
+    // Add a small delay to ensure proper initialization and prevent keyboard event issues
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeForm();
+    });
+  }
+
+  void _initializeForm() {
     if (widget.team != null) {
       _teamNameController.text = widget.team!.name;
       _coachNameController.text = widget.team!.coachName;
       _coachPhoneController.text = widget.team!.coachPhone;
       _coachEmailController.text = widget.team!.coachEmail;
-      _selectedDivision = widget.team!.division;
+
+      // Map old division values to new ones
+      String existingDivision = widget.team!.division;
+      if (existingDivision == 'Adult (18-35)' ||
+          existingDivision == 'Adult 18+') {
+        _selectedDivision = 'Adult 18+';
+      } else if (existingDivision == 'Youth (18 or under)') {
+        _selectedDivision = 'Youth (18 or under)';
+      } else {
+        // Default to Adult 18+ if division doesn't match
+        _selectedDivision = 'Adult 18+';
+      }
+
       _players.addAll(widget.team!.players);
     }
 
@@ -100,10 +116,16 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
   }
 
   void _onFormChanged() {
-    if (!_hasUnsavedChanges) {
-      setState(() {
-        _hasUnsavedChanges = true;
-      });
+    // Add defensive programming to prevent keyboard event issues
+    if (mounted && !_hasUnsavedChanges) {
+      try {
+        setState(() {
+          _hasUnsavedChanges = true;
+        });
+      } catch (e) {
+        // Handle any potential state update issues
+        print('Form change handler error: $e');
+      }
     }
   }
 
@@ -113,6 +135,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
       context: context,
       builder:
           (context) => _PlayerDialog(
+            selectedDivision: _selectedDivision,
             onSave: (player) {
               print('Adding player to team: ${player.name}'); // Debug print
               setState(() {
@@ -131,6 +154,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
       builder:
           (context) => _PlayerDialog(
             player: _players[index],
+            selectedDivision: _selectedDivision,
             onSave: (player) {
               setState(() {
                 _players[index] = player;
@@ -205,20 +229,30 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         address: '123 Main Street,\nSugar Land, TX\n77498',
       );
 
-      // Navigate to process registration screen
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder:
-              (context) => ProcessRegistrationScreen(team: team, event: event),
-        ),
-      );
+      // If editing an existing team, call onSave callback
+      if (widget.team != null && widget.onSave != null) {
+        widget.onSave!(team);
+        setState(() {
+          _hasUnsavedChanges = false;
+          _isSaving = false;
+        });
+      } else {
+        // Navigate to process registration screen for new teams
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (context) =>
+                    ProcessRegistrationScreen(team: team, event: event),
+          ),
+        );
 
-      // Reset unsaved changes flag
-      setState(() {
-        _hasUnsavedChanges = false;
-        _isSaving = false;
-      });
+        // Reset unsaved changes flag
+        setState(() {
+          _hasUnsavedChanges = false;
+          _isSaving = false;
+        });
+      }
     } else if (_players.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -324,7 +358,10 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                           onChanged: (String? newValue) {
                             setState(() {
                               _selectedDivision = newValue!;
+                              _hasUnsavedChanges = true;
                             });
+                            // Validate existing players against new division
+                            _validatePlayersForDivision();
                           },
                         ),
                       ],
@@ -333,7 +370,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Coach Information Card
+                // Team Captain Information Card
                 Card(
                   elevation: 4,
                   shape: RoundedRectangleBorder(
@@ -345,7 +382,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Coach Information',
+                          'Team Captain Information',
                           style: Theme.of(
                             context,
                           ).textTheme.headlineSmall?.copyWith(
@@ -360,7 +397,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                           autocorrect: false,
                           enableSuggestions: false,
                           decoration: const InputDecoration(
-                            labelText: 'Coach Name',
+                            labelText: 'Team Captain Name',
                             prefixIcon: Icon(Icons.person),
                             border: OutlineInputBorder(),
                           ),
@@ -372,7 +409,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                           },
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'Please enter coach name';
+                              return 'Please enter team captain name';
                             }
                             return null;
                           },
@@ -383,7 +420,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                           autocorrect: false,
                           enableSuggestions: false,
                           decoration: const InputDecoration(
-                            labelText: 'Phone Number',
+                            labelText: 'Captain Phone Number',
                             prefixIcon: Icon(Icons.phone),
                             border: OutlineInputBorder(),
                             hintText: 'XXX-XXX-XXXX',
@@ -405,7 +442,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                           },
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'Please enter phone number';
+                              return 'Please enter captain phone number';
                             }
                             // Remove dashes for validation
                             final digitsOnly = value.replaceAll('-', '');
@@ -421,7 +458,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                           autocorrect: false,
                           enableSuggestions: false,
                           decoration: const InputDecoration(
-                            labelText: 'Email',
+                            labelText: 'Captain Email',
                             prefixIcon: Icon(Icons.email),
                             border: OutlineInputBorder(),
                           ),
@@ -434,7 +471,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                           },
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'Please enter email';
+                              return 'Please enter captain email';
                             }
                             if (!value.contains('@')) {
                               return 'Please enter a valid email';
@@ -590,6 +627,87 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
     );
   }
 
+  void _validatePlayersForDivision() {
+    // Check if any existing players don't match the new division
+    List<Player> playersToRemove = [];
+
+    for (int i = 0; i < _players.length; i++) {
+      final player = _players[i];
+      bool isValid = true;
+
+      if (_selectedDivision == 'Youth (18 or under)' && player.age > 18) {
+        isValid = false;
+      } else if (_selectedDivision == 'Adult 18+' && player.age < 18) {
+        isValid = false;
+      }
+
+      if (!isValid) {
+        playersToRemove.add(player);
+      }
+    }
+
+    // Show confirmation dialog if players need to be removed
+    if (playersToRemove.isNotEmpty) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Division Change'),
+            content: Text(
+              'Changing to "$_selectedDivision" will remove ${playersToRemove.length} player(s) who don\'t meet the age requirements:\n\n'
+              '${playersToRemove.map((p) => '• ${p.name} (age ${p.age})').join('\n')}\n\n'
+              'Do you want to continue?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  // Revert division change
+                  setState(() {
+                    _selectedDivision =
+                        _selectedDivision == 'Youth (18 or under)'
+                            ? 'Adult 18+'
+                            : 'Youth (18 or under)';
+                  });
+                },
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  // Remove incompatible players
+                  setState(() {
+                    for (var player in playersToRemove) {
+                      _players.remove(player);
+                    }
+                    _hasUnsavedChanges = true;
+                  });
+
+                  // Show confirmation
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '${playersToRemove.length} player(s) removed due to age requirements for $_selectedDivision division',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      backgroundColor: Colors.orange,
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Remove Players'),
+              ),
+            ],
+          );
+        },
+      );
+    }
+  }
+
   Future<bool> _onWillPop() async {
     if (!_hasUnsavedChanges) {
       return true; // Allow navigation if no changes
@@ -621,9 +739,14 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
 
 class _PlayerDialog extends StatefulWidget {
   final Player? player;
+  final String selectedDivision;
   final Function(Player) onSave;
 
-  const _PlayerDialog({this.player, required this.onSave});
+  const _PlayerDialog({
+    this.player,
+    required this.selectedDivision,
+    required this.onSave,
+  });
 
   @override
   State<_PlayerDialog> createState() => _PlayerDialogState();
@@ -744,6 +867,16 @@ class _PlayerDialogState extends State<_PlayerDialog> {
                     if (age < 1 || age > 99) {
                       return 'Age must be between 1 and 99';
                     }
+
+                    // Division-based age validation
+                    if (widget.selectedDivision == 'Youth (18 or under)' &&
+                        age > 18) {
+                      return 'Player must be 18 or under for Youth division';
+                    }
+                    if (widget.selectedDivision == 'Adult 18+' && age < 18) {
+                      return 'Player must be 18 or older for Adult division';
+                    }
+
                     return null;
                   },
                 ),
