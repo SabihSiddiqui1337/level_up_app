@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/custom_app_bar.dart';
 import 'sport_schedule_screen.dart';
+import '../keys/schedule_screen/schedule_screen_keys.dart';
 
 class ScheduleScreen extends StatefulWidget {
   final VoidCallback? onHomePressed;
@@ -26,95 +27,95 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             colors: [Colors.grey[50]!, Colors.white],
           ),
         ),
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Title
-                    Center(
-                      child: Text(
-                        'SCHEDULE-RESULTS',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFFE67E22),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title
+                Center(
+                  child: Text(
+                    ScheduleScreenKeys.screenTitle,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFFE67E22),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 25),
+
+                // Year Selector with Expandable Sports
+                Center(
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _isExpanded = !_isExpanded;
+                          });
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              ScheduleScreenKeys.year2025,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            AnimatedRotation(
+                              turns: _isExpanded ? 0.5 : 0,
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(
+                                Icons.keyboard_arrow_down,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 25),
 
-                    // Year Selector with Expandable Sports
-                    Center(
-                      child: Column(
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _isExpanded = !_isExpanded;
-                              });
-                            },
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '2025',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                AnimatedRotation(
-                                  turns: _isExpanded ? 0.5 : 0,
-                                  duration: const Duration(milliseconds: 200),
-                                  child: Icon(
-                                    Icons.keyboard_arrow_down,
-                                    color: Colors.black54,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Expandable Sports List
-                          AnimatedSize(
-                            duration: const Duration(milliseconds: 300),
-                            child:
-                                _isExpanded
-                                    ? Padding(
-                                      padding: const EdgeInsets.only(top: 16),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          _buildSportCard(
-                                            'Basketball',
-                                            const Color(0xFFE67E22), // Orange
-                                            Icons.sports_basketball,
-                                            'BasketBall Tournament 2025',
-                                          ),
-                                          const SizedBox(height: 16),
-                                          _buildSportCard(
-                                            'Pickleball',
-                                            const Color(0xFF38A169), // Green
-                                            Icons.sports_tennis,
-                                            'Thanksgiving Picketball Tournament',
-                                          ),
-                                        ],
+                      // Expandable Sports List
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 300),
+                        child:
+                            _isExpanded
+                                ? Padding(
+                                  padding: const EdgeInsets.only(top: 16),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _buildSportCard(
+                                        ScheduleScreenKeys.basketball,
+                                        const Color(0xFFE67E22), // Orange
+                                        Icons.sports_basketball,
+                                        ScheduleScreenKeys.basketballTournament,
                                       ),
-                                    )
-                                    : const SizedBox.shrink(),
-                          ),
-                        ],
+                                      const SizedBox(height: 16),
+                                      _buildSportCard(
+                                        ScheduleScreenKeys.pickleball,
+                                        const Color(0xFF38A169), // Green
+                                        Icons.sports_tennis,
+                                        ScheduleScreenKeys.pickleballTournament,
+                                      ),
+                                    ],
+                                  ),
+                                )
+                                : const SizedBox.shrink(),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          )
+          ),
+        ),
+      ),
     );
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'services/auth_service.dart';
+import 'services/team_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,7 +35,9 @@ class LevelUpApp extends StatelessWidget {
         cardTheme: CardThemeData(
           color: Colors.white,
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
@@ -83,16 +86,18 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   final AuthService _authService = AuthService();
+  final TeamService _teamService = TeamService();
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _checkAuthStatus();
+    _initializeServices();
   }
 
-  Future<void> _checkAuthStatus() async {
+  Future<void> _initializeServices() async {
     await _authService.initialize();
+    await _teamService.loadTeams();
     setState(() {
       _isLoading = false;
     });

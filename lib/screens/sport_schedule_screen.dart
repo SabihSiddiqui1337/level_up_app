@@ -3,6 +3,8 @@ import '../widgets/custom_app_bar.dart';
 import '../models/match.dart';
 import '../models/standing.dart';
 import '../models/playoff_match.dart';
+import '../services/team_service.dart';
+import '../keys/schedule_screen/schedule_screen_keys.dart';
 
 class SportScheduleScreen extends StatefulWidget {
   final String sportName;
@@ -21,228 +23,176 @@ class SportScheduleScreen extends StatefulWidget {
 }
 
 class _SportScheduleScreenState extends State<SportScheduleScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late TabController _tabController;
-  bool _isSemiFinalsSelected = true;
+  final TeamService _teamService = TeamService();
 
-  // Sample data - in real app, this would come from API
-  final List<Match> _preliminaryMatches = [
-    const Match(
-      id: '1',
-      day: 'Day 2',
-      court: 'Court 1',
-      time: '11:15 AM',
-      team1: 'Endgame',
-      team2: 'Ramadan Fast Breakers',
-      team1Status: 'Not Checked-in',
-      team2Status: 'Checked-in',
-      team1Score: 64,
-      team2Score: 31,
-    ),
-    const Match(
-      id: '2',
-      day: 'Day 2',
-      court: 'Court 1',
-      time: '12:00 PM',
-      team1: 'Ramadan Fast Breakers',
-      team2: 'Snook Showtyme',
-      team1Status: 'Checked-in',
-      team2Status: 'Not Checked-in',
-      team1Score: 22,
-      team2Score: 83,
-    ),
-    const Match(
-      id: '3',
-      day: 'Day 2',
-      court: 'Court 1',
-      time: '12:45 PM',
-      team1: 'Endgame',
-      team2: 'Snook Showtyme',
-      team1Status: 'Not Checked-in',
-      team2Status: 'Not Checked-in',
-      team1Score: 78,
-      team2Score: 85,
-    ),
-    const Match(
-      id: '4',
-      day: 'Day 2',
-      court: 'Court 2',
-      time: '1:30 PM',
-      team1: 'Thunder Bolts',
-      team2: 'Lightning Strikes',
-      team1Status: 'Checked-in',
-      team2Status: 'Checked-in',
-      team1Score: 45,
-      team2Score: 52,
-    ),
-    const Match(
-      id: '5',
-      day: 'Day 2',
-      court: 'Court 2',
-      time: '2:15 PM',
-      team1: 'Fire Dragons',
-      team2: 'Ice Warriors',
-      team1Status: 'Not Checked-in',
-      team2Status: 'Checked-in',
-      team1Score: 67,
-      team2Score: 43,
-    ),
-    const Match(
-      id: '6',
-      day: 'Day 2',
-      court: 'Court 3',
-      time: '3:00 PM',
-      team1: 'Storm Riders',
-      team2: 'Wind Walkers',
-      team1Status: 'Checked-in',
-      team2Status: 'Not Checked-in',
-      team1Score: 38,
-      team2Score: 41,
-    ),
-  ];
+  // Get teams from service instead of hardcoded data
+  List<Match> get _preliminaryMatches {
+    final teams = _teamService.teams;
+    if (teams.isEmpty) return [];
 
-  final List<Standing> _standings = [
-    const Standing(
-      rank: 1,
-      teamName: 'Snook Showtyme',
-      games: 2,
-      wins: 2,
-      draws: 0,
-      losses: 0,
-      technicalFouls: 0,
-      pointDifference: 65,
-      points: 6,
-    ),
-    const Standing(
-      rank: 2,
-      teamName: 'Endgame',
-      games: 2,
-      wins: 1,
-      draws: 0,
-      losses: 1,
-      technicalFouls: 0,
-      pointDifference: 18,
-      points: 3,
-    ),
-    const Standing(
-      rank: 3,
-      teamName: 'Ramadan Fast Breakers',
-      games: 2,
-      wins: 0,
-      draws: 0,
-      losses: 2,
-      technicalFouls: 0,
-      pointDifference: -83,
-      points: 0,
-    ),
-    const Standing(
-      rank: 4,
-      teamName: 'Thunder Bolts',
-      games: 1,
-      wins: 1,
-      draws: 0,
-      losses: 0,
-      technicalFouls: 0,
-      pointDifference: 7,
-      points: 3,
-    ),
-    const Standing(
-      rank: 5,
-      teamName: 'Lightning Strikes',
-      games: 1,
-      wins: 0,
-      draws: 0,
-      losses: 1,
-      technicalFouls: 0,
-      pointDifference: -7,
-      points: 0,
-    ),
-    const Standing(
-      rank: 6,
-      teamName: 'Fire Dragons',
-      games: 1,
-      wins: 1,
-      draws: 0,
-      losses: 0,
-      technicalFouls: 0,
-      pointDifference: 24,
-      points: 3,
-    ),
-    const Standing(
-      rank: 7,
-      teamName: 'Ice Warriors',
-      games: 1,
-      wins: 0,
-      draws: 0,
-      losses: 1,
-      technicalFouls: 0,
-      pointDifference: -24,
-      points: 0,
-    ),
-    const Standing(
-      rank: 8,
-      teamName: 'Storm Riders',
-      games: 1,
-      wins: 0,
-      draws: 0,
-      losses: 1,
-      technicalFouls: 0,
-      pointDifference: -3,
-      points: 0,
-    ),
-    const Standing(
-      rank: 9,
-      teamName: 'Wind Walkers',
-      games: 1,
-      wins: 1,
-      draws: 0,
-      losses: 0,
-      technicalFouls: 0,
-      pointDifference: 3,
-      points: 3,
-    ),
-  ];
+    // Generate matches from registered teams
+    List<Match> matches = [];
+    int matchId = 1;
+    int courtNumber = 1;
+    int timeSlot = 10; // Start at 10 AM
 
-  final List<PlayoffMatch> _semiFinals = [
-    const PlayoffMatch(
-      id: 'sf1',
-      time: '00:00 AM',
-      court: '-',
-      team1: '1# TBD',
-      team2: '4# TBD',
-      team1Score: 0,
-      team2Score: 0,
-      round: 'Semi-Finals',
-    ),
-    const PlayoffMatch(
-      id: 'sf2',
-      time: '02:45 PM',
-      court: '1',
-      team1: '2# TBD',
-      team2: '3# TBD',
-      team1Score: 1,
-      team2Score: 0,
-      round: 'Semi-Finals',
-    ),
-  ];
+    if (teams.length == 1) {
+      // If only 1 team, show them as waiting for opponent
+      matches.add(
+        Match(
+          id: '${matchId++}',
+          day: 'Day 1',
+          court: 'Court $courtNumber',
+          time: '$timeSlot:00 AM',
+          team1: teams[0].name,
+          team2: 'Waiting for Opponent',
+          team1Status: 'Ready',
+          team2Status: 'TBD',
+          team1Score: 0,
+          team2Score: 0,
+        ),
+      );
+    } else {
+      // Create matches between all teams (round-robin style)
+      for (int i = 0; i < teams.length; i++) {
+        for (int j = i + 1; j < teams.length; j++) {
+          matches.add(
+            Match(
+              id: '${matchId++}',
+              day: 'Day 1',
+              court: 'Court $courtNumber',
+              time: '$timeSlot:00 AM',
+              team1: teams[i].name,
+              team2: teams[j].name,
+              team1Status: 'Not Checked-in',
+              team2Status: 'Not Checked-in',
+              team1Score: 0,
+              team2Score: 0,
+            ),
+          );
 
-  final List<PlayoffMatch> _finals = [
-    const PlayoffMatch(
-      id: 'f1',
-      time: '04:15 PM',
-      court: '1',
-      team1: 'Winner SF1',
-      team2: 'Winner SF2',
-      team1Score: 0,
-      team2Score: 0,
-      round: 'Finals',
-    ),
-  ];
+          // Alternate courts and time slots
+          courtNumber = (courtNumber % 3) + 1; // 3 courts max
+          if (courtNumber == 1) {
+            timeSlot += 1; // Move to next hour
+          }
+        }
+      }
+    }
+    return matches;
+  }
+
+  // Get standings from registered teams
+  List<Standing> get _standings {
+    final teams = _teamService.teams;
+    if (teams.isEmpty) return [];
+
+    // Generate standings from registered teams with initial stats
+    List<Standing> standings = [];
+    for (int i = 0; i < teams.length; i++) {
+      standings.add(
+        Standing(
+          rank: i + 1,
+          teamName: teams[i].name,
+          games: 0,
+          wins: 0,
+          draws: 0,
+          losses: 0,
+          technicalFouls: 0,
+          pointDifference: 0,
+          points: 0,
+        ),
+      );
+    }
+
+    // Sort by points (descending), then by wins (descending)
+    standings.sort((a, b) {
+      if (b.points != a.points) return b.points.compareTo(a.points);
+      return b.wins.compareTo(a.wins);
+    });
+
+    // Update ranks after sorting
+    for (int i = 0; i < standings.length; i++) {
+      standings[i] = Standing(
+        rank: i + 1,
+        teamName: standings[i].teamName,
+        games: standings[i].games,
+        wins: standings[i].wins,
+        draws: standings[i].draws,
+        losses: standings[i].losses,
+        technicalFouls: standings[i].technicalFouls,
+        pointDifference: standings[i].pointDifference,
+        points: standings[i].points,
+      );
+    }
+
+    return standings;
+  }
+
+  // Get semi-finals from registered teams
+  List<PlayoffMatch> get _semiFinals {
+    final teams = _teamService.teams;
+    if (teams.length < 4) return [];
+
+    return [
+      PlayoffMatch(
+        id: 'sf1',
+        time: '00:00 AM',
+        court: '-',
+        team1: teams.isNotEmpty ? '1# ${teams[0].name}' : '1# TBD',
+        team2: teams.length >= 4 ? '4# ${teams[3].name}' : '4# TBD',
+        team1Score: 0,
+        team2Score: 0,
+        round: ScheduleScreenKeys.semiFinals,
+      ),
+      PlayoffMatch(
+        id: 'sf2',
+        time: '02:45 PM',
+        court: '1',
+        team1: teams.length >= 2 ? '2# ${teams[1].name}' : '2# TBD',
+        team2: teams.length >= 3 ? '3# ${teams[2].name}' : '3# TBD',
+        team1Score: 0,
+        team2Score: 0,
+        round: ScheduleScreenKeys.semiFinals,
+      ),
+    ];
+  }
+
+  // Get finals from registered teams
+  List<PlayoffMatch> get _finals {
+    final teams = _teamService.teams;
+    if (teams.length < 2) return [];
+
+    return [
+      PlayoffMatch(
+        id: 'f1',
+        time: '04:15 PM',
+        court: '1',
+        team1: 'Winner SF1',
+        team2: 'Winner SF2',
+        team1Score: 0,
+        team2Score: 0,
+        round: ScheduleScreenKeys.finals,
+      ),
+    ];
+  }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
+    _loadTeams();
+  }
+
+  Future<void> _loadTeams() async {
+    await _teamService.loadTeams();
+    if (mounted) {
+      setState(() {
+        // Trigger rebuild to show updated teams
+      });
+    }
   }
 
   @override
@@ -263,109 +213,113 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             colors: [Colors.grey[50]!, Colors.white],
           ),
         ),
-            child: SafeArea(
-              child: Column(
-                children: [
-                  // Back Button and Tournament Title
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      children: [
-                        // Back Button
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              Icons.arrow_back,
-                              color: Colors.black87,
-                              size: 20,
-                            ),
-                          ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Back Button and Tournament Title
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    // Back Button
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        const SizedBox(width: 16),
-                        // Tournament Title
-                        Expanded(
-                          child: Text(
-                            widget.tournamentTitle,
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
+                        child: Icon(
+                          Icons.arrow_back,
+                          color: Colors.black87,
+                          size: 20,
                         ),
-                      ],
-                    ),
-                  ),
-
-                  // Content
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Preliminary Rounds
-                          _buildPreliminaryRounds(),
-                          const SizedBox(height: 24),
-
-                          // Standings
-                          _buildStandings(),
-                          const SizedBox(height: 24),
-
-                          // Playoffs
-                          _buildPlayoffs(),
-                          const SizedBox(height: 24), // Extra padding at bottom
-                        ],
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 16),
+                    // Tournament Title
+                    Expanded(
+                      child: Text(
+                        widget.tournamentTitle,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          )
+
+              // Tab Bar
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: TabBar(
+                  controller: _tabController,
+                  indicator: BoxDecoration(
+                    color: const Color(0xFF2196F3),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  indicatorPadding: EdgeInsets.zero,
+                  dividerColor: Colors.transparent,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.grey[600],
+                  labelStyle: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                  unselectedLabelStyle: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                  ),
+                  tabs: const [
+                    Tab(text: 'Preliminary Rounds'),
+                    Tab(text: 'Standings'),
+                    Tab(text: 'Playoffs'),
+                  ],
+                ),
+              ),
+
+              // Tab Content
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildPreliminaryRoundsTab(),
+                    _buildStandingsTab(),
+                    _buildPlayoffsTab(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildPreliminaryRounds() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header
-        Row(
-          children: [
-            Text(
-              'Preliminary Rounds',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFFE67E22),
+  Widget _buildPreliminaryRoundsTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child:
+          _preliminaryMatches.isEmpty
+              ? _buildEmptyMatchesState()
+              : ListView.builder(
+                itemCount: _preliminaryMatches.length,
+                itemBuilder: (context, index) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _buildMatchCard(_preliminaryMatches[index]),
+                  );
+                },
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        // Scrollable Match Cards
-        SizedBox(
-          height: 175, // Fixed height for scrollable area
-          child: ListView.builder(
-            scrollDirection: Axis.vertical,
-            itemCount: _preliminaryMatches.length,
-            itemBuilder: (context, index) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _buildMatchCard(_preliminaryMatches[index]),
-              );
-            },
-          ),
-        ),
-      ],
     );
   }
 
@@ -443,7 +397,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 const SizedBox(height: 1),
                 // Score
                 Text(
-                  'Score: ${match.team1Score}',
+                  '${ScheduleScreenKeys.scorePrefix} ${match.team1Score}',
                   style: const TextStyle(
                     color: Color(0xFFE67E22), // Orange
                     fontSize: 9,
@@ -458,7 +412,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 4),
             child: Text(
-              'VS',
+              ScheduleScreenKeys.vsText,
               style: TextStyle(
                 color: Color(0xFFFFFF00), // Bright yellow
                 fontWeight: FontWeight.bold,
@@ -488,7 +442,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 const SizedBox(height: 1),
                 // Score
                 Text(
-                  'Score: ${match.team2Score}',
+                  '${ScheduleScreenKeys.scorePrefix} ${match.team2Score}',
                   style: const TextStyle(
                     color: Color(0xFFE67E22), // Orange
                     fontSize: 9,
@@ -503,92 +457,75 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     );
   }
 
-  Widget _buildStandings() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header
-        Row(
-          children: [
-            Text(
-              'Standings',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFFE67E22),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        // Scrollable Table
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF2196F3),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            children: [
-              // Header Row
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1976D2),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(8),
-                    topRight: Radius.circular(8),
-                  ),
+  Widget _buildStandingsTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child:
+          _standings.isEmpty
+              ? _buildEmptyStandingsState()
+              : Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2196F3),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Row(
+                child: Column(
                   children: [
-                    _buildTableHeader('Team', 2),
-                    _buildTableHeader('Games', 1),
-                    _buildTableHeader('W', 1),
-                    _buildTableHeader('D', 1),
-                    _buildTableHeader('L', 1),
-                    _buildTableHeader('T/Fouls', 1),
-                    _buildTableHeader('+/-', 1),
-                    _buildTableHeader('PTS', 1),
+                    // Header Row
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF1976D2),
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(8),
+                          topRight: Radius.circular(8),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          _buildTableHeader(ScheduleScreenKeys.teamHeader, 3),
+                          _buildTableHeader(ScheduleScreenKeys.winsHeader, 1),
+                          _buildTableHeader(ScheduleScreenKeys.lossesHeader, 1),
+                          _buildTableHeader(ScheduleScreenKeys.drawsHeader, 1),
+                          _buildTableHeader(ScheduleScreenKeys.pointsHeader, 1),
+                        ],
+                      ),
+                    ),
+
+                    // Data Rows
+                    ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _standings.length,
+                      itemBuilder: (context, index) {
+                        return _buildStandingRow(_standings[index]);
+                      },
+                    ),
                   ],
                 ),
               ),
-
-              // Scrollable Data Rows
-              SizedBox(
-                height: 200, // Fixed height for scrollable area
-                child: ListView.builder(
-                  itemCount: _standings.length,
-                  itemBuilder: (context, index) {
-                    return _buildStandingRow(_standings[index]);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
   Widget _buildTableHeader(String text, int flex) {
     return Expanded(
       flex: flex,
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        child: Text(
+          text,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+          ),
+          textAlign: TextAlign.center,
         ),
-        textAlign: TextAlign.center,
       ),
     );
   }
 
   Widget _buildStandingRow(Standing standing) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(color: Colors.white.withOpacity(0.1), width: 1),
@@ -598,8 +535,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         children: [
           // Rank
           Container(
-            width: 24,
-            height: 24,
+            width: 28,
+            height: 28,
             decoration: const BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
@@ -615,40 +552,38 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
 
           // Team Logo (placeholder)
           Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
+            width: 28,
+            height: 28,
+            decoration: const BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.sports, color: Color(0xFF2196F3), size: 16),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
 
           // Team Name
           Expanded(
-            flex: 2,
+            flex: 3,
             child: Text(
               standing.teamName,
               style: const TextStyle(
                 color: Colors.white,
-                fontWeight: FontWeight.w500,
-                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
 
-          // Stats
-          _buildStatText('${standing.games}', 1),
+          // Stats - only W, L, D, PTS
           _buildStatText('${standing.wins}', 1),
-          _buildStatText('${standing.draws}', 1),
           _buildStatText('${standing.losses}', 1),
-          _buildStatText('${standing.technicalFouls}', 1),
-          _buildStatText('${standing.pointDifference}', 1),
+          _buildStatText('${standing.draws}', 1),
           _buildStatText('${standing.points}', 1),
         ],
       ),
@@ -658,105 +593,55 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   Widget _buildStatText(String text, int flex) {
     return Expanded(
       flex: flex,
-      child: Text(
-        text,
-        style: const TextStyle(color: Colors.white, fontSize: 12),
-        textAlign: TextAlign.center,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+        child: Text(
+          text,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+          textAlign: TextAlign.center,
+        ),
       ),
     );
   }
 
-  Widget _buildPlayoffs() {
+  Widget _buildPlayoffsTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          // Semi-Finals Section
+          _buildPlayoffSection('Semi-Finals', _semiFinals),
+          const SizedBox(height: 24),
+          // Finals Section
+          _buildPlayoffSection('Finals', _finals),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlayoffSection(String title, List<PlayoffMatch> matches) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header
-        Row(
-          children: [
-            Icon(Icons.games, color: const Color(0xFFE67E22), size: 30),
-            const SizedBox(width: 8),
-            Text(
-              'Playoffs',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFFE67E22),
-              ),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFFE67E22),
+          ),
+        ),
+        const SizedBox(height: 16),
+        matches.isEmpty
+            ? _buildEmptyPlayoffsState()
+            : Column(
+              children:
+                  matches.map((match) => _buildPlayoffMatch(match)).toList(),
             ),
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        // Tabs
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey[200],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _isSemiFinalsSelected = true),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color:
-                          _isSemiFinalsSelected
-                              ? const Color(0xFF2196F3)
-                              : Colors.transparent,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Semi-Finals',
-                      style: TextStyle(
-                        color:
-                            _isSemiFinalsSelected
-                                ? Colors.white
-                                : Colors.black87,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _isSemiFinalsSelected = false),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color:
-                          !_isSemiFinalsSelected
-                              ? const Color(0xFF2196F3)
-                              : Colors.transparent,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Finals',
-                      style: TextStyle(
-                        color:
-                            !_isSemiFinalsSelected
-                                ? Colors.white
-                                : Colors.black87,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Playoff Matches
-        if (_isSemiFinalsSelected)
-          ..._semiFinals.map((match) => _buildPlayoffMatch(match))
-        else
-          ..._finals.map((match) => _buildPlayoffMatch(match)),
       ],
     );
   }
@@ -885,6 +770,96 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                   ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyMatchesState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.sports_basketball, size: 48, color: Colors.grey[600]),
+          const SizedBox(height: 16),
+          Text(
+            'No Matches Available',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Register teams to see preliminary rounds',
+            style: TextStyle(
+              fontSize: 15,
+              color: Colors.grey[700],
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyStandingsState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.leaderboard, size: 48, color: Colors.grey[600]),
+          const SizedBox(height: 16),
+          Text(
+            'No Standings Available',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Register teams to see standings',
+            style: TextStyle(
+              fontSize: 15,
+              color: Colors.grey[700],
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyPlayoffsState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.games, size: 48, color: Colors.grey[600]),
+          const SizedBox(height: 16),
+          Text(
+            'No Data',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Playoff matches will appear here',
+            style: TextStyle(
+              fontSize: 15,
+              color: Colors.grey[700],
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),

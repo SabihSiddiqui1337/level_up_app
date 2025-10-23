@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/team.dart';
 import 'team_registration_screen.dart';
 import 'team_detail_screen.dart';
+import '../keys/team_screen/team_screen_keys.dart';
+import '../services/team_service.dart';
 
 class TeamListScreen extends StatefulWidget {
   const TeamListScreen({super.key});
@@ -12,25 +14,43 @@ class TeamListScreen extends StatefulWidget {
 
 class _TeamListScreenState extends State<TeamListScreen> {
   final List<Team> _teams = [];
+  final TeamService _teamService = TeamService();
 
-  void _addTeam(Team team) {
+  @override
+  void initState() {
+    super.initState();
+    _loadTeams();
+  }
+
+  Future<void> _loadTeams() async {
+    await _teamService.loadTeams();
     setState(() {
-      _teams.add(team);
+      _teams.clear();
+      _teams.addAll(_teamService.teams);
     });
   }
 
-  void _updateTeam(Team updatedTeam) {
+  Future<void> _addTeam(Team team) async {
+    await _teamService.addTeam(team);
     setState(() {
-      final index = _teams.indexWhere((team) => team.id == updatedTeam.id);
-      if (index != -1) {
-        _teams[index] = updatedTeam;
-      }
+      _teams.clear();
+      _teams.addAll(_teamService.teams);
     });
   }
 
-  void _deleteTeam(String teamId) {
+  Future<void> _updateTeam(Team updatedTeam) async {
+    await _teamService.updateTeam(updatedTeam);
     setState(() {
-      _teams.removeWhere((team) => team.id == teamId);
+      _teams.clear();
+      _teams.addAll(_teamService.teams);
+    });
+  }
+
+  Future<void> _deleteTeam(String teamId) async {
+    await _teamService.deleteTeam(teamId);
+    setState(() {
+      _teams.clear();
+      _teams.addAll(_teamService.teams);
     });
   }
 
@@ -71,7 +91,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Level Up Sports'),
+        title: const Text(TeamScreenKeys.appTitle),
         backgroundColor: const Color(0xFF1976D2),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -108,7 +128,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            'Registered Teams',
+                            TeamScreenKeys.registeredTeams,
                             style: Theme.of(
                               context,
                             ).textTheme.headlineMedium?.copyWith(
@@ -117,7 +137,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
                             ),
                           ),
                           Text(
-                            '${_teams.length} team${_teams.length == 1 ? '' : 's'} registered',
+                            '${_teams.length} ${_teams.length == 1 ? TeamScreenKeys.teamsCount : TeamScreenKeys.teamsCountPlural} ${TeamScreenKeys.teamsRegistered}',
                             style: Theme.of(context).textTheme.bodyLarge
                                 ?.copyWith(color: Colors.white70),
                           ),
@@ -142,7 +162,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
         backgroundColor: const Color(0xFF1976D2),
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
-        label: const Text('Register Team'),
+        label: const Text(TeamScreenKeys.registerTeam),
       ),
     );
   }
@@ -161,7 +181,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
             ),
             const SizedBox(height: 24),
             Text(
-              'No Teams Registered Yet',
+              TeamScreenKeys.noTeamsRegistered,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 color: Colors.grey[600],
                 fontWeight: FontWeight.bold,
@@ -169,7 +189,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Get started by registering your first basketball team!\nTap the button below to begin.',
+              TeamScreenKeys.noTeamsMessage,
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
@@ -179,7 +199,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
             ElevatedButton.icon(
               onPressed: () => _navigateToRegistration(),
               icon: const Icon(Icons.add),
-              label: const Text('Register Your First Team'),
+              label: const Text(TeamScreenKeys.registerFirstTeam),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1976D2),
                 foregroundColor: Colors.white,
@@ -235,7 +255,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
                           ),
                         ),
                         Text(
-                          'Coach: ${team.coachName}',
+                          '${TeamScreenKeys.coachPrefix} ${team.coachName}',
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(color: Colors.grey[600]),
                         ),
@@ -261,7 +281,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
                               children: [
                                 Icon(Icons.edit, color: Color(0xFF2196F3)),
                                 SizedBox(width: 8),
-                                Text('Edit'),
+                                Text(TeamScreenKeys.edit),
                               ],
                             ),
                           ),
@@ -271,7 +291,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
                               children: [
                                 Icon(Icons.delete, color: Color(0xFFE53E3E)),
                                 SizedBox(width: 8),
-                                Text('Delete'),
+                                Text(TeamScreenKeys.delete),
                               ],
                             ),
                           ),
@@ -290,14 +310,14 @@ class _TeamListScreenState extends State<TeamListScreen> {
                   const SizedBox(width: 8),
                   _buildInfoChip(
                     Icons.people,
-                    '${team.players.length} players',
+                    '${team.players.length} ${TeamScreenKeys.playersCount}',
                     const Color(0xFF38A169),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
-                'Registered: ${_formatDate(team.registrationDate)}',
+                '${TeamScreenKeys.registeredPrefix} ${_formatDate(team.registrationDate)}',
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
@@ -340,12 +360,14 @@ class _TeamListScreenState extends State<TeamListScreen> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text('Delete Team'),
-            content: Text('Are you sure you want to delete "${team.name}"?'),
+            title: const Text(TeamScreenKeys.deleteTeamTitle),
+            content: Text(
+              '${TeamScreenKeys.deleteTeamMessage} "${team.name}"?',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
+                child: const Text(TeamScreenKeys.cancel),
               ),
               ElevatedButton(
                 onPressed: () {
@@ -353,7 +375,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Team deleted successfully'),
+                      content: Text(TeamScreenKeys.teamDeletedSuccess),
                       backgroundColor: const Color(0xFF38A169),
                     ),
                   );
@@ -362,7 +384,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
                   backgroundColor: const Color(0xFFE53E3E),
                   foregroundColor: Colors.white,
                 ),
-                child: const Text('Delete'),
+                child: const Text(TeamScreenKeys.deleteButton),
               ),
             ],
           ),

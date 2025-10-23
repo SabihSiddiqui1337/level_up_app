@@ -7,6 +7,7 @@ import '../utils/navigation_utils.dart';
 import 'signup_screen.dart';
 import 'main_navigation_screen.dart';
 import 'forgot_password_screen.dart';
+import '../keys/login_screen/login_screen_keys.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -42,12 +43,12 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     // Validation
     if (_emailController.text.trim().isEmpty) {
-      SnackBarUtils.showError(context, 'Please enter your email or username');
+      SnackBarUtils.showError(context, LoginScreenKeys.enterEmailUsername);
       return;
     }
 
     if (_passwordController.text.isEmpty) {
-      SnackBarUtils.showError(context, 'Please enter your password');
+      SnackBarUtils.showError(context, LoginScreenKeys.enterPassword);
       return;
     }
 
@@ -124,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       // App Title
                       Text(
-                        'Level Up Sports',
+                        LoginScreenKeys.appTitle,
                         style: Theme.of(
                           context,
                         ).textTheme.headlineSmall?.copyWith(
@@ -168,7 +169,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           autocorrect: false,
                           enableSuggestions: false,
                           decoration: InputDecoration(
-                            hintText: 'Email/Username',
+                            hintText: LoginScreenKeys.emailUsernameHint,
                             hintStyle: TextStyle(color: Colors.grey[500]),
                             prefixIcon: Icon(
                               Icons.email_outlined,
@@ -199,7 +200,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           keyboardType: TextInputType.emailAddress,
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'Please enter your email or username';
+                              return LoginScreenKeys.enterEmailUsername;
                             }
                             return null;
                           },
@@ -227,7 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           autocorrect: false,
                           enableSuggestions: false,
                           decoration: InputDecoration(
-                            hintText: 'Password',
+                            hintText: LoginScreenKeys.passwordHint,
                             hintStyle: TextStyle(color: Colors.grey[500]),
                             prefixIcon: Icon(
                               Icons.lock_outline,
@@ -271,10 +272,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           obscureText: _obscurePassword,
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'Please enter your password';
+                              return LoginScreenKeys.enterPassword;
                             }
                             if (value.length < 6) {
-                              return 'Password must be at least 6 characters';
+                              return LoginScreenKeys.passwordMinLength;
                             }
                             return null;
                           },
@@ -332,7 +333,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   )
                                   : const Text(
-                                    'LOGIN',
+                                    LoginScreenKeys.loginButton,
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
@@ -372,7 +373,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                           child: Text(
-                            'CREATE ACCOUNT',
+                            LoginScreenKeys.createAccountButton,
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -393,7 +394,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           );
                         },
                         child: Text(
-                          'Forgot Password?',
+                          LoginScreenKeys.forgotPasswordButton,
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 14,
@@ -415,8 +416,8 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showLoginFailedDialog(BuildContext context) {
     NavigationUtils.showErrorDialog(
       context,
-      title: 'Login Failed',
-      message: 'Incorrect email or password.',
+      title: LoginScreenKeys.loginFailedTitle,
+      message: LoginScreenKeys.loginFailedMessage,
     );
   }
 }
