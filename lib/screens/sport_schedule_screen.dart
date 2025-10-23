@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../widgets/simple_app_bar.dart';
 import '../models/match.dart';
 import '../models/standing.dart';
-import '../models/playoff_match.dart';
 import '../services/team_service.dart';
 import '../services/pickleball_team_service.dart';
 import '../keys/schedule_screen/schedule_screen_keys.dart';
@@ -42,6 +41,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   Match? _selectedMatch;
   final Map<String, Map<String, int>> _matchScores =
       {}; // matchId -> {team1Id: score, team2Id: score}
+
+  // Playoffs state
+  bool _playoffsStarted = false;
+  final Map<String, Map<String, int>> _playoffScores = {};
 
   // Get teams based on sport type and selected division
   List<dynamic> get _teams {
@@ -84,13 +87,27 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   }
 
   void _selectMatch(Match match) {
+    // Don't allow selection of matches without opponents
+    if (match.team2 == 'Waiting for Opponent') {
+      return;
+    }
+
     setState(() {
-      _selectedMatch = match;
+      // If clicking the same match that's already selected, unselect it
+      if (_selectedMatch?.id == match.id) {
+        _selectedMatch = null;
+      } else {
+        // Otherwise, select the new match
+        _selectedMatch = match;
+      }
     });
   }
 
   void _startScoring() {
     if (_selectedMatch != null) {
+      // Determine if this is a playoff match
+      final isPlayoffMatch = _playoffs.contains(_selectedMatch!);
+
       // Navigate to dedicated scoring screen
       Navigator.push(
         context,
@@ -98,12 +115,23 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           builder:
               (context) => MatchScoringScreen(
                 match: _selectedMatch!,
-                initialScores: _matchScores[_selectedMatch!.id],
+                initialScores:
+                    isPlayoffMatch
+                        ? _playoffScores[_selectedMatch!.id]
+                        : _matchScores[_selectedMatch!.id],
                 onScoresUpdated: (scores) {
+                  print('Scores updated: $scores');
                   setState(() {
-                    _matchScores[_selectedMatch!.id] = scores;
+                    if (isPlayoffMatch) {
+                      _playoffScores[_selectedMatch!.id] = scores;
+                    } else {
+                      _matchScores[_selectedMatch!.id] = scores;
+                    }
                     _selectedMatch = null; // Clear selection after scoring
                   });
+                  print(
+                    'Match scores after update: ${isPlayoffMatch ? _playoffScores : _matchScores}',
+                  );
                 },
               ),
         ),
@@ -111,25 +139,105 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     }
   }
 
-  int _getTeamScore(String matchId, String teamId) {
-    final scores = _matchScores[matchId];
-    if (scores == null) return 0;
-    return scores[teamId] ?? 0;
+  int _getTeamScore(String matchId, String? teamId) {
+    if (teamId == null) return 0; // Handle "Waiting for Opponent" case
+
+    // Check preliminary scores first
+    final preliminaryScores = _matchScores[matchId];
+    if (preliminaryScores != null) {
+      final score = preliminaryScores[teamId] ?? 0;
+      print(
+        'Getting preliminary score for match $matchId, team $teamId: $score',
+      );
+      return score;
+    }
+
+    // Check playoff scores
+    final playoffScores = _playoffScores[matchId];
+    if (playoffScores != null) {
+      final score = playoffScores[teamId] ?? 0;
+      print('Getting playoff score for match $matchId, team $teamId: $score');
+      return score;
+    }
+
+    return 0;
   }
 
   String? _getWinningTeamId(String matchId) {
-    final scores = _matchScores[matchId];
-    if (scores == null || scores.length < 2) return null;
+    // Check preliminary scores first
+    final preliminaryScores = _matchScores[matchId];
+    if (preliminaryScores != null && preliminaryScores.length >= 2) {
+      final teamIds = preliminaryScores.keys.toList();
+      if (teamIds.length >= 2) {
+        final team1Score = preliminaryScores[teamIds[0]] ?? 0;
+        final team2Score = preliminaryScores[teamIds[1]] ?? 0;
 
-    final teamIds = scores.keys.toList();
-    if (teamIds.length < 2) return null;
+        if (team1Score > team2Score) return teamIds[0];
+        if (team2Score > team1Score) return teamIds[1];
+        return null; // Tie
+      }
+    }
 
-    final team1Score = scores[teamIds[0]] ?? 0;
-    final team2Score = scores[teamIds[1]] ?? 0;
+    // Check playoff scores
+    final playoffScores = _playoffScores[matchId];
+    if (playoffScores != null && playoffScores.length >= 2) {
+      final teamIds = playoffScores.keys.toList();
+      if (teamIds.length >= 2) {
+        final team1Score = playoffScores[teamIds[0]] ?? 0;
+        final team2Score = playoffScores[teamIds[1]] ?? 0;
 
-    if (team1Score > team2Score) return teamIds[0];
-    if (team2Score > team1Score) return teamIds[1];
-    return null; // Tie
+        if (team1Score > team2Score) return teamIds[0];
+        if (team2Score > team1Score) return teamIds[1];
+        return null; // Tie
+      }
+    }
+
+    return null;
+  }
+
+  // Check if all preliminary games are completed
+  bool get _allPreliminaryGamesCompleted {
+    for (var match in _preliminaryMatches) {
+      if (match.team2 == 'Waiting for Opponent') {
+        continue; // Skip waiting matches
+      }
+      final scores = _matchScores[match.id];
+      if (scores == null || scores.length < 2) return false;
+      final team1Score = scores[match.team1Id] ?? 0;
+      final team2Score = scores[match.team2Id] ?? 0;
+      if (team1Score == 0 && team2Score == 0) return false; // No scores entered
+    }
+    return true;
+  }
+
+  // Start playoffs
+  void _startPlayoffs() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Start Playoffs'),
+          content: const Text(
+            'Are you sure you want to start the playoffs? This will begin the elimination rounds based on current standings.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                setState(() {
+                  _playoffsStarted = true;
+                });
+              },
+              child: const Text('Start Playoffs'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // Get teams from service instead of hardcoded data
@@ -180,6 +288,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             team2Status: 'TBD',
             team1Score: 0,
             team2Score: 0,
+            team1Id: divisionTeams[0].id,
+            team2Id: null, // No opponent yet
+            team1Name: divisionTeams[0].name,
+            team2Name: 'Waiting for Opponent',
           ),
         );
         courtNumber = (courtNumber % 3) + 1;
@@ -197,19 +309,22 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           playedAgainst[team.name] = <String>{};
         }
 
-        // Generate exactly 3 games per team, ensuring no team plays the same opponent twice
+        // Generate matches ensuring each team plays at least 2 games, max 3
         Map<String, int> gamesPlayed = {};
         for (var team in sortedTeams) {
           gamesPlayed[team.name] = 0;
         }
 
-        int maxAttempts = 100; // Prevent infinite loops
+        int maxAttempts = 200; // Increased attempts
         int attempts = 0;
 
         while (attempts < maxAttempts) {
-          // Find teams that need more games
+          // Find teams that need more games (minimum 2, maximum 3)
           List<dynamic> teamsNeedingGames =
-              sortedTeams.where((team) => gamesPlayed[team.name]! < 3).toList();
+              sortedTeams.where((team) {
+                int games = gamesPlayed[team.name]!;
+                return games < 3; // Allow up to 3 games
+              }).toList();
 
           if (teamsNeedingGames.isEmpty) break;
 
@@ -240,6 +355,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     team2Status: 'Not Checked-in',
                     team1Score: 0,
                     team2Score: 0,
+                    team1Id: teamsNeedingGames[i].id,
+                    team2Id: teamsNeedingGames[j].id,
+                    team1Name: team1Name,
+                    team2Name: team2Name,
                   ),
                 );
 
@@ -305,10 +424,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           final team1Score = scores[team1Id] ?? 0;
           final team2Score = scores[team2Id] ?? 0;
 
-          print('Processing match: ${match.team1} vs ${match.team2}');
-          print('Team1 ID: $team1Id, Score: $team1Score');
-          print('Team2 ID: $team2Id, Score: $team2Score');
-
           // Only process if both teams have valid IDs and scores are meaningful
           if (team1Id.isNotEmpty &&
               team2Id.isNotEmpty &&
@@ -316,8 +431,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             // Make sure both teams exist in teamStats
             if (teamStats.containsKey(team1Id) &&
                 teamStats.containsKey(team2Id)) {
-              print('Both teams found in teamStats');
-
               // Update games played
               teamStats[team1Id]!['games'] =
                   (teamStats[team1Id]!['games']! + 1);
@@ -332,7 +445,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     (teamStats[team1Id]!['points']! + 1);
                 teamStats[team2Id]!['losses'] =
                     (teamStats[team2Id]!['losses']! + 1);
-                print('${match.team1} wins!');
               } else if (team2Score > team1Score) {
                 teamStats[team2Id]!['wins'] =
                     (teamStats[team2Id]!['wins']! + 1);
@@ -340,20 +452,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     (teamStats[team2Id]!['points']! + 1);
                 teamStats[team1Id]!['losses'] =
                     (teamStats[team1Id]!['losses']! + 1);
-                print('${match.team2} wins!');
               } else if (team1Score == team2Score && team1Score > 0) {
                 // Draw (only if both teams scored)
                 teamStats[team1Id]!['draws'] =
                     (teamStats[team1Id]!['draws']! + 1);
                 teamStats[team2Id]!['draws'] =
                     (teamStats[team2Id]!['draws']! + 1);
-                print('Draw!');
               }
-            } else {
-              print('Teams not found in teamStats: $team1Id, $team2Id');
             }
-          } else {
-            print('Skipping match - invalid IDs or no scores');
           }
         }
       }
@@ -409,52 +515,71 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     return standings;
   }
 
-  // Get semi-finals from registered teams
-  List<PlayoffMatch> get _semiFinals {
-    final teams = _teams;
-    if (teams.length < 4) return [];
+  // Get playoffs matches
+  List<Match> get _playoffs {
+    if (!_playoffsStarted) return [];
 
-    return [
-      PlayoffMatch(
-        id: 'sf1',
-        time: '00:00 AM',
-        court: '-',
-        team1: teams.isNotEmpty ? '1# ${teams[0].name}' : '1# TBD',
-        team2: teams.length >= 4 ? '4# ${teams[3].name}' : '4# TBD',
-        team1Score: 0,
-        team2Score: 0,
-        round: ScheduleScreenKeys.semiFinals,
-      ),
-      PlayoffMatch(
-        id: 'sf2',
-        time: '02:45 PM',
-        court: '1',
-        team1: teams.length >= 2 ? '2# ${teams[1].name}' : '2# TBD',
-        team2: teams.length >= 3 ? '3# ${teams[2].name}' : '3# TBD',
-        team1Score: 0,
-        team2Score: 0,
-        round: ScheduleScreenKeys.semiFinals,
-      ),
-    ];
-  }
+    final standings = _standings;
+    if (standings.length < 4) return []; // Need at least 4 teams for playoffs
 
-  // Get finals from registered teams
-  List<PlayoffMatch> get _finals {
-    final teams = _teams;
-    if (teams.length < 2) return [];
+    List<Match> playoffMatches = [];
+    int matchId = 1000; // Start playoff match IDs from 1000
+    int courtNumber = 1;
+    int timeSlot = 14; // Start at 2 PM for playoffs
 
-    return [
-      PlayoffMatch(
-        id: 'f1',
-        time: '04:15 PM',
-        court: '1',
-        team1: 'Winner SF1',
-        team2: 'Winner SF2',
-        team1Score: 0,
-        team2Score: 0,
-        round: ScheduleScreenKeys.finals,
-      ),
-    ];
+    // Quarter-finals: 1st vs 4th, 2nd vs 3rd
+    if (standings.length >= 4) {
+      // Find teams by their standings
+      final team1 = _teams.firstWhere((t) => t.name == standings[0].teamName);
+      final team4 = _teams.firstWhere((t) => t.name == standings[3].teamName);
+      final team2 = _teams.firstWhere((t) => t.name == standings[1].teamName);
+      final team3 = _teams.firstWhere((t) => t.name == standings[2].teamName);
+
+      // 1st vs 4th
+      playoffMatches.add(
+        Match(
+          id: '${matchId++}',
+          day: 'Playoffs',
+          court: 'Court $courtNumber',
+          time: '$timeSlot:00 PM',
+          team1: team1.name,
+          team2: team4.name,
+          team1Status: 'Ready',
+          team2Status: 'Ready',
+          team1Score: 0,
+          team2Score: 0,
+          team1Id: team1.id,
+          team2Id: team4.id,
+          team1Name: team1.name,
+          team2Name: team4.name,
+        ),
+      );
+
+      courtNumber = (courtNumber % 3) + 1;
+      if (courtNumber == 1) timeSlot += 1;
+
+      // 2nd vs 3rd
+      playoffMatches.add(
+        Match(
+          id: '${matchId++}',
+          day: 'Playoffs',
+          court: 'Court $courtNumber',
+          time: '$timeSlot:00 PM',
+          team1: team2.name,
+          team2: team3.name,
+          team1Status: 'Ready',
+          team2Status: 'Ready',
+          team1Score: 0,
+          team2Score: 0,
+          team1Id: team2.id,
+          team2Id: team3.id,
+          team1Name: team2.name,
+          team2Name: team3.name,
+        ),
+      );
+    }
+
+    return playoffMatches;
   }
 
   @override
@@ -519,24 +644,24 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               if (_availableDivisions.isNotEmpty) ...[
                 Center(
                   child: Container(
-                    constraints: const BoxConstraints(maxWidth: 220),
-                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    constraints: const BoxConstraints(maxWidth: 280),
+                    margin: const EdgeInsets.symmetric(vertical: 12),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
+                      horizontal: 16,
+                      vertical: 8,
                     ),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(25),
+                      borderRadius: BorderRadius.circular(30),
                       border: Border.all(
-                        color: const Color(0xFF2196F3).withOpacity(0.4),
-                        width: 1.5,
+                        color: const Color(0xFF2196F3).withOpacity(0.6),
+                        width: 2,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 10,
-                          offset: const Offset(0, 3),
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
                         ),
                       ],
                     ),
@@ -547,20 +672,22 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         icon: const Icon(
                           Icons.keyboard_arrow_down,
                           color: Color(0xFF2196F3),
-                          size: 18,
+                          size: 20,
                         ),
-                        hint: const Text(
-                          'Select Division',
-                          style: TextStyle(
+                        hint: Text(
+                          widget.sportName.toLowerCase().contains('pickleball')
+                              ? 'Select DUPR Rating'
+                              : 'Select Division',
+                          style: const TextStyle(
                             color: Colors.grey,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         style: const TextStyle(
                           color: Colors.black87,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
                         dropdownColor: Colors.white,
                         menuMaxHeight: 180,
@@ -571,38 +698,51 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                                 value: division,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 6,
+                                    horizontal: 12,
+                                    vertical: 8,
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Container(
-                                        width: 5,
-                                        height: 5,
-                                        decoration: BoxDecoration(
-                                          color:
-                                              _selectedDivision == division
-                                                  ? const Color(0xFF2196F3)
-                                                  : Colors.grey[400],
-                                          shape: BoxShape.circle,
+                                      // Sport-specific icon
+                                      Icon(
+                                        widget.sportName.toLowerCase().contains(
+                                              'pickleball',
+                                            )
+                                            ? Icons.sports_tennis
+                                            : Icons.sports_basketball,
+                                        size: 16,
+                                        color:
+                                            _selectedDivision == division
+                                                ? const Color(0xFF2196F3)
+                                                : Colors.grey[600],
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Division text with better styling
+                                      Flexible(
+                                        fit: FlexFit.loose,
+                                        child: Text(
+                                          division,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight:
+                                                _selectedDivision == division
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w600,
+                                            color:
+                                                _selectedDivision == division
+                                                    ? const Color(0xFF2196F3)
+                                                    : Colors.black87,
+                                          ),
                                         ),
                                       ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        division,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight:
-                                              _selectedDivision == division
-                                                  ? FontWeight.w600
-                                                  : FontWeight.w500,
-                                          color:
-                                              _selectedDivision == division
-                                                  ? const Color(0xFF2196F3)
-                                                  : Colors.black87,
+                                      // Selection indicator
+                                      if (_selectedDivision == division)
+                                        const Icon(
+                                          Icons.check_circle,
+                                          size: 16,
+                                          color: Color(0xFF2196F3),
                                         ),
-                                      ),
                                     ],
                                   ),
                                 ),
@@ -742,18 +882,25 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               ],
             ),
             child: ElevatedButton.icon(
-              onPressed: _selectedMatch != null ? _startScoring : null,
+              onPressed:
+                  _selectedMatch != null &&
+                          _selectedMatch!.team2 != 'Waiting for Opponent'
+                      ? _startScoring
+                      : null,
               icon: const Icon(Icons.sports_score),
               label: Text(
                 _selectedMatch != null
-                    ? (_matchScores.containsKey(_selectedMatch!.id)
-                        ? 'Edit Scoring'
-                        : 'Start Scoring')
+                    ? (_selectedMatch!.team2 == 'Waiting for Opponent'
+                        ? 'No Opponent Available'
+                        : (_matchScores.containsKey(_selectedMatch!.id)
+                            ? 'Edit Scoring'
+                            : 'Start Scoring'))
                     : 'Select a Match',
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor:
-                    _selectedMatch != null
+                    _selectedMatch != null &&
+                            _selectedMatch!.team2 != 'Waiting for Opponent'
                         ? const Color(0xFF2196F3)
                         : Colors.grey[400],
                 foregroundColor: Colors.white,
@@ -770,33 +917,90 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     final team2Score = _getTeamScore(match.id, match.team2Id ?? '');
     final winningTeamId = _getWinningTeamId(match.id);
     final isSelected = _selectedMatch?.id == match.id;
+    final hasOpponent = match.team2 != 'Waiting for Opponent';
 
     return GestureDetector(
-      onTap: () => _selectMatch(match),
+      onTap: hasOpponent ? () => _selectMatch(match) : null,
       child: Container(
-        height: 50,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blue[700] : Colors.grey[600],
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           border:
-              isSelected ? Border.all(color: Colors.yellow, width: 2) : null,
+              isSelected ? Border.all(color: Colors.yellow, width: 4) : null,
           boxShadow: [
             BoxShadow(
               color:
                   isSelected
-                      ? Colors.blue[700]!.withOpacity(0.3)
-                      : Colors.grey[600]!.withOpacity(0.2),
-              blurRadius: isSelected ? 4 : 2,
-              offset: const Offset(0, 1),
+                      ? Colors.yellow.withOpacity(0.8)
+                      : Colors.black.withOpacity(0.1),
+              blurRadius: isSelected ? 20 : 4,
+              offset: const Offset(0, 4),
+              spreadRadius: isSelected ? 2 : 0,
             ),
           ],
         ),
-        child: _buildNormalMatchCard(
-          match,
-          team1Score,
-          team2Score,
-          winningTeamId,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: isSelected ? Colors.yellow.withOpacity(0.2) : null,
+            gradient:
+                isSelected
+                    ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.yellow.withOpacity(0.3),
+                        Colors.orange.withOpacity(0.2),
+                      ],
+                    )
+                    : null,
+          ),
+          child: Stack(
+            children: [
+              _buildNormalMatchCard(
+                match,
+                team1Score,
+                team2Score,
+                winningTeamId,
+              ),
+              if (isSelected)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.yellow,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.yellow.withOpacity(0.5),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.check,
+                      color: Colors.black,
+                      size: 16,
+                    ),
+                  ),
+                ),
+              if (!hasOpponent)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Center(
+                      child: Icon(Icons.block, color: Colors.grey, size: 24),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -808,175 +1012,269 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     int team2Score,
     String? winningTeamId,
   ) {
-    return Row(
-      children: [
-        // Left Section - Match Details (compact)
-        SizedBox(
-          width: 50,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Day
-              Text(
-                match.day,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 1),
-              // Time
-              Text(
-                match.time,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+    final hasScores = team1Score > 0 || team2Score > 0;
+    final team1Won = winningTeamId == match.team1Id;
+    final team2Won = winningTeamId == match.team2Id;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[800],
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
-        ),
-
-        const SizedBox(width: 6),
-
-        // Team 1 Section
-        Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+        ],
+      ),
+      child: Column(
+        children: [
+          // Date and Match Type
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const SizedBox(height: 1),
-              // Team Name
               Text(
-                match.team1,
-                style: TextStyle(
-                  color:
-                      winningTeamId == match.team1Id
-                          ? Colors.yellow
-                          : Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 1),
-              // Score
-              Text(
-                '${ScheduleScreenKeys.scorePrefix} $team1Score',
+                '${match.day} - ${match.time}',
                 style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey[700],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Match',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],
           ),
-        ),
 
-        // VS Separator
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 4),
-          child: Text(
-            ScheduleScreenKeys.vsText,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-            ),
-          ),
-        ),
+          const SizedBox(height: 16),
 
-        // Team 2 Section
-        Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          // Teams and Scores
+          Row(
             children: [
-              const SizedBox(height: 1),
-              // Team Name
-              Text(
-                match.team2,
-                style: TextStyle(
-                  color:
-                      winningTeamId == match.team2Id
-                          ? Colors.yellow
-                          : Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10,
+              // Team 1 (Left side)
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      match.team1,
+                      style: TextStyle(
+                        color: team1Won ? Colors.blue : Colors.grey[400],
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$team1Score',
+                      style: TextStyle(
+                        color: team1Won ? Colors.blue : Colors.grey[400],
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (team1Won && hasScores) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.emoji_events,
+                            color: Colors.amber,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'Winner',
+                            style: TextStyle(
+                              color: Colors.amber,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 1),
-              // Score
-              Text(
-                '${ScheduleScreenKeys.scorePrefix} $team2Score',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
+
+              // VS
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'VS',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
+              // Team 2 (Right side)
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      match.team2,
+                      style: TextStyle(
+                        color: team2Won ? Colors.red : Colors.grey[400],
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$team2Score',
+                      style: TextStyle(
+                        color: team2Won ? Colors.red : Colors.grey[400],
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (team2Won && hasScores) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.emoji_events,
+                            color: Colors.amber,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'Winner',
+                            style: TextStyle(
+                              color: Colors.amber,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ],
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildStandingsTab() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child:
-          _standings.isEmpty
-              ? _buildEmptyStandingsState()
-              : Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[600],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  children: [
-                    // Header Row
-                    Container(
-                      padding: const EdgeInsets.all(12),
+    return Column(
+      children: [
+        // Standings Table
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child:
+                _standings.isEmpty
+                    ? _buildEmptyStandingsState()
+                    : Container(
                       decoration: BoxDecoration(
-                        color: Colors.grey[700],
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(8),
-                          topRight: Radius.circular(8),
-                        ),
+                        color: Colors.grey[600],
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Row(
+                      child: Column(
                         children: [
-                          _buildTableHeader(ScheduleScreenKeys.teamHeader, 3),
-                          _buildTableHeader(ScheduleScreenKeys.winsHeader, 1),
-                          _buildTableHeader(ScheduleScreenKeys.lossesHeader, 1),
-                          _buildTableHeader(ScheduleScreenKeys.drawsHeader, 1),
-                          _buildTableHeader(ScheduleScreenKeys.pointsHeader, 1),
+                          // Header Row
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[700],
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(8),
+                                topRight: Radius.circular(8),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                _buildTableHeader(
+                                  ScheduleScreenKeys.teamHeader,
+                                  3,
+                                ),
+                                _buildTableHeader(
+                                  ScheduleScreenKeys.winsHeader,
+                                  1,
+                                ),
+                                _buildTableHeader(
+                                  ScheduleScreenKeys.lossesHeader,
+                                  1,
+                                ),
+                                _buildTableHeader(
+                                  ScheduleScreenKeys.drawsHeader,
+                                  1,
+                                ),
+                                _buildTableHeader(
+                                  ScheduleScreenKeys.pointsHeader,
+                                  1,
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Data Rows
+                          ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: _standings.length,
+                            itemBuilder: (context, index) {
+                              return _buildStandingRow(_standings[index]);
+                            },
+                          ),
                         ],
                       ),
                     ),
+          ),
+        ),
 
-                    // Data Rows
-                    ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: _standings.length,
-                      itemBuilder: (context, index) {
-                        return _buildStandingRow(_standings[index]);
-                      },
-                    ),
-                  ],
+        // Start Playoffs Button (only show when all games are completed and playoffs haven't started)
+        if (_allPreliminaryGamesCompleted &&
+            !_playoffsStarted &&
+            _standings.length >= 4)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, -2),
                 ),
+              ],
+            ),
+            child: ElevatedButton.icon(
+              onPressed: _startPlayoffs,
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Start Playoffs'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
               ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -1132,168 +1430,15 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   Widget _buildPlayoffsTab() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          // Semi-Finals Section
-          _buildPlayoffSection('Semi-Finals', _semiFinals),
-          const SizedBox(height: 24),
-          // Finals Section
-          _buildPlayoffSection('Finals', _finals),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPlayoffSection(String title, List<PlayoffMatch> matches) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: const Color(0xFFE67E22),
-          ),
-        ),
-        const SizedBox(height: 16),
-        matches.isEmpty
-            ? _buildEmptyPlayoffsState()
-            : Column(
-              children:
-                  matches.map((match) => _buildPlayoffMatch(match)).toList(),
-            ),
-      ],
-    );
-  }
-
-  Widget _buildPlayoffMatch(PlayoffMatch match) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          // Time and Court
-          Container(
-            width: 80,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  match.time,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Court: ${match.court}',
-                  style: const TextStyle(fontSize: 10, color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Teams
-          Expanded(
-            child: Column(
-              children: [
-                if (match.team1 != null)
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 20,
-                          height: 20,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF2196F3),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.sports,
-                            color: Colors.white,
-                            size: 12,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            match.team1!,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          'Score: ${match.team1Score}',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (match.team1 != null && match.team2 != null)
-                  const SizedBox(height: 8),
-                if (match.team2 != null)
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 20,
-                          height: 20,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFE67E22),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.sports,
-                            color: Colors.white,
-                            size: 12,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            match.team2!,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          'Score: ${match.team2Score}',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      child:
+          _playoffs.isEmpty
+              ? _buildEmptyPlayoffsState()
+              : ListView.builder(
+                itemCount: _playoffs.length,
+                itemBuilder: (context, index) {
+                  return _buildMatchCard(_playoffs[index]);
+                },
+              ),
     );
   }
 
