@@ -201,7 +201,7 @@ class _PickleballTeamRegistrationScreenState
       } else {
         // Creating new team - generate unique ID with random component
         teamId =
-            '${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch}';
+            'pickleball_${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch}_${DateTime.now().hashCode}';
         print('Creating new pickleball team with ID: $teamId');
       }
 

@@ -437,12 +437,6 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
                     team.division,
                     const Color(0xFF2196F3),
                   ),
-                  const SizedBox(width: 8),
-                  _buildInfoChip(
-                    Icons.calendar_today,
-                    _formatDate(team.registrationDate),
-                    Colors.purple,
-                  ),
                 ],
               ),
             ],
@@ -548,12 +542,6 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
                     team.division,
                     const Color(0xFF4CAF50),
                   ),
-                  const SizedBox(width: 8),
-                  _buildInfoChip(
-                    Icons.calendar_today,
-                    _formatDate(team.registrationDate),
-                    Colors.purple,
-                  ),
                 ],
               ),
             ],
@@ -561,9 +549,5 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
         ),
       ),
     );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}/${date.year}';
   }
 }

@@ -25,6 +25,7 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen> {
   bool _isProcessing = false;
+  bool _paymentCompleted = false;
   final _cardNumberController = TextEditingController();
   final _expiryController = TextEditingController();
   final _cvvController = TextEditingController();
@@ -163,6 +164,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     setState(() {
       _isProcessing = false;
+      _paymentCompleted = true;
     });
 
     // Show success snackbar and navigate to home
@@ -503,7 +505,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _isProcessing ? null : _processPayment,
+                onPressed:
+                    (_isProcessing || _paymentCompleted)
+                        ? null
+                        : _processPayment,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1976D2),
                   foregroundColor: Colors.white,
@@ -527,6 +532,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             ),
                             SizedBox(width: 12),
                             Text('Processing Payment...'),
+                          ],
+                        )
+                        : _paymentCompleted
+                        ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.check_circle, color: Colors.white),
+                            SizedBox(width: 12),
+                            Text('Payment Completed'),
                           ],
                         )
                         : const Text(

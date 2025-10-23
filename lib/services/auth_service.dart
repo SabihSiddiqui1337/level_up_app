@@ -31,19 +31,18 @@ class AuthService {
           name: 'Admin User',
           username: 'admin',
           phone: '123-456-7890',
-          role: 'admin',
+          role: 'owner',
           createdAt: DateTime.now(),
         ),
         User(
           id: '2',
-          email: 'coach@levelup.com',
-          password: 'coach123',
-          name: 'John Coach',
-          username: 'coach',
+          email: 'scoring@levelup.com',
+          password: 'scoring123',
+          name: 'John Scoring',
+          username: 'scoring',
           phone: '987-654-3210',
-          role: 'manager',
+          role: 'scoring',
           createdAt: DateTime.now(),
-          teamId: 'team1',
         ),
         User(
           id: '3',
@@ -52,7 +51,7 @@ class AuthService {
           name: 'Sabih',
           username: 'sabih',
           phone: '555-123-4567',
-          role: 'manager',
+          role: 'scoring',
           createdAt: DateTime.now(),
         ),
       ];
@@ -64,6 +63,10 @@ class AuthService {
   }
 
   // Load users from SharedPreferences
+  Future<void> loadUsers() async {
+    await _loadUsers();
+  }
+
   Future<void> _loadUsers() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -176,7 +179,7 @@ class AuthService {
     required String name,
     required String username,
     required String phone,
-    String role = 'manager',
+    String role = 'user',
   }) async {
     print('AuthService.register called with: $email, $username, $name');
     await Future.delayed(const Duration(seconds: 1)); // Simulate network delay
@@ -252,8 +255,31 @@ class AuthService {
     return true;
   }
 
+  List<User> get users => List.from(_users);
+
   List<User> getAllUsers() {
     return List.from(_users);
+  }
+
+  // Add a new user (for admin panel)
+  Future<void> addUser(User user) async {
+    _users.add(user);
+    await _saveUsers();
+  }
+
+  // Update user
+  Future<void> updateUser(User updatedUser) async {
+    final index = _users.indexWhere((user) => user.id == updatedUser.id);
+    if (index != -1) {
+      _users[index] = updatedUser;
+      await _saveUsers();
+    }
+  }
+
+  // Delete user
+  Future<void> deleteUser(String userId) async {
+    _users.removeWhere((user) => user.id == userId);
+    await _saveUsers();
   }
 
   // Check if email exists in the database

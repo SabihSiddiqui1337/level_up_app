@@ -42,6 +42,9 @@ class PickleballTeamService {
     print(
       'PickleballTeamService: Current teams count before adding: ${_teams.length}',
     );
+    print(
+      'PickleballTeamService: Existing team IDs: ${_teams.map((t) => t.id).toList()}',
+    );
 
     // Check if team with same ID already exists
     bool teamExists = _teams.any((existingTeam) => existingTeam.id == team.id);
@@ -51,10 +54,15 @@ class PickleballTeamService {
       );
       // Remove existing team with same ID
       _teams.removeWhere((existingTeam) => existingTeam.id == team.id);
+    } else {
+      print('PickleballTeamService: New team with unique ID, adding to list');
     }
 
     _teams.add(team);
     print('PickleballTeamService: Teams count after adding: ${_teams.length}');
+    print(
+      'PickleballTeamService: All team names: ${_teams.map((t) => t.name).toList()}',
+    );
     await _saveTeams();
   }
 

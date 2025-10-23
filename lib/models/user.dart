@@ -5,7 +5,7 @@ class User {
   final String name;
   final String username;
   final String phone;
-  final String role; // 'manager' or 'admin'
+  final String role; // 'user', 'scoring', or 'owner'
   final DateTime createdAt;
   final String? teamId; // If user is a team manager
 

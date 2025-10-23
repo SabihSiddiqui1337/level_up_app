@@ -4,9 +4,73 @@ class ValidationUtils {
     if (value == null || value.trim().isEmpty) {
       return 'Please enter your email';
     }
-    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value.trim())) {
-      return 'Please enter a valid email';
+
+    String email = value.trim().toLowerCase();
+
+    // Basic format validation - must have @ and proper structure
+    if (!email.contains('@')) {
+      return 'Email must contain @ symbol';
     }
+
+    // Split email into local and domain parts
+    List<String> parts = email.split('@');
+    if (parts.length != 2) {
+      return 'Please enter a valid email format';
+    }
+
+    String localPart = parts[0];
+    String domainPart = parts[1];
+
+    // Validate local part (before @)
+    if (localPart.isEmpty || localPart.length > 64) {
+      return 'Email username is too long or empty';
+    }
+
+    // Check for valid characters in local part
+    if (!RegExp(r'^[a-zA-Z0-9._-]+$').hasMatch(localPart)) {
+      return 'Email username contains invalid characters';
+    }
+
+    // Check for consecutive dots or starting/ending with dots
+    if (localPart.startsWith('.') ||
+        localPart.endsWith('.') ||
+        localPart.contains('..')) {
+      return 'Email username format is invalid';
+    }
+
+    // Validate domain part (after @)
+    if (domainPart.isEmpty || domainPart.length > 253) {
+      return 'Email domain is too long or empty';
+    }
+
+    // Check for valid domain format
+    if (!RegExp(r'^[a-zA-Z0-9.-]+$').hasMatch(domainPart)) {
+      return 'Email domain contains invalid characters';
+    }
+
+    // Check for valid TLD (top-level domain)
+    if (!RegExp(r'^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(domainPart)) {
+      return 'Email must have a valid domain (e.g., .com, .org, .edu)';
+    }
+
+    // Check for consecutive dots in domain
+    if (domainPart.contains('..')) {
+      return 'Email domain format is invalid';
+    }
+
+    // Check for valid TLD length (2-63 characters)
+    String tld = domainPart.split('.').last;
+    if (tld.length < 2 || tld.length > 63) {
+      return 'Email domain extension is invalid';
+    }
+
+    // Additional comprehensive regex check
+    if (!RegExp(
+      r'^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    ).hasMatch(email)) {
+      return 'Please enter a valid email address';
+    }
+
     return null;
   }
 

@@ -127,7 +127,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   ) {
     return GestureDetector(
       onTap: () {
-        Navigator.push(
+        Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder:

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import '../widgets/custom_app_bar.dart';
+import '../widgets/simple_app_bar.dart';
 import '../models/match.dart';
 import '../models/standing.dart';
 import '../models/playoff_match.dart';
 import '../services/team_service.dart';
 import '../services/pickleball_team_service.dart';
 import '../keys/schedule_screen/schedule_screen_keys.dart';
+import 'main_navigation_screen.dart';
+import 'match_scoring_screen.dart';
 
 class SportScheduleScreen extends StatefulWidget {
   final String sportName;
@@ -35,6 +37,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   // Cache for stable match generation
   final Map<String, List<Match>> _matchesCache = {};
+
+  // Scoring state
+  Match? _selectedMatch;
+  final Map<String, Map<String, int>> _matchScores =
+      {}; // matchId -> {team1Id: score, team2Id: score}
 
   // Get teams based on sport type and selected division
   List<dynamic> get _teams {
@@ -74,6 +81,55 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       _selectedDivision =
           _availableDivisions.isNotEmpty ? _availableDivisions.first : null;
     }
+  }
+
+  void _selectMatch(Match match) {
+    setState(() {
+      _selectedMatch = match;
+    });
+  }
+
+  void _startScoring() {
+    if (_selectedMatch != null) {
+      // Navigate to dedicated scoring screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder:
+              (context) => MatchScoringScreen(
+                match: _selectedMatch!,
+                initialScores: _matchScores[_selectedMatch!.id],
+                onScoresUpdated: (scores) {
+                  setState(() {
+                    _matchScores[_selectedMatch!.id] = scores;
+                    _selectedMatch = null; // Clear selection after scoring
+                  });
+                },
+              ),
+        ),
+      );
+    }
+  }
+
+  int _getTeamScore(String matchId, String teamId) {
+    final scores = _matchScores[matchId];
+    if (scores == null) return 0;
+    return scores[teamId] ?? 0;
+  }
+
+  String? _getWinningTeamId(String matchId) {
+    final scores = _matchScores[matchId];
+    if (scores == null || scores.length < 2) return null;
+
+    final teamIds = scores.keys.toList();
+    if (teamIds.length < 2) return null;
+
+    final team1Score = scores[teamIds[0]] ?? 0;
+    final team2Score = scores[teamIds[1]] ?? 0;
+
+    if (team1Score > team2Score) return teamIds[0];
+    if (team2Score > team1Score) return teamIds[1];
+    return null; // Tie
   }
 
   // Get teams from service instead of hardcoded data
@@ -224,20 +280,101 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     final teams = _teams;
     if (teams.isEmpty) return [];
 
-    // Generate standings from registered teams with initial stats
+    // Calculate actual stats based on match scores
+    Map<String, Map<String, int>> teamStats = {};
+
+    // Initialize team stats
+    for (var team in teams) {
+      teamStats[team.id] = {
+        'games': 0,
+        'wins': 0,
+        'draws': 0,
+        'losses': 0,
+        'points': 0,
+      };
+    }
+
+    // Process match results
+    for (var match in _preliminaryMatches) {
+      final scores = _matchScores[match.id];
+      if (scores != null && scores.length >= 2) {
+        final teamIds = scores.keys.toList();
+        if (teamIds.length >= 2) {
+          final team1Id = teamIds[0];
+          final team2Id = teamIds[1];
+          final team1Score = scores[team1Id] ?? 0;
+          final team2Score = scores[team2Id] ?? 0;
+
+          print('Processing match: ${match.team1} vs ${match.team2}');
+          print('Team1 ID: $team1Id, Score: $team1Score');
+          print('Team2 ID: $team2Id, Score: $team2Score');
+
+          // Only process if both teams have valid IDs and scores are meaningful
+          if (team1Id.isNotEmpty &&
+              team2Id.isNotEmpty &&
+              (team1Score > 0 || team2Score > 0)) {
+            // Make sure both teams exist in teamStats
+            if (teamStats.containsKey(team1Id) &&
+                teamStats.containsKey(team2Id)) {
+              print('Both teams found in teamStats');
+
+              // Update games played
+              teamStats[team1Id]!['games'] =
+                  (teamStats[team1Id]!['games']! + 1);
+              teamStats[team2Id]!['games'] =
+                  (teamStats[team2Id]!['games']! + 1);
+
+              // Determine winner
+              if (team1Score > team2Score) {
+                teamStats[team1Id]!['wins'] =
+                    (teamStats[team1Id]!['wins']! + 1);
+                teamStats[team1Id]!['points'] =
+                    (teamStats[team1Id]!['points']! + 1);
+                teamStats[team2Id]!['losses'] =
+                    (teamStats[team2Id]!['losses']! + 1);
+                print('${match.team1} wins!');
+              } else if (team2Score > team1Score) {
+                teamStats[team2Id]!['wins'] =
+                    (teamStats[team2Id]!['wins']! + 1);
+                teamStats[team2Id]!['points'] =
+                    (teamStats[team2Id]!['points']! + 1);
+                teamStats[team1Id]!['losses'] =
+                    (teamStats[team1Id]!['losses']! + 1);
+                print('${match.team2} wins!');
+              } else if (team1Score == team2Score && team1Score > 0) {
+                // Draw (only if both teams scored)
+                teamStats[team1Id]!['draws'] =
+                    (teamStats[team1Id]!['draws']! + 1);
+                teamStats[team2Id]!['draws'] =
+                    (teamStats[team2Id]!['draws']! + 1);
+                print('Draw!');
+              }
+            } else {
+              print('Teams not found in teamStats: $team1Id, $team2Id');
+            }
+          } else {
+            print('Skipping match - invalid IDs or no scores');
+          }
+        }
+      }
+    }
+
+    // Generate standings from calculated stats
     List<Standing> standings = [];
     for (int i = 0; i < teams.length; i++) {
+      final teamId = teams[i].id;
+      final stats = teamStats[teamId]!;
       standings.add(
         Standing(
           rank: i + 1,
           teamName: teams[i].name,
-          games: 0,
-          wins: 0,
-          draws: 0,
-          losses: 0,
+          games: stats['games']!,
+          wins: stats['wins']!,
+          draws: stats['draws']!,
+          losses: stats['losses']!,
           technicalFouls: 0,
           pointDifference: 0,
-          points: 0,
+          points: stats['points']!,
         ),
       );
     }
@@ -354,7 +491,19 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: CustomAppBar(onHomePressed: widget.onHomePressed),
+      appBar: SimpleAppBar(
+        title: widget.tournamentTitle,
+        onBackPressed: () {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder:
+                  (context) => MainNavigationScreen(
+                    initialIndex: 3,
+                  ), // Go to Schedule tab
+            ),
+          );
+        },
+      ),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -366,116 +515,112 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         child: SafeArea(
           child: Column(
             children: [
-              // Back Button and Tournament Title
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    // Back Button
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Icons.arrow_back,
-                          color: Colors.black87,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    // Tournament Title
-                    Expanded(
-                      child: Text(
-                        widget.tournamentTitle,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
               // Division Dropdown
               if (_availableDivisions.isNotEmpty) ...[
-                Container(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFF2196F3),
-                      width: 1.5,
+                Center(
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 220),
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(25),
+                      border: Border.all(
+                        color: const Color(0xFF2196F3).withOpacity(0.4),
+                        width: 1.5,
                       ),
-                    ],
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _selectedDivision,
-                      isExpanded: true,
-                      icon: const Icon(
-                        Icons.keyboard_arrow_down,
-                        color: Color(0xFF2196F3),
-                        size: 20,
-                      ),
-                      hint: const Text(
-                        'Select Division',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 14,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedDivision,
+                        isExpanded: false,
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down,
+                          color: Color(0xFF2196F3),
+                          size: 18,
+                        ),
+                        hint: const Text(
+                          'Select Division',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),
-                      ),
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      items:
-                          _availableDivisions.map((String division) {
-                            return DropdownMenuItem<String>(
-                              value: division,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                ),
-                                child: Text(
-                                  division,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.black87,
+                        dropdownColor: Colors.white,
+                        menuMaxHeight: 180,
+                        borderRadius: BorderRadius.circular(12),
+                        items:
+                            _availableDivisions.map((String division) {
+                              return DropdownMenuItem<String>(
+                                value: division,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 5,
+                                        height: 5,
+                                        decoration: BoxDecoration(
+                                          color:
+                                              _selectedDivision == division
+                                                  ? const Color(0xFF2196F3)
+                                                  : Colors.grey[400],
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        division,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight:
+                                              _selectedDivision == division
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w500,
+                                          color:
+                                              _selectedDivision == division
+                                                  ? const Color(0xFF2196F3)
+                                                  : Colors.black87,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ),
-                            );
-                          }).toList(),
-                      onChanged: (String? newValue) {
-                        setState(() {
-                          _selectedDivision = newValue;
-                        });
-                      },
+                              );
+                            }).toList(),
+                        onChanged: (String? newValue) {
+                          setState(() {
+                            _selectedDivision = newValue;
+                          });
+                        },
+                      ),
                     ),
                   ),
                 ),
               ],
+
+              // Spacing between dropdown and tab bar
+              const SizedBox(height: 16),
 
               // Tab Bar
               Container(
@@ -561,154 +706,229 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   }
 
   Widget _buildPreliminaryRoundsTab() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child:
-          _preliminaryMatches.isEmpty
-              ? _buildEmptyMatchesState()
-              : ListView.builder(
-                itemCount: _preliminaryMatches.length,
-                itemBuilder: (context, index) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _buildMatchCard(_preliminaryMatches[index]),
-                  );
-                },
+    return Column(
+      children: [
+        // Scrollable content
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child:
+                _preliminaryMatches.isEmpty
+                    ? _buildEmptyMatchesState()
+                    : ListView.builder(
+                      itemCount: _preliminaryMatches.length,
+                      itemBuilder: (context, index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _buildMatchCard(_preliminaryMatches[index]),
+                        );
+                      },
+                    ),
+          ),
+        ),
+        // Fixed scoring button at bottom
+        if (_preliminaryMatches.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: ElevatedButton.icon(
+              onPressed: _selectedMatch != null ? _startScoring : null,
+              icon: const Icon(Icons.sports_score),
+              label: Text(
+                _selectedMatch != null
+                    ? (_matchScores.containsKey(_selectedMatch!.id)
+                        ? 'Edit Scoring'
+                        : 'Start Scoring')
+                    : 'Select a Match',
               ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    _selectedMatch != null
+                        ? const Color(0xFF2196F3)
+                        : Colors.grey[400],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
   Widget _buildMatchCard(Match match) {
-    return Container(
-      height: 50,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.grey[600],
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey[600]!.withOpacity(0.2),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
+    final team1Score = _getTeamScore(match.id, match.team1Id ?? '');
+    final team2Score = _getTeamScore(match.id, match.team2Id ?? '');
+    final winningTeamId = _getWinningTeamId(match.id);
+    final isSelected = _selectedMatch?.id == match.id;
+
+    return GestureDetector(
+      onTap: () => _selectMatch(match),
+      child: Container(
+        height: 50,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blue[700] : Colors.grey[600],
+          borderRadius: BorderRadius.circular(8),
+          border:
+              isSelected ? Border.all(color: Colors.yellow, width: 2) : null,
+          boxShadow: [
+            BoxShadow(
+              color:
+                  isSelected
+                      ? Colors.blue[700]!.withOpacity(0.3)
+                      : Colors.grey[600]!.withOpacity(0.2),
+              blurRadius: isSelected ? 4 : 2,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: _buildNormalMatchCard(
+          match,
+          team1Score,
+          team2Score,
+          winningTeamId,
+        ),
       ),
-      child: Row(
-        children: [
-          // Left Section - Match Details (compact)
-          SizedBox(
-            width: 50,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Day
-                Text(
-                  match.day,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 1),
-                // Time
-                Text(
-                  match.time,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
+    );
+  }
 
-          const SizedBox(width: 6),
-
-          // Team 1 Section
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(height: 1),
-                // Team Name
-                Text(
-                  match.team1,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 10,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+  Widget _buildNormalMatchCard(
+    Match match,
+    int team1Score,
+    int team2Score,
+    String? winningTeamId,
+  ) {
+    return Row(
+      children: [
+        // Left Section - Match Details (compact)
+        SizedBox(
+          width: 50,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Day
+              Text(
+                match.day,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
                 ),
-                const SizedBox(height: 1),
-                // Score
-                Text(
-                  '${ScheduleScreenKeys.scorePrefix} ${match.team1Score}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // VS Separator
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              ScheduleScreenKeys.vsText,
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
+              const SizedBox(height: 1),
+              // Time
+              Text(
+                match.time,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
+        ),
 
-          // Team 2 Section
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(height: 1),
-                // Team Name
-                Text(
-                  match.team2,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 10,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+        const SizedBox(width: 6),
+
+        // Team 1 Section
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(height: 1),
+              // Team Name
+              Text(
+                match.team1,
+                style: TextStyle(
+                  color:
+                      winningTeamId == match.team1Id
+                          ? Colors.yellow
+                          : Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
                 ),
-                const SizedBox(height: 1),
-                // Score
-                Text(
-                  '${ScheduleScreenKeys.scorePrefix} ${match.team2Score}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                  ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 1),
+              // Score
+              Text(
+                '${ScheduleScreenKeys.scorePrefix} $team1Score',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
                 ),
-              ],
+              ),
+            ],
+          ),
+        ),
+
+        // VS Separator
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            ScheduleScreenKeys.vsText,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
             ),
           ),
-        ],
-      ),
+        ),
+
+        // Team 2 Section
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(height: 1),
+              // Team Name
+              Text(
+                match.team2,
+                style: TextStyle(
+                  color:
+                      winningTeamId == match.team2Id
+                          ? Colors.yellow
+                          : Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 1),
+              // Score
+              Text(
+                '${ScheduleScreenKeys.scorePrefix} $team2Score',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

@@ -6,10 +6,26 @@ import 'my_team_screen.dart';
 import 'game_selection_screen.dart';
 import 'schedule_screen.dart';
 import 'settings_screen.dart';
+import 'scoring_screen.dart';
+import 'admin_panel_screen.dart';
 import '../services/team_service.dart';
 import '../services/pickleball_team_service.dart';
+import '../services/auth_service.dart';
 import '../models/team.dart';
 import '../models/pickleball_team.dart';
+import '../utils/role_utils.dart';
+
+class NavigationItem {
+  final Widget screen;
+  final IconData icon;
+  final String label;
+
+  NavigationItem({
+    required this.screen,
+    required this.icon,
+    required this.label,
+  });
+}
 
 class MainNavigationScreen extends StatefulWidget {
   final int initialIndex;
@@ -24,6 +40,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late int _currentIndex;
   final TeamService _teamService = TeamService();
   final PickleballTeamService _pickleballTeamService = PickleballTeamService();
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -60,32 +77,95 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   Widget _getCurrentScreen() {
-    switch (_currentIndex) {
-      case 0:
-        return UpcomingEventsScreen(onHomePressed: _navigateToHome);
-      case 1:
-        return GameSelectionScreen(
+    final user = _authService.currentUser;
+    final userRole = user?.role ?? 'user';
+
+    // Get role-based navigation items
+    final navigationItems = _getNavigationItems(userRole);
+
+    if (_currentIndex >= navigationItems.length) {
+      _currentIndex = 0;
+    }
+
+    final currentItem = navigationItems[_currentIndex];
+    return currentItem.screen;
+  }
+
+  List<NavigationItem> _getNavigationItems(String userRole) {
+    final baseItems = [
+      NavigationItem(
+        screen: UpcomingEventsScreen(onHomePressed: _navigateToHome),
+        icon: Icons.event,
+        label: 'Home',
+      ),
+      NavigationItem(
+        screen: GameSelectionScreen(
           onSave: _addTeam,
           onSavePickleball: _addPickleballTeam,
           onHomePressed: _navigateToHome,
-        );
-      case 2:
-        return MyTeamScreen(
+        ),
+        icon: Icons.app_registration,
+        label: 'Registration',
+      ),
+      NavigationItem(
+        screen: MyTeamScreen(
           teamService: _teamService,
           pickleballTeamService: _pickleballTeamService,
           onHomePressed: _navigateToHome,
-        );
-      case 3:
-        return ScheduleScreen(onHomePressed: _navigateToHome);
-      case 4:
-        return SettingsScreen(onHomePressed: _navigateToHome);
-      default:
-        return UpcomingEventsScreen(onHomePressed: _navigateToHome);
+        ),
+        icon: Icons.group,
+        label: 'My Team',
+      ),
+      NavigationItem(
+        screen: ScheduleScreen(onHomePressed: _navigateToHome),
+        icon: Icons.schedule,
+        label: 'Schedule',
+      ),
+    ];
+
+    // Add role-specific items
+    if (RoleUtils.canScore(userRole)) {
+      baseItems.add(
+        NavigationItem(
+          screen: ScoringScreen(
+            sportName: 'Basketball',
+            teamService: _teamService,
+            pickleballTeamService: _pickleballTeamService,
+          ),
+          icon: Icons.sports_score,
+          label: 'Scoring',
+        ),
+      );
     }
+
+    if (RoleUtils.isOwner(userRole)) {
+      baseItems.add(
+        NavigationItem(
+          screen: const AdminPanelScreen(),
+          icon: Icons.admin_panel_settings,
+          label: 'Admin',
+        ),
+      );
+    }
+
+    // Always add settings at the end
+    baseItems.add(
+      NavigationItem(
+        screen: SettingsScreen(onHomePressed: _navigateToHome),
+        icon: Icons.settings,
+        label: 'Settings',
+      ),
+    );
+
+    return baseItems;
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = _authService.currentUser;
+    final userRole = user?.role ?? 'user';
+    final navigationItems = _getNavigationItems(userRole);
+
     // ignore: deprecated_member_use
     return WillPopScope(
       onWillPop: () async {
@@ -107,22 +187,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           selectedItemColor: const Color(0xFF2196F3),
           unselectedItemColor: Colors.grey[600],
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Home'),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.app_registration),
-              label: 'Registration',
-            ),
-            BottomNavigationBarItem(icon: Icon(Icons.group), label: 'My Team'),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.schedule),
-              label: 'Schedule',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
-              label: 'Settings',
-            ),
-          ],
+          items:
+              navigationItems
+                  .map(
+                    (item) => BottomNavigationBarItem(
+                      icon: Icon(item.icon),
+                      label: item.label,
+                    ),
+                  )
+                  .toList(),
         ),
       ),
     );
