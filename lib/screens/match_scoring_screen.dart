@@ -61,16 +61,16 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
       widget.onScoresUpdated(scores);
 
       // Show success message
-      SnackbarUtils.showSuccess(
+      SnackBarUtils.showSuccess(
         context,
         message: 'Scores saved successfully!',
         duration: const Duration(seconds: 4),
       );
 
       // Navigate back with cleanup
-      SnackbarUtils.popWithCleanup(context);
+      SnackBarUtils.popWithCleanup(context);
     } catch (e) {
-      SnackbarUtils.showError(
+      SnackBarUtils.showError(
         context,
         message: 'Error saving scores: $e',
         duration: const Duration(seconds: 5),
@@ -82,6 +82,19 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
         });
       }
     }
+  }
+
+  void _resetScores() {
+    setState(() {
+      _team1ScoreController.text = '0';
+      _team2ScoreController.text = '0';
+    });
+
+    SnackBarUtils.showWarning(
+      context,
+      message: 'Scores reset to 0',
+      duration: const Duration(seconds: 2),
+    );
   }
 
   @override
@@ -176,24 +189,52 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
 
             const SizedBox(height: 20),
 
-            // Save Button
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _isProcessing ? null : _saveScores,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isProcessing ? Colors.grey : Colors.green,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+            // Action Buttons
+            Row(
+              children: [
+                // Reset Button
+                Expanded(
+                  child: SizedBox(
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: _isProcessing ? null : _resetScores,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            _isProcessing ? Colors.grey : Colors.orange,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text('Reset'),
+                    ),
                   ),
                 ),
-                child:
-                    _isProcessing
-                        ? const Text('Saving...')
-                        : const Text('Save Scores'),
-              ),
+
+                const SizedBox(width: 16),
+
+                // Save Button
+                Expanded(
+                  child: SizedBox(
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: _isProcessing ? null : _saveScores,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            _isProcessing ? Colors.grey : Colors.green,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child:
+                          _isProcessing
+                              ? const Text('Saving...')
+                              : const Text('Save Scores'),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

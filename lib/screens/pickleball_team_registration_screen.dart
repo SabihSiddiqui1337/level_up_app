@@ -118,11 +118,21 @@ class _PickleballTeamRegistrationScreenState
   }
 
   void _onFormChanged() {
-    if (!_hasUnsavedChanges) {
+    if (mounted) {
       setState(() {
         _hasUnsavedChanges = true;
+        // This will trigger a rebuild to update button state
       });
     }
+  }
+
+  bool _isFormComplete() {
+    // Check if all required fields are filled
+    return _teamNameController.text.trim().isNotEmpty &&
+        _coachNameController.text.trim().isNotEmpty &&
+        _coachPhoneController.text.trim().isNotEmpty &&
+        _coachEmailController.text.trim().isNotEmpty &&
+        _players.isNotEmpty;
   }
 
   void _addPlayer() {
@@ -675,7 +685,8 @@ class _PickleballTeamRegistrationScreenState
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _isSaving ? null : _saveTeam,
+                  onPressed:
+                      (_isSaving || !_isFormComplete()) ? null : _saveTeam,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF38A169),
                     foregroundColor: Colors.white,
@@ -687,11 +698,12 @@ class _PickleballTeamRegistrationScreenState
                   child:
                       _isSaving
                           ? const CircularProgressIndicator(color: Colors.white)
-                          : Text(
+                          : const Text(
                             'Next',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
+                              color: Colors.white,
                             ),
                           ),
                 ),

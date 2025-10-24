@@ -119,6 +119,7 @@ class GameSelectionScreen extends StatelessWidget {
                   coachName: team.coachName,
                   coachPhone: team.coachPhone,
                   coachEmail: team.coachEmail,
+                  coachAge: team.coachAge,
                   players: team.players,
                   registrationDate: team.registrationDate,
                   division: team.division,

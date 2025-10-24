@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class SnackbarUtils {
+class SnackBarUtils {
   /// Show a snackbar with proper positioning and auto-cleanup
   static void showSnackbar(
     BuildContext context, {

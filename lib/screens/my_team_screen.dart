@@ -64,8 +64,14 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
 
   int get _totalTeams => _basketballTeams.length + _pickleballTeams.length;
   int get _totalPlayers =>
-      _basketballTeams.fold(0, (sum, team) => sum + team.players.length) +
-      _pickleballTeams.fold(0, (sum, team) => sum + team.players.length);
+      _basketballTeams.fold(
+        0,
+        (sum, team) => sum + team.players.length + 1,
+      ) + // +1 for captain
+      _pickleballTeams.fold(
+        0,
+        (sum, team) => sum + team.players.length + 1,
+      ); // +1 for captain
 
   void _navigateToTeamDetail(Team team) {
     Navigator.push(
@@ -528,7 +534,7 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
                 children: [
                   _buildInfoChip(
                     Icons.people,
-                    '${team.players.length} Players',
+                    '${team.players.length + 1} Players', // +1 for captain
                     const Color(0xFF38A169),
                   ),
                   const SizedBox(width: 8),
@@ -633,7 +639,7 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
                 children: [
                   _buildInfoChip(
                     Icons.people,
-                    '${team.players.length} Player${team.players.length != 1 ? 's' : ''}',
+                    '${team.players.length + 1} Player${team.players.length + 1 != 1 ? 's' : ''}', // +1 for captain
                     const Color(0xFF4CAF50),
                   ),
                   const SizedBox(width: 8),

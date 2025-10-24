@@ -105,6 +105,7 @@ class TeamService {
           coachName: 'John Coach',
           coachPhone: '987-654-3210',
           coachEmail: 'coach@levelup.com',
+          coachAge: 28,
           players: [],
           registrationDate: DateTime.now().subtract(const Duration(days: 5)),
           division: 'Adult 18+',

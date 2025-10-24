@@ -195,7 +195,7 @@ class _PickleballTeamDetailScreenState
                           Icon(Icons.people, color: const Color(0xFF4CAF50)),
                           const SizedBox(width: 8),
                           Text(
-                            'Players (${_currentTeam.players.length})',
+                            'Players (${_currentTeam.players.length + 1})', // +1 for captain
                             style: Theme.of(
                               context,
                             ).textTheme.titleLarge?.copyWith(
@@ -206,12 +206,16 @@ class _PickleballTeamDetailScreenState
                         ],
                       ),
                       const SizedBox(height: 16),
+                      // Show captain first
+                      _buildCaptainCard(),
+                      const SizedBox(height: 8),
+
                       if (_currentTeam.players.isEmpty)
                         const Center(
                           child: Padding(
                             padding: EdgeInsets.all(32.0),
                             child: Text(
-                              'No players registered for this team.',
+                              'No additional players registered for this team.',
                               style: TextStyle(
                                 fontSize: 16,
                                 color: Colors.grey,
@@ -317,6 +321,85 @@ class _PickleballTeamDetailScreenState
     );
   }
 
+  Widget _buildCaptainCard() {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFF4CAF50).withOpacity(0.1),
+              const Color(0xFF4CAF50).withOpacity(0.05),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: const Color(0xFF4CAF50),
+                radius: 20,
+                child: Icon(Icons.star, color: Colors.white, size: 16),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _currentTeam.coachName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Color(0xFF4CAF50),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF4CAF50),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Captain',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Icon(Icons.phone, color: Colors.grey[600], size: 16),
+                  const SizedBox(height: 2),
+                  Text(
+                    _currentTeam.coachPhone,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPlayerCard(player) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -375,7 +458,7 @@ class _PickleballTeamDetailScreenState
                   _currentTeam = updatedTeam; // Update the current team
                 });
                 // Navigate back to My Teams tab with snackbar cleanup
-                SnackbarUtils.navigateWithCleanup(
+                SnackBarUtils.navigateWithCleanup(
                   context,
                   const MainNavigationScreen(initialIndex: 2), // My Teams tab
                   clearStack: true,

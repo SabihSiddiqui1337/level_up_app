@@ -59,6 +59,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
   final _coachNameController = TextEditingController();
   final _coachPhoneController = TextEditingController();
   final _coachEmailController = TextEditingController();
+  final _coachAgeController = TextEditingController();
 
   final List<Player> _players = [];
   String _selectedDivision = 'Adult 18+';
@@ -83,6 +84,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
       _coachNameController.text = widget.team!.coachName;
       _coachPhoneController.text = widget.team!.coachPhone;
       _coachEmailController.text = widget.team!.coachEmail;
+      _coachAgeController.text = widget.team!.coachAge.toString();
 
       // Map old division values to new ones
       String existingDivision = widget.team!.division;
@@ -111,6 +113,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
     _coachNameController.addListener(_onFormChanged);
     _coachPhoneController.addListener(_onFormChanged);
     _coachEmailController.addListener(_onFormChanged);
+    _coachAgeController.addListener(_onFormChanged);
   }
 
   @override
@@ -119,15 +122,17 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
     _coachNameController.dispose();
     _coachPhoneController.dispose();
     _coachEmailController.dispose();
+    _coachAgeController.dispose();
     super.dispose();
   }
 
   void _onFormChanged() {
     // Add defensive programming to prevent keyboard event issues
-    if (mounted && !_hasUnsavedChanges) {
+    if (mounted) {
       try {
         setState(() {
           _hasUnsavedChanges = true;
+          // This will trigger a rebuild to update button state
         });
       } catch (e) {
         // Handle any potential state update issues
@@ -148,6 +153,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
               setState(() {
                 _players.add(player);
                 _hasUnsavedChanges = true;
+                // This will trigger button state update
               });
               print('Total players now: ${_players.length}'); // Debug print
             },
@@ -166,6 +172,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
               setState(() {
                 _players[index] = player;
                 _hasUnsavedChanges = true;
+                // This will trigger button state update
               });
             },
           ),
@@ -190,6 +197,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                 setState(() {
                   _players.removeAt(index);
                   _hasUnsavedChanges = true;
+                  // This will trigger button state update
                 });
               },
               style: ElevatedButton.styleFrom(
@@ -218,6 +226,9 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         coachName: _coachNameController.text,
         coachPhone: _coachPhoneController.text,
         coachEmail: _coachEmailController.text,
+        coachAge:
+            int.tryParse(_coachAgeController.text) ??
+            25, // Default to 25 if invalid
         players: List.from(_players), // Create a copy of the players list
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
         division: _selectedDivision,
@@ -369,6 +380,8 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                             });
                             // Validate existing players against new division
                             _validatePlayersForDivision();
+                            // Re-validate captain age against new division
+                            _formKey.currentState?.validate();
                           },
                         ),
                       ],
@@ -486,6 +499,52 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                             return null;
                           },
                         ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _coachAgeController,
+                          decoration: InputDecoration(
+                            labelText: 'Captain Age',
+                            prefixIcon: const Icon(Icons.cake),
+                            border: const OutlineInputBorder(),
+                            helperText: _getAgeRequirementText(),
+                            helperStyle: TextStyle(
+                              color:
+                                  _selectedDivision == 'Youth (18 or under)'
+                                      ? Colors.blue[700]
+                                      : Colors.green[700],
+                              fontSize: 12,
+                            ),
+                          ),
+                          keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            // Clear validation error when user starts typing
+                            if (value.isNotEmpty) {
+                              _formKey.currentState?.validate();
+                            }
+                          },
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter captain age';
+                            }
+                            final age = int.tryParse(value);
+                            if (age == null) {
+                              return 'Please enter a valid age';
+                            }
+
+                            // Check age against selected division
+                            if (_selectedDivision == 'Youth (18 or under)') {
+                              if (age > 18) {
+                                return 'Captain age must be 18 or under for Youth division';
+                              }
+                            } else if (_selectedDivision == 'Adult 18+') {
+                              if (age < 18) {
+                                return 'Captain age must be 18 or older for Adult division';
+                              }
+                            }
+
+                            return null;
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -582,25 +641,42 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                   width: double.infinity,
                   height: 50,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFF2196F3),
-                        const Color(0xFF1976D2),
-                      ],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
+                    gradient:
+                        _isFormComplete()
+                            ? LinearGradient(
+                              colors: [
+                                const Color(0xFF2196F3),
+                                const Color(0xFF1976D2),
+                              ],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            )
+                            : LinearGradient(
+                              colors: [Colors.grey[400]!, Colors.grey[500]!],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            ),
                     borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF2196F3).withOpacity(0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
+                    boxShadow:
+                        _isFormComplete()
+                            ? [
+                              BoxShadow(
+                                color: const Color(0xFF2196F3).withOpacity(0.3),
+                                blurRadius: 10,
+                                offset: const Offset(0, 5),
+                              ),
+                            ]
+                            : [
+                              BoxShadow(
+                                color: Colors.grey.withOpacity(0.2),
+                                blurRadius: 5,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                   ),
                   child: ElevatedButton(
-                    onPressed: _isSaving ? null : _saveTeam,
+                    onPressed:
+                        (_isSaving || !_isFormComplete()) ? null : _saveTeam,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       shadowColor: Colors.transparent,
@@ -614,7 +690,9 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                         const Icon(Icons.arrow_forward, color: Colors.white),
                         const SizedBox(width: 8),
                         Text(
-                          widget.team == null ? 'Next' : 'Update Team',
+                          _isSaving
+                              ? 'Saving...'
+                              : (widget.team == null ? 'Next' : 'Update Team'),
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -741,6 +819,25 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
               ),
         ) ??
         false;
+  }
+
+  String _getAgeRequirementText() {
+    if (_selectedDivision == 'Youth (18 or under)') {
+      return 'Age must be 18 or under for Youth division';
+    } else if (_selectedDivision == 'Adult 18+') {
+      return 'Age must be 18 or older for Adult division';
+    }
+    return 'Enter captain age';
+  }
+
+  bool _isFormComplete() {
+    // Check if all required fields are filled
+    return _teamNameController.text.trim().isNotEmpty &&
+        _coachNameController.text.trim().isNotEmpty &&
+        _coachPhoneController.text.trim().isNotEmpty &&
+        _coachEmailController.text.trim().isNotEmpty &&
+        _coachAgeController.text.trim().isNotEmpty &&
+        _players.isNotEmpty;
   }
 }
 

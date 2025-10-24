@@ -187,15 +187,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           selectedItemColor: const Color(0xFF2196F3),
           unselectedItemColor: Colors.grey[600],
           selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+          unselectedLabelStyle: const TextStyle(fontSize: 11),
           items:
-              navigationItems
-                  .map(
-                    (item) => BottomNavigationBarItem(
-                      icon: Icon(item.icon),
-                      label: item.label,
-                    ),
-                  )
-                  .toList(),
+              navigationItems.asMap().entries.map((entry) {
+                final item = entry.value;
+                final isRegistration = item.label == 'Registration';
+
+                return BottomNavigationBarItem(
+                  icon: Icon(item.icon, size: isRegistration ? 20 : 24),
+                  label: item.label,
+                );
+              }).toList(),
         ),
       ),
     );

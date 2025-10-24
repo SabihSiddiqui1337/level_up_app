@@ -43,12 +43,15 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     // Validation
     if (_emailController.text.trim().isEmpty) {
-      SnackBarUtils.showError(context, LoginScreenKeys.enterEmailUsername);
+      SnackBarUtils.showError(
+        context,
+        message: LoginScreenKeys.enterEmailUsername,
+      );
       return;
     }
 
     if (_passwordController.text.isEmpty) {
-      SnackBarUtils.showError(context, LoginScreenKeys.enterPassword);
+      SnackBarUtils.showError(context, message: LoginScreenKeys.enterPassword);
       return;
     }
 

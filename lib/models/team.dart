@@ -6,6 +6,7 @@ class Team {
   final String coachName;
   final String coachPhone;
   final String coachEmail;
+  final int coachAge; // Captain's age
   final List<Player> players;
   final DateTime registrationDate;
   final String division; // e.g., "Youth", "Adult", "Senior"
@@ -16,6 +17,7 @@ class Team {
     required this.coachName,
     required this.coachPhone,
     required this.coachEmail,
+    required this.coachAge,
     required this.players,
     required this.registrationDate,
     required this.division,
@@ -28,6 +30,7 @@ class Team {
       'coachName': coachName,
       'coachPhone': coachPhone,
       'coachEmail': coachEmail,
+      'coachAge': coachAge,
       'players': players.map((player) => player.toJson()).toList(),
       'registrationDate': registrationDate.toIso8601String(),
       'division': division,
@@ -41,6 +44,7 @@ class Team {
       coachName: json['coachName'],
       coachPhone: json['coachPhone'],
       coachEmail: json['coachEmail'],
+      coachAge: json['coachAge'] ?? 25, // Default age if not provided
       players:
           (json['players'] as List)
               .map((playerJson) => Player.fromJson(playerJson))

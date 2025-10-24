@@ -310,7 +310,7 @@ class _TeamListScreenState extends State<TeamListScreen> {
                   const SizedBox(width: 8),
                   _buildInfoChip(
                     Icons.people,
-                    '${team.players.length} ${TeamScreenKeys.playersCount}',
+                    '${team.players.length + 1} ${TeamScreenKeys.playersCount}', // +1 for captain
                     const Color(0xFF38A169),
                   ),
                 ],

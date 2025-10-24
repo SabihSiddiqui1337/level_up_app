@@ -109,7 +109,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
       print('SignUp: Registration successful');
 
       if (mounted) {
-        SnackBarUtils.showSuccess(context, 'Account created successfully!');
+        SnackBarUtils.showSuccess(
+          context,
+          message: 'Account created successfully!',
+        );
         NavigationUtils.pushReplacement(context, const LoginScreen());
       }
     } catch (e) {
@@ -121,7 +124,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         } else if (errorMessage.contains('Username is already taken')) {
           errorMessage = 'Username is already taken. Please try again.';
         }
-        SnackBarUtils.showError(context, errorMessage);
+        SnackBarUtils.showError(context, message: errorMessage);
       }
     } finally {
       if (mounted) {

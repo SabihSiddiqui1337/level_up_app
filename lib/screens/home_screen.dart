@@ -163,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Expanded(
                           child: _buildStatCard(
                             'Players',
-                            '${_teams.fold(0, (sum, team) => sum + team.players.length)}',
+                            '${_teams.fold(0, (sum, team) => sum + team.players.length + 1)}', // +1 for captain
                             Icons.people,
                             const Color(0xFF42A5F5),
                           ),
