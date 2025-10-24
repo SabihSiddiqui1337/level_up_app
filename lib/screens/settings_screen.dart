@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../widgets/custom_app_bar.dart';
 import 'login_screen.dart';
@@ -529,6 +530,8 @@ class AppFeedbackScreen extends StatefulWidget {
 
 class _AppFeedbackScreenState extends State<AppFeedbackScreen> {
   final _feedbackController = TextEditingController();
+  final _authService = AuthService();
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -536,7 +539,7 @@ class _AppFeedbackScreenState extends State<AppFeedbackScreen> {
     super.dispose();
   }
 
-  void _submitFeedback() {
+  Future<void> _submitFeedback() async {
     if (_feedbackController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -554,23 +557,294 @@ class _AppFeedbackScreenState extends State<AppFeedbackScreen> {
       return;
     }
 
-    // Show success message
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text(
-          'Thank you for your feedback!',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-        ),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        margin: const EdgeInsets.only(left: 16, right: 16, bottom: 100),
-        elevation: 4,
-      ),
-    );
+    setState(() {
+      _isSubmitting = true;
+    });
 
-    // Navigate back to settings
-    Navigator.pop(context);
+    try {
+      // Get current user info
+      final currentUser = _authService.currentUser;
+      final userName = currentUser?.name ?? 'Anonymous User';
+      final userEmail = currentUser?.email ?? 'No email provided';
+
+      // Create email content
+      final emailBody = '''
+App Feedback from Level Up Sports App
+
+User Information:
+- Name: $userName
+- Email: $userEmail
+- User ID: ${currentUser?.id ?? 'N/A'}
+
+Feedback:
+${_feedbackController.text.trim()}
+
+---
+Sent from Level Up Sports App
+Time: ${DateTime.now().toString()}
+''';
+
+      // Show options dialog first (iOS workaround)
+      _showEmailOptionsDialog(emailBody);
+    } catch (e) {
+      print('DEBUG: Error preparing email: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error preparing email: $e',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            margin: const EdgeInsets.only(left: 16, right: 16, bottom: 100),
+            elevation: 4,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  void _showEmailOptionsDialog(String emailBody) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Send Feedback'),
+          content: const Text(
+            'Choose how you\'d like to send your feedback:',
+            style: TextStyle(fontSize: 16),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _feedbackController.clear();
+                Navigator.pop(context); // Go back to settings
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _tryLaunchEmailClient(emailBody);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2196F3),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Open Email App'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showFallbackDialog(emailBody);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Copy Content'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _tryLaunchEmailClient(String emailBody) async {
+    try {
+      // Get current user info
+      final currentUser = _authService.currentUser;
+      final userName = currentUser?.name ?? 'Anonymous User';
+
+      // Create mailto URL
+      final Uri emailUri = Uri(
+        scheme: 'mailto',
+        path: 'levelupsports96@gmail.com',
+        query:
+            'subject=${Uri.encodeComponent('App Feedback from $userName')}&body=${Uri.encodeComponent(emailBody)}',
+      );
+
+      // Try to launch email client with better error handling
+      print('DEBUG: Attempting to launch email URI: $emailUri');
+
+      try {
+        // First try to launch directly without checking canLaunchUrl (iOS issue workaround)
+        final launched = await launchUrl(
+          emailUri,
+          mode: LaunchMode.externalApplication,
+        );
+
+        if (launched) {
+          print('DEBUG: Email client launched successfully');
+          // Show success message
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                  'Email client opened. Please send the email to submit your feedback.',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                ),
+                backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                margin: const EdgeInsets.only(left: 16, right: 16, bottom: 100),
+                elevation: 4,
+              ),
+            );
+
+            // Clear form and navigate back
+            _feedbackController.clear();
+            Navigator.pop(context);
+          }
+        } else {
+          throw Exception('Failed to launch email client');
+        }
+      } catch (e) {
+        print('DEBUG: Direct launch failed: $e');
+        // If direct launch fails, try with canLaunchUrl check
+        try {
+          if (await canLaunchUrl(emailUri)) {
+            final launched = await launchUrl(
+              emailUri,
+              mode: LaunchMode.externalApplication,
+            );
+            if (launched) {
+              print('DEBUG: Email client launched successfully after retry');
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text(
+                      'Email client opened. Please send the email to submit your feedback.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    backgroundColor: Colors.green,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    margin: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      bottom: 100,
+                    ),
+                    elevation: 4,
+                  ),
+                );
+
+                _feedbackController.clear();
+                Navigator.pop(context);
+              }
+            } else {
+              throw Exception('Failed to launch email client after retry');
+            }
+          } else {
+            throw Exception('No email client available on this device');
+          }
+        } catch (e2) {
+          print('DEBUG: Both launch attempts failed: $e2');
+          rethrow; // Re-throw to trigger fallback dialog
+        }
+      }
+    } catch (e) {
+      print('DEBUG: Error launching email client: $e');
+      if (mounted) {
+        // Show fallback dialog with email content
+        _showFallbackDialog(emailBody);
+      }
+    }
+  }
+
+  void _showFallbackDialog(String emailBody) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Email Client Not Available'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Please copy the following information and send it to:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'levelupsports96@gmail.com',
+                style: TextStyle(
+                  color: Color(0xFF2196F3),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Email Content:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: SelectableText(
+                  emailBody,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _feedbackController.clear();
+                Navigator.pop(context); // Go back to settings
+              },
+              child: const Text('Close'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                // Copy to clipboard
+                Clipboard.setData(ClipboardData(text: emailBody));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Email content copied to clipboard!'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                Navigator.of(context).pop();
+                _feedbackController.clear();
+                Navigator.pop(context); // Go back to settings
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2196F3),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Copy & Close'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -614,7 +888,7 @@ class _AppFeedbackScreenState extends State<AppFeedbackScreen> {
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: _submitFeedback,
+                onPressed: _isSubmitting ? null : _submitFeedback,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2196F3),
                   foregroundColor: Colors.white,
@@ -623,10 +897,32 @@ class _AppFeedbackScreenState extends State<AppFeedbackScreen> {
                   ),
                   elevation: 0,
                 ),
-                child: const Text(
-                  'Submit',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
+                child:
+                    _isSubmitting
+                        ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Text('Submitting...'),
+                          ],
+                        )
+                        : const Text(
+                          'Submit',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
               ),
             ),
           ],

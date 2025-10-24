@@ -16,6 +16,23 @@ class TeamService {
     return List.from(_teams); // Changed from List.unmodifiable to List.from
   }
 
+  // Get public teams (visible to everyone)
+  List<Team> getPublicTeams() {
+    return _teams.where((team) => !team.isPrivate).toList();
+  }
+
+  // Get teams visible to a specific user (public teams + user's private teams)
+  List<Team> getTeamsForUser(String? userId) {
+    if (userId == null) {
+      // If no user logged in, only show public teams
+      return getPublicTeams();
+    }
+
+    return _teams
+        .where((team) => !team.isPrivate || team.createdByUserId == userId)
+        .toList();
+  }
+
   // Load teams from SharedPreferences
   Future<void> loadTeams() async {
     try {

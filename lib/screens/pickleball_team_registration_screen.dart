@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../models/pickleball_team.dart';
 import '../models/pickleball_player.dart';
 import '../models/event.dart';
+import '../services/auth_service.dart';
 import '../keys/pickleball_screen/pickleball_screen_keys.dart';
 import 'pickleball_process_registration_screen.dart';
 
@@ -62,6 +63,7 @@ class _PickleballTeamRegistrationScreenState
   final _coachNameController = TextEditingController();
   final _coachPhoneController = TextEditingController();
   final _coachEmailController = TextEditingController();
+  final AuthService _authService = AuthService();
 
   final List<PickleballPlayer> _players = [];
   String _selectedDuprRating = PickleballScreenKeys.duprRatingUnder35;
@@ -226,6 +228,10 @@ class _PickleballTeamRegistrationScreenState
         print('Creating new pickleball team with ID: $teamId');
       }
 
+      final currentUser = _authService.currentUser;
+      final isAdmin =
+          currentUser?.role == 'scoring' || currentUser?.role == 'owner';
+
       final team = PickleballTeam(
         id: teamId,
         name: _teamNameController.text,
@@ -235,6 +241,9 @@ class _PickleballTeamRegistrationScreenState
         players: List.from(_players), // Create a copy of the players list
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
         division: _selectedDuprRating,
+        createdByUserId: currentUser?.id,
+        isPrivate:
+            !isAdmin, // Regular users create private teams, admins create public teams
       );
       print('Team created with ${team.players.length} players'); // Debug print
       print(

@@ -1,7 +1,5 @@
-// ignore_for_file: avoid_print
-
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 
 class AuthService {
@@ -9,62 +7,90 @@ class AuthService {
   factory AuthService() => _instance;
   AuthService._internal();
 
-  User? _currentUser;
   List<User> _users = [];
+  User? _currentUser;
 
-  User? get currentUser => _currentUser;
-  bool get isLoggedIn => _currentUser != null;
-
-  // Initialize with persistent storage
+  // Initialize the service
   Future<void> initialize() async {
     print('AuthService.initialize called');
     await _loadUsers();
     await _loadCurrentUser(); // Load current user session
 
-    // Only add demo users if no users exist in storage
-    if (_users.isEmpty) {
-      _users = [
-        User(
-          id: '1',
-          email: 'admin@levelup.com',
-          password: 'admin123',
-          name: 'Admin User',
-          username: 'admin',
-          phone: '123-456-7890',
-          role: 'owner',
-          createdAt: DateTime.now(),
-        ),
-        User(
-          id: '2',
-          email: 'scoring@levelup.com',
-          password: 'scoring123',
-          name: 'John Scoring',
-          username: 'scoring',
-          phone: '987-654-3210',
-          role: 'scoring',
-          createdAt: DateTime.now(),
-        ),
-        User(
-          id: '3',
-          email: 'sabih',
-          password: '1234567',
-          name: 'Sabih',
-          username: 'sabih',
-          phone: '555-123-4567',
-          role: 'scoring',
-          createdAt: DateTime.now(),
-        ),
-      ];
-      await _saveUsers();
-      print('AuthService initialized with ${_users.length} demo users');
-    } else {
-      print('AuthService loaded ${_users.length} users from storage');
-    }
+    // Force reinitialize with admin accounts (for fixing login issues)
+    _users = [
+      // Admin accounts with scoring access
+      User(
+        id: '1',
+        email: 'scoring@levelup.com',
+        password: 'Scoring123',
+        name: 'Scoring Admin',
+        username: 'scoring_admin',
+        phone: '123-456-7890',
+        role: 'scoring',
+        createdAt: DateTime.now(),
+      ),
+      User(
+        id: '2',
+        email: 'sabihadmin@levelup.com',
+        password: 'Sabih1337',
+        name: 'Sabih Admin',
+        username: 'sabih_admin',
+        phone: '987-654-3210',
+        role: 'scoring',
+        createdAt: DateTime.now(),
+      ),
+      User(
+        id: '3',
+        email: 'rehainadmin@levelup.com',
+        password: 'Rehain123',
+        name: 'Rehain Admin',
+        username: 'rehain_admin',
+        phone: '555-123-4567',
+        role: 'scoring',
+        createdAt: DateTime.now(),
+      ),
+      User(
+        id: '4',
+        email: 'mustafaadmin@levelup.com',
+        password: 'Mustafa123',
+        name: 'Mustafa Admin',
+        username: 'mustafa_admin',
+        phone: '555-987-6543',
+        role: 'scoring',
+        createdAt: DateTime.now(),
+      ),
+      User(
+        id: '5',
+        email: 'sabih@levelup.com',
+        password: '1234567',
+        name: 'Sabih User',
+        username: 'sabih',
+        phone: '555-123-4567',
+        role: 'scoring',
+        createdAt: DateTime.now(),
+      ),
+    ];
+    await _saveUsers();
+    print('AuthService initialized with ${_users.length} admin users');
   }
 
   // Load users from SharedPreferences
   Future<void> loadUsers() async {
     await _loadUsers();
+  }
+
+  // Reset users data (for fixing email case issues)
+  Future<void> resetUsers() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('users');
+      await prefs.remove('current_user');
+      _users = [];
+      _currentUser = null;
+      print('Users data cleared. App will reinitialize with new data.');
+    } catch (e) {
+      print('Error resetting users: $e');
+    }
   }
 
   Future<void> _loadUsers() async {
@@ -114,12 +140,14 @@ class AuthService {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (_currentUser != null) {
-        final userJson = json.encode(_currentUser!.toJson());
-        await prefs.setString('current_user', userJson);
-        print('Saved current user: ${_currentUser!.username}');
+        await prefs.setString(
+          'current_user',
+          json.encode(_currentUser!.toJson()),
+        );
+        print('Current user saved: ${_currentUser!.username}');
       } else {
         await prefs.remove('current_user');
-        print('Cleared current user session');
+        print('Current user cleared');
       }
     } catch (e) {
       print('Error saving current user: $e');
@@ -132,11 +160,11 @@ class AuthService {
       final prefs = await SharedPreferences.getInstance();
       final userJson = prefs.getString('current_user');
       if (userJson != null) {
-        final userMap = json.decode(userJson);
-        _currentUser = User.fromJson(userMap);
-        print('Loaded current user: ${_currentUser!.username}');
+        _currentUser = User.fromJson(json.decode(userJson));
+        print('Current user loaded: ${_currentUser!.username}');
       } else {
-        print('No current user found in storage');
+        _currentUser = null;
+        print('No current user found');
       }
     } catch (e) {
       print('Error loading current user: $e');
@@ -144,6 +172,7 @@ class AuthService {
     }
   }
 
+  // Login method
   Future<bool> login(String emailOrUsername, String password) async {
     print('AuthService.login called with: $emailOrUsername, $password');
     print(
@@ -174,118 +203,170 @@ class AuthService {
   }
 
   Future<bool> register({
+    required String name,
     required String email,
     required String password,
-    required String name,
     required String username,
     required String phone,
-    String role = 'user',
   }) async {
-    print('AuthService.register called with: $email, $username, $name');
+    print('AuthService.register called with: $email, $username');
     await Future.delayed(const Duration(seconds: 1)); // Simulate network delay
 
-    // Check if email already exists (case-insensitive)
-    if (_users.any((user) => user.email.toLowerCase() == email.toLowerCase())) {
-      print('Email already exists: $email');
-      throw Exception('User with this email already exists');
+    // Check if user already exists
+    try {
+      _users.firstWhere(
+        (user) =>
+            user.email.toLowerCase() == email.toLowerCase() ||
+            user.username.toLowerCase() == username.toLowerCase(),
+      );
+      print('User already exists');
+      return false; // User already exists
+    } catch (e) {
+      // User doesn't exist, proceed with registration
     }
 
-    // Check if username already exists (case-insensitive)
-    if (_users.any(
-      (user) => user.username.toLowerCase() == username.toLowerCase(),
-    )) {
-      print('Username already exists: $username');
-      throw Exception('Username is already taken. Please try again.');
+    try {
+      final newUser = User(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        name: name,
+        email: email,
+        password: password,
+        username: username,
+        phone: phone,
+        role: 'user', // Default role for new users
+        createdAt: DateTime.now(),
+      );
+
+      _users.add(newUser);
+      await _saveUsers();
+      print('User registered successfully: ${newUser.username}');
+      return true;
+    } catch (e) {
+      print('Error registering user: $e');
+      return false;
     }
-
-    final newUser = User(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      email: email,
-      password: password,
-      name: name,
-      username: username,
-      phone: phone,
-      role: role,
-      createdAt: DateTime.now(),
-    );
-
-    print('Creating new user: ${newUser.name} (${newUser.username})');
-    _users.add(newUser);
-    await _saveUsers(); // Save to persistent storage
-    print('Total users now: ${_users.length}');
-    print('Users list: ${_users.map((u) => u.username).toList()}');
-
-    // Don't auto-login during registration
-    return true;
   }
 
+  // Logout method
   Future<void> logout() async {
+    print('AuthService.logout called');
     _currentUser = null;
-    await _saveCurrentUser(); // Clear current user session
+    await _saveCurrentUser();
   }
 
+  // Get current user
+  User? get currentUser => _currentUser;
+
+  // Check if user is logged in
+  bool get isLoggedIn => _currentUser != null;
+
+  // Check if user can score (has scoring or owner role)
+  bool get canScore =>
+      _currentUser != null &&
+      (_currentUser!.role == 'scoring' || _currentUser!.role == 'owner');
+
+  // Check if email exists
+  Future<bool> checkEmailExists(String email) async {
+    try {
+      _users.firstWhere(
+        (user) => user.email.toLowerCase() == email.toLowerCase(),
+      );
+      return true; // Email exists
+    } catch (e) {
+      return false; // Email doesn't exist
+    }
+  }
+
+  // Add user (for admin purposes)
+  Future<bool> addUser(User user) async {
+    try {
+      _users.add(user);
+      await _saveUsers();
+      print('User added: ${user.username}');
+      return true;
+    } catch (e) {
+      print('Error adding user: $e');
+      return false;
+    }
+  }
+
+  // Update user (for admin purposes)
+  Future<bool> updateUser(User user) async {
+    try {
+      final userIndex = _users.indexWhere((u) => u.id == user.id);
+      if (userIndex != -1) {
+        _users[userIndex] = user;
+        await _saveUsers();
+        print('User updated: ${user.username}');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Error updating user: $e');
+      return false;
+    }
+  }
+
+  // Update user profile
   Future<bool> updateProfile({
-    String? name,
-    String? phone,
-    String? email,
+    required String name,
+    required String phone,
+    required String email,
   }) async {
     if (_currentUser == null) return false;
 
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      // Find the user in the list and update
+      final userIndex = _users.indexWhere(
+        (user) => user.id == _currentUser!.id,
+      );
+      if (userIndex != -1) {
+        _users[userIndex] = User(
+          id: _currentUser!.id,
+          name: name,
+          email: email,
+          password: _currentUser!.password, // Keep existing password
+          username: _currentUser!.username,
+          phone: phone,
+          role: _currentUser!.role,
+          createdAt: _currentUser!.createdAt,
+        );
 
-    _currentUser = _currentUser!.copyWith(
-      name: name ?? _currentUser!.name,
-      phone: phone ?? _currentUser!.phone,
-      email: email ?? _currentUser!.email,
-    );
+        // Update current user
+        _currentUser = _users[userIndex];
 
-    // Update in users list
-    final index = _users.indexWhere((user) => user.id == _currentUser!.id);
-    if (index != -1) {
-      _users[index] = _currentUser!;
+        // Save to storage
+        await _saveUsers();
+        await _saveCurrentUser();
+
+        print('Profile updated successfully');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Error updating profile: $e');
+      return false;
     }
-
-    // Save updated users to storage
-    await _saveUsers();
-
-    // Save updated current user session
-    await _saveCurrentUser();
-
-    print('Profile updated for user: ${_currentUser!.username}');
-    return true;
   }
 
+  // Get all users (for admin purposes)
   List<User> get users => List.from(_users);
 
-  List<User> getAllUsers() {
-    return List.from(_users);
+  // Get users by role
+  List<User> getUsersByRole(String role) {
+    return _users.where((user) => user.role == role).toList();
   }
 
-  // Add a new user (for admin panel)
-  Future<void> addUser(User user) async {
-    _users.add(user);
-    await _saveUsers();
-  }
-
-  // Update user
-  Future<void> updateUser(User updatedUser) async {
-    final index = _users.indexWhere((user) => user.id == updatedUser.id);
-    if (index != -1) {
-      _users[index] = updatedUser;
+  // Delete user (for admin purposes)
+  Future<bool> deleteUser(String userId) async {
+    try {
+      _users.removeWhere((user) => user.id == userId);
       await _saveUsers();
+      print('User deleted: $userId');
+      return true;
+    } catch (e) {
+      print('Error deleting user: $e');
+      return false;
     }
-  }
-
-  // Delete user
-  Future<void> deleteUser(String userId) async {
-    _users.removeWhere((user) => user.id == userId);
-    await _saveUsers();
-  }
-
-  // Check if email exists in the database
-  bool checkEmailExists(String email) {
-    return _users.any(
-      (user) => user.email.toLowerCase() == email.toLowerCase(),
-    );
   }
 }

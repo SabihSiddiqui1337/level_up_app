@@ -359,7 +359,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       await Future.delayed(const Duration(seconds: 1));
 
       // Check if email exists in database
-      final emailExists = _authService.checkEmailExists(
+      final emailExists = await _authService.checkEmailExists(
         _emailController.text.trim(),
       );
 

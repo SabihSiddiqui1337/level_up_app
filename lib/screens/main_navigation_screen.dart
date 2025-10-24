@@ -6,7 +6,6 @@ import 'my_team_screen.dart';
 import 'game_selection_screen.dart';
 import 'schedule_screen.dart';
 import 'settings_screen.dart';
-import 'scoring_screen.dart';
 import 'admin_panel_screen.dart';
 import '../services/team_service.dart';
 import '../services/pickleball_team_service.dart';
@@ -107,36 +106,32 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         icon: Icons.app_registration,
         label: 'Registration',
       ),
-      NavigationItem(
-        screen: MyTeamScreen(
-          teamService: _teamService,
-          pickleballTeamService: _pickleballTeamService,
-          onHomePressed: _navigateToHome,
+    ];
+
+    // Only show "My Team" for regular users (not admins/scoring users)
+    if (userRole == 'user') {
+      baseItems.add(
+        NavigationItem(
+          screen: MyTeamScreen(
+            teamService: _teamService,
+            pickleballTeamService: _pickleballTeamService,
+            onHomePressed: _navigateToHome,
+          ),
+          icon: Icons.group,
+          label: 'My Team',
         ),
-        icon: Icons.group,
-        label: 'My Team',
-      ),
+      );
+    }
+
+    baseItems.add(
       NavigationItem(
         screen: ScheduleScreen(onHomePressed: _navigateToHome),
         icon: Icons.schedule,
         label: 'Schedule',
       ),
-    ];
+    );
 
-    // Add role-specific items
-    if (RoleUtils.canScore(userRole)) {
-      baseItems.add(
-        NavigationItem(
-          screen: ScoringScreen(
-            sportName: 'Basketball',
-            teamService: _teamService,
-            pickleballTeamService: _pickleballTeamService,
-          ),
-          icon: Icons.sports_score,
-          label: 'Scoring',
-        ),
-      );
-    }
+    // Remove Scoring from main navigation - it's accessed through Schedule screen
 
     if (RoleUtils.isOwner(userRole)) {
       baseItems.add(

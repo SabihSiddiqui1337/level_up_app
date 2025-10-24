@@ -8,6 +8,23 @@ class PickleballTeamService {
 
   List<PickleballTeam> get teams => List.unmodifiable(_teams);
 
+  // Get public teams (visible to everyone)
+  List<PickleballTeam> getPublicTeams() {
+    return _teams.where((team) => !team.isPrivate).toList();
+  }
+
+  // Get teams visible to a specific user (public teams + user's private teams)
+  List<PickleballTeam> getTeamsForUser(String? userId) {
+    if (userId == null) {
+      // If no user logged in, only show public teams
+      return getPublicTeams();
+    }
+
+    return _teams
+        .where((team) => !team.isPrivate || team.createdByUserId == userId)
+        .toList();
+  }
+
   Future<void> loadTeams() async {
     try {
       final prefs = await SharedPreferences.getInstance();

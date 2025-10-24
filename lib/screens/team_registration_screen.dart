@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../models/team.dart';
 import '../models/player.dart';
 import '../models/event.dart';
+import '../services/auth_service.dart';
 import 'process_registration_screen.dart';
 
 class PhoneNumberFormatter extends TextInputFormatter {
@@ -81,6 +82,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
   final _coachPhoneController = TextEditingController();
   final _coachEmailController = TextEditingController();
   final _coachAgeController = TextEditingController();
+  final AuthService _authService = AuthService();
 
   final List<Player> _players = [];
   String _selectedDivision = 'Adult 18+';
@@ -241,6 +243,10 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         _isSaving = true;
       });
       print('Saving team with ${_players.length} players'); // Debug print
+      final currentUser = _authService.currentUser;
+      final isAdmin =
+          currentUser?.role == 'scoring' || currentUser?.role == 'owner';
+
       final team = Team(
         id: widget.team?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
         name: _teamNameController.text,
@@ -253,6 +259,9 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         players: List.from(_players), // Create a copy of the players list
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
         division: _selectedDivision,
+        createdByUserId: currentUser?.id,
+        isPrivate:
+            !isAdmin, // Regular users create private teams, admins create public teams
       );
       print('Team created with ${team.players.length} players'); // Debug print
       print(

@@ -10,6 +10,9 @@ class Team {
   final List<Player> players;
   final DateTime registrationDate;
   final String division; // e.g., "Youth", "Adult", "Senior"
+  final String?
+  createdByUserId; // ID of user who created this team (null = public team)
+  final bool isPrivate; // true if team is private to creator only
 
   Team({
     required this.id,
@@ -21,6 +24,8 @@ class Team {
     required this.players,
     required this.registrationDate,
     required this.division,
+    this.createdByUserId,
+    this.isPrivate = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -34,6 +39,8 @@ class Team {
       'players': players.map((player) => player.toJson()).toList(),
       'registrationDate': registrationDate.toIso8601String(),
       'division': division,
+      'createdByUserId': createdByUserId,
+      'isPrivate': isPrivate,
     };
   }
 
@@ -51,6 +58,8 @@ class Team {
               .toList(),
       registrationDate: DateTime.parse(json['registrationDate']),
       division: json['division'],
+      createdByUserId: json['createdByUserId'],
+      isPrivate: json['isPrivate'] ?? false,
     );
   }
 }
