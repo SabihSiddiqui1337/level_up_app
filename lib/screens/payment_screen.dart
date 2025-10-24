@@ -30,6 +30,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   final _expiryController = TextEditingController();
   final _cvvController = TextEditingController();
   final _nameController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
 
   final _teamService = TeamService();
   final _pickleballTeamService = PickleballTeamService();
@@ -122,16 +123,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   void _processPayment() async {
-    if (_cardNumberController.text.isEmpty ||
-        _expiryController.text.isEmpty ||
-        _cvvController.text.isEmpty ||
-        _nameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill in all payment details'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    // Validate all form fields
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
@@ -278,54 +271,39 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Payment Details',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1976D2),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Card Type Indicator
-                    if (_cardType != 'unknown')
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Payment Details',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1976D2),
                         ),
-                        decoration: BoxDecoration(
-                          color:
-                              _cardType == 'visa'
-                                  ? Colors.blue.withOpacity(0.1)
-                                  : _cardType == 'mastercard'
-                                  ? Colors.red.withOpacity(0.1)
-                                  : _cardType == 'amex'
-                                  ? Colors.green.withOpacity(0.1)
-                                  : Colors.grey.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Card Type Indicator
+                      if (_cardType != 'unknown')
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
                             color:
                                 _cardType == 'visa'
-                                    ? Colors.blue
+                                    ? Colors.blue.withOpacity(0.1)
                                     : _cardType == 'mastercard'
-                                    ? Colors.red
+                                    ? Colors.red.withOpacity(0.1)
                                     : _cardType == 'amex'
-                                    ? Colors.green
-                                    : Colors.grey,
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.credit_card,
-                              size: 16,
+                                    ? Colors.green.withOpacity(0.1)
+                                    : Colors.grey.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
                               color:
                                   _cardType == 'visa'
                                       ? Colors.blue
@@ -334,13 +312,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                       : _cardType == 'amex'
                                       ? Colors.green
                                       : Colors.grey,
+                              width: 1,
                             ),
-                            const SizedBox(width: 6),
-                            Text(
-                              _cardType.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.credit_card,
+                                size: 16,
                                 color:
                                     _cardType == 'visa'
                                         ? Colors.blue
@@ -350,42 +330,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                         ? Colors.green
                                         : Colors.grey,
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    if (_cardType != 'unknown') const SizedBox(height: 12),
-
-                    // Card Number
-                    TextFormField(
-                      controller: _cardNumberController,
-                      decoration: InputDecoration(
-                        labelText: 'Card Number',
-                        hintText:
-                            _cardType == 'amex'
-                                ? '1234 567890 12345'
-                                : '1234 5678 9012 3456',
-                        border: const OutlineInputBorder(),
-                        prefixIcon: Icon(
-                          _cardType == 'visa'
-                              ? Icons.credit_card
-                              : _cardType == 'mastercard'
-                              ? Icons.credit_card
-                              : _cardType == 'amex'
-                              ? Icons.credit_card
-                              : Icons.credit_card,
-                        ),
-                        suffixIcon:
-                            _cardType != 'unknown'
-                                ? Icon(
-                                  _cardType == 'visa'
-                                      ? Icons.credit_card
-                                      : _cardType == 'mastercard'
-                                      ? Icons.credit_card
-                                      : _cardType == 'amex'
-                                      ? Icons.credit_card
-                                      : Icons.credit_card,
+                              const SizedBox(width: 6),
+                              Text(
+                                _cardType.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
                                   color:
                                       _cardType == 'visa'
                                           ? Colors.blue
@@ -394,107 +344,192 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                           : _cardType == 'amex'
                                           ? Colors.green
                                           : Colors.grey,
-                                )
-                                : null,
-                      ),
-                      keyboardType: TextInputType.number,
-                      onChanged: (value) {
-                        // Remove all non-digit characters first
-                        String digitsOnly = value.replaceAll(
-                          RegExp(r'[^\d]'),
-                          '',
-                        );
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
 
-                        // Check if we've exceeded the maximum length
-                        int maxLength = _cardType == 'amex' ? 15 : 16;
-                        if (digitsOnly.length > maxLength) {
-                          digitsOnly = digitsOnly.substring(0, maxLength);
-                        }
+                      if (_cardType != 'unknown') const SizedBox(height: 12),
 
-                        _detectCardType(digitsOnly);
-                        String formatted = _formatCardNumber(digitsOnly);
-
-                        if (formatted != value) {
-                          _cardNumberController.value = TextEditingValue(
-                            text: formatted,
-                            selection: TextSelection.collapsed(
-                              offset: formatted.length,
-                            ),
+                      // Card Number
+                      TextFormField(
+                        controller: _cardNumberController,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter card number';
+                          }
+                          // Remove spaces and check if it's a valid card number
+                          String digitsOnly = value.replaceAll(' ', '');
+                          if (digitsOnly.length < 13 ||
+                              digitsOnly.length > 19) {
+                            return 'Please enter a valid card number';
+                          }
+                          return null;
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Card Number',
+                          hintText:
+                              _cardType == 'amex'
+                                  ? '1234 567890 12345'
+                                  : '1234 5678 9012 3456',
+                          border: const OutlineInputBorder(),
+                          prefixIcon: Icon(
+                            _cardType == 'visa'
+                                ? Icons.credit_card
+                                : _cardType == 'mastercard'
+                                ? Icons.credit_card
+                                : _cardType == 'amex'
+                                ? Icons.credit_card
+                                : Icons.credit_card,
+                          ),
+                          suffixIcon:
+                              _cardType != 'unknown'
+                                  ? Icon(
+                                    _cardType == 'visa'
+                                        ? Icons.credit_card
+                                        : _cardType == 'mastercard'
+                                        ? Icons.credit_card
+                                        : _cardType == 'amex'
+                                        ? Icons.credit_card
+                                        : Icons.credit_card,
+                                    color:
+                                        _cardType == 'visa'
+                                            ? Colors.blue
+                                            : _cardType == 'mastercard'
+                                            ? Colors.red
+                                            : _cardType == 'amex'
+                                            ? Colors.green
+                                            : Colors.grey,
+                                  )
+                                  : null,
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (value) {
+                          // Remove all non-digit characters first
+                          String digitsOnly = value.replaceAll(
+                            RegExp(r'[^\d]'),
+                            '',
                           );
-                        }
-                      },
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(
-                          _cardType == 'amex'
-                              ? 15
-                              : 19, // Allow for spaces in formatted number
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
 
-                    // Expiry and CVV
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _expiryController,
-                            decoration: const InputDecoration(
-                              labelText: 'Expiry (MM/YY)',
-                              hintText: '12/25',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.number,
-                            onChanged: (value) {
-                              String formatted = _formatExpiryDate(value);
-                              if (formatted != value) {
-                                _expiryController.value = TextEditingValue(
-                                  text: formatted,
-                                  selection: TextSelection.collapsed(
-                                    offset: formatted.length,
-                                  ),
-                                );
-                              }
-                            },
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(4),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _cvvController,
-                            decoration: InputDecoration(
-                              labelText: 'CVV',
-                              hintText: _cardType == 'amex' ? '1234' : '123',
-                              border: const OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(_maxCvvLength),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
+                          // Check if we've exceeded the maximum length
+                          int maxLength = _cardType == 'amex' ? 15 : 16;
+                          if (digitsOnly.length > maxLength) {
+                            digitsOnly = digitsOnly.substring(0, maxLength);
+                          }
 
-                    // Cardholder Name
-                    TextFormField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Cardholder Name',
-                        hintText: 'John Doe',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.person),
+                          _detectCardType(digitsOnly);
+                          String formatted = _formatCardNumber(digitsOnly);
+
+                          if (formatted != value) {
+                            _cardNumberController.value = TextEditingValue(
+                              text: formatted,
+                              selection: TextSelection.collapsed(
+                                offset: formatted.length,
+                              ),
+                            );
+                          }
+                        },
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(
+                            _cardType == 'amex'
+                                ? 15
+                                : 19, // Allow for spaces in formatted number
+                          ),
+                        ],
                       ),
-                      textCapitalization: TextCapitalization.words,
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+
+                      // Expiry and CVV
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _expiryController,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter expiry date';
+                                }
+                                if (!RegExp(r'^\d{2}/\d{2}$').hasMatch(value)) {
+                                  return 'Please enter valid expiry (MM/YY)';
+                                }
+                                return null;
+                              },
+                              decoration: const InputDecoration(
+                                labelText: 'Expiry (MM/YY)',
+                                hintText: '12/25',
+                                border: OutlineInputBorder(),
+                              ),
+                              keyboardType: TextInputType.number,
+                              onChanged: (value) {
+                                String formatted = _formatExpiryDate(value);
+                                if (formatted != value) {
+                                  _expiryController.value = TextEditingValue(
+                                    text: formatted,
+                                    selection: TextSelection.collapsed(
+                                      offset: formatted.length,
+                                    ),
+                                  );
+                                }
+                              },
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(4),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _cvvController,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter CVV';
+                                }
+                                if (value.length < 3 || value.length > 4) {
+                                  return 'Please enter valid CVV';
+                                }
+                                return null;
+                              },
+                              decoration: InputDecoration(
+                                labelText: 'CVV',
+                                hintText: _cardType == 'amex' ? '1234' : '123',
+                                border: const OutlineInputBorder(),
+                              ),
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(_maxCvvLength),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Cardholder Name
+                      TextFormField(
+                        controller: _nameController,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter cardholder name';
+                          }
+                          if (value.trim().length < 2) {
+                            return 'Please enter full name';
+                          }
+                          return null;
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'Cardholder Name',
+                          hintText: 'John Doe',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.person),
+                        ),
+                        textCapitalization: TextCapitalization.words,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

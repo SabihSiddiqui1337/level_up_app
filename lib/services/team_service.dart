@@ -13,14 +13,6 @@ class TeamService {
   static const String _teamsKey = 'saved_teams';
 
   List<Team> get teams {
-    print(
-      'TeamService.teams getter called, returning ${_teams.length} teams',
-    ); // Debug print
-    for (var team in _teams) {
-      print(
-        'TeamService team: ${team.name} has ${team.players.length} players',
-      ); // Debug print
-    }
     return List.from(_teams); // Changed from List.unmodifiable to List.from
   }
 
@@ -36,7 +28,6 @@ class TeamService {
         _teams.addAll(
           teamsList.map((teamJson) => Team.fromJson(teamJson)).toList(),
         );
-        print('Loaded ${_teams.length} teams from storage');
       }
     } catch (e) {
       print('Error loading teams: $e');
@@ -51,28 +42,13 @@ class TeamService {
         _teams.map((team) => team.toJson()).toList(),
       );
       await prefs.setString(_teamsKey, teamsJson);
-      print('Saved ${_teams.length} teams to storage');
     } catch (e) {
       print('Error saving teams: $e');
     }
   }
 
   Future<void> addTeam(Team team) async {
-    print(
-      'Adding team: ${team.name} with ${team.players.length} players',
-    ); // Debug print
-    print(
-      'Team players before adding: ${team.players.map((p) => p.name).toList()}',
-    ); // Debug print
     _teams.add(team);
-    print('Total teams now: ${_teams.length}'); // Debug print
-    print(
-      'Team after adding: ${_teams.last.name} with ${_teams.last.players.length} players',
-    ); // Debug print
-    print(
-      'Team players after adding: ${_teams.last.players.map((p) => p.name).toList()}',
-    ); // Debug print
-
     // Save to storage
     await _saveTeams();
   }
@@ -87,11 +63,7 @@ class TeamService {
   }
 
   Future<void> deleteTeam(String teamId) async {
-    print('Deleting team with ID: $teamId'); // Debug print
-    print('Teams before deletion: ${_teams.length}'); // Debug print
     _teams.removeWhere((team) => team.id == teamId);
-    print('Teams after deletion: ${_teams.length}'); // Debug print
-
     // Save to storage
     await _saveTeams();
   }

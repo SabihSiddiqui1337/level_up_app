@@ -65,7 +65,6 @@ class _PickleballTeamRegistrationScreenState
 
   final List<PickleballPlayer> _players = [];
   String _selectedDuprRating = PickleballScreenKeys.duprRatingUnder35;
-  bool _hasUnsavedChanges = false;
   bool _isSaving = false;
 
   final List<String> _duprRatings = [
@@ -120,7 +119,6 @@ class _PickleballTeamRegistrationScreenState
   void _onFormChanged() {
     if (mounted) {
       setState(() {
-        _hasUnsavedChanges = true;
         // This will trigger a rebuild to update button state
       });
     }
@@ -154,7 +152,6 @@ class _PickleballTeamRegistrationScreenState
             onSave: (player) {
               setState(() {
                 _players.add(player);
-                _hasUnsavedChanges = true;
               });
               print('Player added: ${player.name}'); // Debug print
               print('Total players: ${_players.length}'); // Debug print
@@ -172,7 +169,6 @@ class _PickleballTeamRegistrationScreenState
             onSave: (updatedPlayer) {
               setState(() {
                 _players[index] = updatedPlayer;
-                _hasUnsavedChanges = true;
               });
             },
           ),
@@ -195,7 +191,6 @@ class _PickleballTeamRegistrationScreenState
               onPressed: () {
                 setState(() {
                   _players.removeAt(index);
-                  _hasUnsavedChanges = true;
                 });
                 Navigator.pop(context);
               },
@@ -267,7 +262,6 @@ class _PickleballTeamRegistrationScreenState
       if (widget.team != null && widget.onSave != null) {
         widget.onSave!(team);
         setState(() {
-          _hasUnsavedChanges = false;
           _isSaving = false;
         });
       } else {
@@ -292,7 +286,6 @@ class _PickleballTeamRegistrationScreenState
               .then((_) {
                 // Reset flags after navigation completes
                 setState(() {
-                  _hasUnsavedChanges = false;
                   _isSaving = false;
                 });
                 print('Navigation completed, flags reset'); // Debug print
@@ -556,7 +549,6 @@ class _PickleballTeamRegistrationScreenState
                         onChanged: (String? newValue) {
                           setState(() {
                             _selectedDuprRating = newValue!;
-                            _hasUnsavedChanges = true;
                           });
                         },
                       ),

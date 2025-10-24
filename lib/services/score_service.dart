@@ -47,7 +47,6 @@ class ScoreService {
           }
         });
 
-        print('Loaded preliminary scores: $scores');
         return scores;
       }
     } catch (e) {
@@ -89,7 +88,6 @@ class ScoreService {
           }
         });
 
-        print('Loaded playoff scores: $scores');
         return scores;
       }
     } catch (e) {
@@ -258,7 +256,6 @@ class ScoreService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final playoffsStarted = prefs.getBool(_playoffsStartedKey) ?? false;
-      print('Loaded playoffs started state: $playoffsStarted');
       return playoffsStarted;
     } catch (e) {
       print('Error loading playoffs started state: $e');

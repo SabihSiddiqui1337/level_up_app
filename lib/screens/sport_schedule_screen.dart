@@ -40,6 +40,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   // Cache for stable match generation
   final Map<String, List<Match>> _matchesCache = {};
 
+  // Cache for standings to prevent stack overflow
+  List<Standing>? _cachedStandings;
+  String? _lastStandingsCacheKey;
+
   // Scoring state
   Match? _selectedMatch;
   final Map<String, Map<String, int>> _matchScores =
@@ -48,9 +52,150 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   // Playoffs state
   bool _playoffsStarted = false;
   final Map<String, Map<String, int>> _playoffScores = {};
+  bool _justRestartedPlayoffs = false;
 
   // Bottom navigation state for playoffs
   int _bottomNavIndex = 0;
+
+  // Helper method to get preliminary matches directly without getter recursion
+  List<Match> _getPreliminaryMatchesDirect() {
+    final teams = _teams;
+    if (teams.isEmpty) return [];
+
+    // Create a cache key based on teams and division
+    String cacheKey =
+        '${widget.sportName}_${_selectedDivision ?? 'all'}_${teams.map((t) => t.id).join('_')}';
+
+    // Return cached matches if available
+    if (_matchesCache.containsKey(cacheKey)) {
+      return _matchesCache[cacheKey]!;
+    }
+
+    // Generate matches from registered teams
+    List<Match> matches = [];
+    int matchId = 1;
+    int courtNumber = 1;
+    int timeSlot = 10; // Start at 10 AM
+
+    // Group teams by division
+    Map<String, List<dynamic>> teamsByDivision = {};
+    for (var team in teams) {
+      String division = team.division;
+      if (!teamsByDivision.containsKey(division)) {
+        teamsByDivision[division] = [];
+      }
+      teamsByDivision[division]!.add(team);
+    }
+
+    // Generate matches for each division separately
+    for (String division in teamsByDivision.keys) {
+      final divisionTeams = teamsByDivision[division]!;
+      if (divisionTeams.length < 2) continue;
+
+      // Create a copy of teams for this division to avoid modifying the original
+      List<dynamic> availableTeams = List.from(divisionTeams);
+      Map<String, int> gamesPlayed = {};
+      Set<String> usedMatches = {};
+
+      // Initialize games played counter
+      for (var team in availableTeams) {
+        gamesPlayed[team.id] = 0;
+      }
+
+      // Generate matches ensuring each team plays exactly 3 games
+      while (availableTeams.length >= 2) {
+        // Shuffle teams for randomization
+        availableTeams.shuffle();
+
+        // Find two teams that haven't played each other and haven't played 3 games
+        bool matchFound = false;
+        for (int i = 0; i < availableTeams.length - 1; i++) {
+          for (int j = i + 1; j < availableTeams.length; j++) {
+            final team1 = availableTeams[i];
+            final team2 = availableTeams[j];
+
+            // Create match key for uniqueness check
+            final matchKey = '${team1.id}_${team2.id}';
+            final reverseMatchKey = '${team2.id}_${team1.id}';
+
+            // Check if teams haven't played each other and haven't reached game limit
+            if (!usedMatches.contains(matchKey) &&
+                !usedMatches.contains(reverseMatchKey) &&
+                gamesPlayed[team1.id]! < 3 &&
+                gamesPlayed[team2.id]! < 3) {
+              // Create match
+              matches.add(
+                Match(
+                  id: matchId.toString(),
+                  day: 'Day 1',
+                  court: 'Court $courtNumber',
+                  time: '$timeSlot:00',
+                  team1: team1.name,
+                  team2: team2.name,
+                  team1Status: 'Not Checked-in',
+                  team2Status: 'Not Checked-in',
+                  team1Score: 0,
+                  team2Score: 0,
+                  team1Id: team1.id,
+                  team2Id: team2.id,
+                  team1Name: team1.name,
+                  team2Name: team2.name,
+                  isCompleted: false,
+                  scheduledDate: DateTime.now().add(Duration(days: 1)),
+                ),
+              );
+
+              // Mark this match as used
+              usedMatches.add(matchKey);
+              usedMatches.add(reverseMatchKey);
+
+              // Update games played
+              gamesPlayed[team1.id] = gamesPlayed[team1.id]! + 1;
+              gamesPlayed[team2.id] = gamesPlayed[team2.id]! + 1;
+
+              matchId++;
+              courtNumber++;
+              if (courtNumber > 4) {
+                courtNumber = 1;
+                timeSlot++;
+              }
+
+              matchFound = true;
+              break;
+            }
+          }
+          if (matchFound) break;
+        }
+
+        // If no match found, break to avoid infinite loop
+        if (!matchFound) {
+          // Check if all teams have played 3 games
+          bool allTeamsPlayed3Games = true;
+          for (var entry in gamesPlayed.entries) {
+            if (entry.value < 3) {
+              allTeamsPlayed3Games = false;
+              break;
+            }
+          }
+          if (allTeamsPlayed3Games) break;
+        }
+      }
+
+      // Validation: Ensure no team plays more than 3 games
+      for (var entry in gamesPlayed.entries) {
+        if (entry.value > 3) {
+          print(
+            'ERROR: Team ${entry.key} played ${entry.value} games (should be max 3)',
+          );
+        }
+        print('DEBUG: Team ${entry.key} played ${entry.value} games');
+      }
+    }
+
+    // Cache the matches for stability
+    _matchesCache[cacheKey] = matches;
+    return matches;
+  }
 
   // Get teams based on sport type and selected division
   List<dynamic> get _teams {
@@ -60,9 +205,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     } else if (widget.sportName.toLowerCase().contains('pickleball')) {
       allTeams = _pickleballTeamService.teams;
     }
-    print(
-      '_teams getter - sport: ${widget.sportName}, allTeams length: ${allTeams.length}',
-    );
 
     // Filter by selected division if one is selected
     if (_selectedDivision != null) {
@@ -97,7 +239,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   void _selectMatch(Match match) {
     // Don't allow selection of matches without opponents
-    if (match.team2 == 'Waiting for Opponent') {
+    if (match.team2 == 'TBA') {
       return;
     }
 
@@ -129,7 +271,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         ? _playoffScores[_selectedMatch!.id]
                         : _matchScores[_selectedMatch!.id],
                 onScoresUpdated: (scores) async {
-                  print('Scores updated: $scores');
                   setState(() {
                     if (isPlayoffMatch) {
                       _playoffScores[_selectedMatch!.id] = scores;
@@ -137,25 +278,21 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       _matchScores[_selectedMatch!.id] = scores;
                     }
                     _selectedMatch = null; // Clear selection after scoring
+                    // Clear standings cache to force recalculation
+                    _cachedStandings = null;
+                    _lastStandingsCacheKey = null;
                   });
 
                   // Save scores to persistent storage
                   try {
                     if (isPlayoffMatch) {
                       await _scoreService.savePlayoffScores(_playoffScores);
-                      print('Playoff scores saved: $_playoffScores');
                     } else {
                       await _scoreService.savePreliminaryScores(_matchScores);
-                      print('Preliminary scores saved: $_matchScores');
                     }
-                    print('Scores saved to storage successfully');
                   } catch (e) {
                     print('Error saving scores to storage: $e');
                   }
-
-                  print(
-                    'Match scores after update: ${isPlayoffMatch ? _playoffScores : _matchScores}',
-                  );
                 },
               ),
         ),
@@ -164,15 +301,12 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   }
 
   int _getTeamScore(String matchId, String? teamId) {
-    if (teamId == null) return 0; // Handle "Waiting for Opponent" case
+    if (teamId == null) return 0; // Handle "TBA" case
 
     // Check preliminary scores first
     final preliminaryScores = _matchScores[matchId];
     if (preliminaryScores != null) {
       final score = preliminaryScores[teamId] ?? 0;
-      print(
-        'Getting preliminary score for match $matchId, team $teamId: $score',
-      );
       return score;
     }
 
@@ -184,6 +318,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       return score;
     }
 
+    print('No score found for match $matchId, team $teamId');
     return 0;
   }
 
@@ -222,7 +357,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   // Check if all preliminary games are completed
   bool get _allPreliminaryGamesCompleted {
     for (var match in _preliminaryMatches) {
-      if (match.team2 == 'Waiting for Opponent') {
+      if (match.team2 == 'TBA') {
         continue; // Skip waiting matches
       }
       final scores = _matchScores[match.id];
@@ -278,7 +413,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         return AlertDialog(
           title: const Text('Restart Playoffs'),
           content: const Text(
-            'Are you sure you want to restart the playoffs? This will allow you to edit preliminary round scores again.',
+            'Are you sure you want to restart the playoffs? This will clear all playoff scores and reset the bracket.',
           ),
           actions: [
             TextButton(
@@ -288,12 +423,23 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             ElevatedButton(
               onPressed: () async {
                 Navigator.of(context).pop();
+                print('Restarting playoffs - clearing all scores');
                 setState(() {
                   _playoffsStarted = false;
-                  _playoffScores.clear(); // Clear playoff scores
+                  _playoffScores.clear(); // Clear all playoff scores
+                  _selectedMatch = null; // Clear selected match
+                  _justRestartedPlayoffs = true; // Set flag to prevent reload
+                  // Clear standings cache to force recalculation
+                  _cachedStandings = null;
+                  _lastStandingsCacheKey = null;
                 });
-                // Save playoff state
+                // Save playoff state and clear all playoff scores
                 await _scoreService.savePlayoffsStarted(_playoffsStarted);
+                await _scoreService.saveQuarterFinalsScores({});
+                await _scoreService.saveSemiFinalsScores({});
+                await _scoreService.saveFinalsScores({});
+                await _scoreService.savePlayoffScores({});
+                print('All playoff scores cleared from storage');
               },
               child: const Text('Restart Playoffs'),
             ),
@@ -305,159 +451,24 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   // Get teams from service instead of hardcoded data
   List<Match> get _preliminaryMatches {
-    final teams = _teams;
-    if (teams.isEmpty) return [];
-
-    // Create a cache key based on teams and division
-    String cacheKey =
-        '${widget.sportName}_${_selectedDivision ?? 'all'}_${teams.map((t) => t.id).join('_')}';
-
-    // Return cached matches if available
-    if (_matchesCache.containsKey(cacheKey)) {
-      return _matchesCache[cacheKey]!;
-    }
-
-    // Generate matches from registered teams
-    List<Match> matches = [];
-    int matchId = 1;
-    int courtNumber = 1;
-    int timeSlot = 10; // Start at 10 AM
-
-    // Group teams by division
-    Map<String, List<dynamic>> teamsByDivision = {};
-    for (var team in teams) {
-      String division = team.division;
-      if (!teamsByDivision.containsKey(division)) {
-        teamsByDivision[division] = [];
-      }
-      teamsByDivision[division]!.add(team);
-    }
-
-    // Generate matches for each division separately
-    for (String division in teamsByDivision.keys) {
-      List<dynamic> divisionTeams = teamsByDivision[division]!;
-
-      if (divisionTeams.length == 1) {
-        // If only 1 team in division, show them as waiting for opponent
-        matches.add(
-          Match(
-            id: '${matchId++}',
-            day: 'Day 1',
-            court: 'Court $courtNumber',
-            time: '$timeSlot:00 AM',
-            team1: divisionTeams[0].name,
-            team2: 'Waiting for Opponent',
-            team1Status: 'Ready',
-            team2Status: 'TBD',
-            team1Score: 0,
-            team2Score: 0,
-            team1Id: divisionTeams[0].id,
-            team2Id: null, // No opponent yet
-            team1Name: divisionTeams[0].name,
-            team2Name: 'Waiting for Opponent',
-          ),
-        );
-        courtNumber = (courtNumber % 3) + 1;
-        if (courtNumber == 1) timeSlot += 1;
-      } else {
-        // Shuffle teams for randomization
-        List<dynamic> shuffledTeams = List.from(divisionTeams);
-        shuffledTeams.shuffle();
-
-        // Create all possible match combinations
-        List<List<int>> possibleMatches = [];
-        for (int i = 0; i < shuffledTeams.length; i++) {
-          for (int j = i + 1; j < shuffledTeams.length; j++) {
-            possibleMatches.add([i, j]);
-          }
-        }
-
-        // Shuffle the possible matches for more randomization
-        possibleMatches.shuffle();
-
-        // Track games played per team
-        Map<String, int> gamesPlayed = {};
-        for (var team in shuffledTeams) {
-          gamesPlayed[team.name] = 0;
-        }
-
-        // Generate matches ensuring each team plays exactly 3 games
-        // Use a more controlled approach to prevent teams from playing more than 3 games
-        List<List<int>> usedMatches = [];
-
-        for (var match in possibleMatches) {
-          final team1Index = match[0];
-          final team2Index = match[1];
-          final team1 = shuffledTeams[team1Index];
-          final team2 = shuffledTeams[team2Index];
-
-          // Check if both teams have played less than 3 games
-          // AND this specific match hasn't been used yet
-          if (gamesPlayed[team1.name]! < 3 &&
-              gamesPlayed[team2.name]! < 3 &&
-              !usedMatches.contains(match)) {
-            matches.add(
-              Match(
-                id: '${matchId++}',
-                day: 'Day 1',
-                court: 'Court $courtNumber',
-                time: '$timeSlot:00 AM',
-                team1: team1.name,
-                team2: team2.name,
-                team1Status: 'Not Checked-in',
-                team2Status: 'Not Checked-in',
-                team1Score: 0,
-                team2Score: 0,
-                team1Id: team1.id,
-                team2Id: team2.id,
-                team1Name: team1.name,
-                team2Name: team2.name,
-              ),
-            );
-
-            // Mark this match as used
-            usedMatches.add(match);
-
-            gamesPlayed[team1.name] = gamesPlayed[team1.name]! + 1;
-            gamesPlayed[team2.name] = gamesPlayed[team2.name]! + 1;
-
-            // Alternate courts and time slots
-            courtNumber = (courtNumber % 3) + 1;
-            if (courtNumber == 1) timeSlot += 1;
-
-            // Stop if all teams have played 3 games
-            bool allTeamsPlayed3Games = gamesPlayed.values.every(
-              (games) => games >= 3,
-            );
-            if (allTeamsPlayed3Games) break;
-          }
-        }
-
-        // Debug: Print final games played
-        print('Final games played: $gamesPlayed');
-        print('Total matches created: ${matches.length}');
-
-        // Validation: Ensure no team plays more than 3 games
-        for (var entry in gamesPlayed.entries) {
-          if (entry.value > 3) {
-            print(
-              'ERROR: Team ${entry.key} played ${entry.value} games (should be max 3)',
-            );
-          }
-        }
-      }
-    }
-
-    // Cache the matches for stability
-    _matchesCache[cacheKey] = matches;
-    return matches;
+    // Use the direct method to avoid duplication
+    return _getPreliminaryMatchesDirect();
   }
 
   // Get standings from registered teams
   List<Standing> get _standings {
     final teams = _teams;
-    print('_standings getter called - teams length: ${teams.length}');
     if (teams.isEmpty) return [];
+
+    // Create cache key based on teams and match scores
+    final teamsKey = teams.map((t) => t.id).join('_');
+    final scoresKey = _matchScores.keys.join('_');
+    final cacheKey = '${teamsKey}_$scoresKey';
+
+    // Return cached standings if available and still valid
+    if (_cachedStandings != null && _lastStandingsCacheKey == cacheKey) {
+      return _cachedStandings!;
+    }
 
     // Calculate actual stats based on match scores
     Map<String, Map<String, int>> teamStats = {};
@@ -474,10 +485,13 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       };
     }
 
+    // Get preliminary matches without calling the getter to avoid recursion
+    final preliminaryMatches = _getPreliminaryMatchesDirect();
+
     // First, count total games scheduled for each team
-    for (var match in _preliminaryMatches) {
-      // Skip "Waiting for Opponent" matches
-      if (match.team2 == 'Waiting for Opponent') continue;
+    for (var match in preliminaryMatches) {
+      // Skip "TBA" matches
+      if (match.team2 == 'TBA') continue;
 
       // Count all scheduled matches (regardless of whether scores are entered)
       if (match.team1Id != null && match.team2Id != null) {
@@ -492,7 +506,13 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     }
 
     // Then, process match results for wins/losses/draws/points
-    for (var match in _preliminaryMatches) {
+    for (var match in preliminaryMatches) {
+      // Only process preliminary match scores (IDs 1-999)
+      final matchIdInt = int.tryParse(match.id);
+      if (matchIdInt == null || matchIdInt >= 1000) {
+        continue;
+      }
+
       final scores = _matchScores[match.id];
       if (scores != null && scores.length >= 2) {
         final teamIds = scores.keys.toList();
@@ -598,16 +618,18 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       );
     }
 
+    // Cache the results
+    _cachedStandings = standings;
+    _lastStandingsCacheKey = cacheKey;
+
     return standings;
   }
 
   // Get playoffs matches
   List<Match> get _playoffs {
-    print('_playoffs getter called - _playoffsStarted: $_playoffsStarted');
     if (!_playoffsStarted) return [];
 
     final standings = _standings;
-    print('_playoffs getter - standings length: ${standings.length}');
     if (standings.length < 2) return []; // Need at least 2 teams for playoffs
 
     List<Match> playoffMatches = [];
@@ -619,7 +641,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     int qualifyingTeams = (standings.length / 2).ceil();
     if (qualifyingTeams < 2) qualifyingTeams = 2;
     if (qualifyingTeams > standings.length) qualifyingTeams = standings.length;
-    print('_playoffs getter - qualifyingTeams: $qualifyingTeams');
 
     // QUARTER FINALS - Create initial playoff matches with proper seeding
     for (int i = 0; i < qualifyingTeams / 2; i++) {
@@ -701,10 +722,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             day: 'Semi Finals',
             court: 'Court ${(i % 3) + 1}',
             time: '${timeSlot + i}:00 PM',
-            team1: 'Waiting for Opponent',
-            team2: 'Waiting for Opponent',
-            team1Status: 'Waiting for Opponent',
-            team2Status: 'Waiting for Opponent',
+            team1: 'TBA',
+            team2: 'TBA',
+            team1Status: 'TBA',
+            team2Status: 'TBA',
             team1Score: 0,
             team2Score: 0,
           ),
@@ -744,25 +765,22 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           day: 'Finals',
           court: 'Court 1',
           time: '${timeSlot + 2}:00 PM',
-          team1: 'Waiting for Opponent',
-          team2: 'Waiting for Opponent',
-          team1Status: 'Waiting for Opponent',
-          team2Status: 'Waiting for Opponent',
+          team1: 'TBA',
+          team2: 'TBA',
+          team1Status: 'TBA',
+          team2Status: 'TBA',
           team1Score: 0,
           team2Score: 0,
         ),
       );
     }
 
-    print(
-      '_playoffs getter - generated ${playoffMatches.length} playoff matches',
-    );
     return playoffMatches;
   }
 
   // Get winners of quarter finals
   List<dynamic> _getQuarterFinalsWinners() {
-    final quarterFinals = _getQuarterFinals();
+    final quarterFinals = _getQuarterFinalsDirect();
     List<dynamic> winners = [];
 
     for (var match in quarterFinals) {
@@ -798,7 +816,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   // Get winners of semi finals
   List<dynamic> _getSemiFinalsWinners() {
-    final semiFinals = _getSemiFinals();
+    final semiFinals = _getSemiFinalsDirect();
     List<dynamic> winners = [];
 
     for (var match in semiFinals) {
@@ -844,9 +862,24 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reload teams and scores when screen becomes visible
-    _loadTeams();
-    _loadScores();
+    // Only reload if we don't have scores loaded yet
+    if (_matchScores.isEmpty) {
+      _loadTeams();
+      _loadScores();
+    }
+  }
+
+  // Force refresh scores - useful when navigating between tabs
+  Future<void> _refreshScores() async {
+    // Only refresh if scores haven't been loaded recently
+    if (_matchScores.isEmpty || _playoffScores.isEmpty) {
+      await _loadScores();
+      if (mounted) {
+        setState(() {
+          // Force UI rebuild to show updated scores
+        });
+      }
+    }
   }
 
   Future<void> _loadTeams() async {
@@ -856,6 +889,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       setState(() {
         // Clear the matches cache to force regeneration with new teams
         _matchesCache.clear();
+        // Clear standings cache to force recalculation
+        _cachedStandings = null;
+        _lastStandingsCacheKey = null;
         _updateDivisions();
         // Trigger rebuild to show updated teams
       });
@@ -864,6 +900,13 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   Future<void> _loadScores() async {
     try {
+      // Don't reload scores if we just restarted playoffs
+      if (_justRestartedPlayoffs) {
+        print('Skipping score reload - just restarted playoffs');
+        _justRestartedPlayoffs = false; // Reset flag
+        return;
+      }
+
       final preliminaryScores = await _scoreService.loadPreliminaryScores();
       final playoffScores = await _scoreService.loadPlayoffScores();
       final playoffsStarted = await _scoreService.loadPlayoffsStarted();
@@ -874,13 +917,16 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
       if (mounted) {
         setState(() {
+          // Don't clear existing scores, just update them
           _matchScores.clear();
           _matchScores.addAll(preliminaryScores);
           _playoffScores.clear();
           _playoffScores.addAll(playoffScores);
           _playoffsStarted = playoffsStarted;
         });
+
         print('Scores loaded successfully - _matchScores: $_matchScores');
+        print('Scores loaded successfully - _playoffScores: $_playoffScores');
       }
     } catch (e) {
       print('Error loading scores: $e');
@@ -928,7 +974,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           );
         },
       ),
-      bottomNavigationBar: _playoffsStarted ? _buildPlayoffsBottomNav() : null,
+      bottomNavigationBar: _buildPlayoffsBottomNav(),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -937,317 +983,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             colors: [Colors.grey[50]!, Colors.white],
           ),
         ),
-        child: SafeArea(
-          child:
-              _playoffsStarted
-                  ? _buildPlayoffsContent()
-                  : Column(
-                    children: [
-                      // Division Dropdown
-                      if (_availableDivisions.isNotEmpty) ...[
-                        Center(
-                          child: Container(
-                            constraints: const BoxConstraints(maxWidth: 280),
-                            margin: const EdgeInsets.symmetric(vertical: 12),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(30),
-                              border: Border.all(
-                                color: const Color(0xFF2196F3).withOpacity(0.6),
-                                width: 2,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.15),
-                                  blurRadius: 15,
-                                  offset: const Offset(0, 5),
-                                ),
-                              ],
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _selectedDivision,
-                                isExpanded: false,
-                                icon: const Icon(
-                                  Icons.keyboard_arrow_down,
-                                  color: Color(0xFF2196F3),
-                                  size: 20,
-                                ),
-                                hint: Text(
-                                  widget.sportName.toLowerCase().contains(
-                                        'pickleball',
-                                      )
-                                      ? 'Select DUPR Rating'
-                                      : 'Select Division',
-                                  style: const TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                style: const TextStyle(
-                                  color: Colors.black87,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                dropdownColor: Colors.white,
-                                menuMaxHeight: 180,
-                                borderRadius: BorderRadius.circular(12),
-                                items:
-                                    _availableDivisions.map((String division) {
-                                      return DropdownMenuItem<String>(
-                                        value: division,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 8,
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              // Sport-specific icon
-                                              Icon(
-                                                widget.sportName
-                                                        .toLowerCase()
-                                                        .contains('pickleball')
-                                                    ? Icons.sports_tennis
-                                                    : Icons.sports_basketball,
-                                                size: 16,
-                                                color:
-                                                    _selectedDivision ==
-                                                            division
-                                                        ? const Color(
-                                                          0xFF2196F3,
-                                                        )
-                                                        : Colors.grey[600],
-                                              ),
-                                              const SizedBox(width: 8),
-                                              // Division text with better styling
-                                              Flexible(
-                                                fit: FlexFit.loose,
-                                                child: Text(
-                                                  division,
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight:
-                                                        _selectedDivision ==
-                                                                division
-                                                            ? FontWeight.w700
-                                                            : FontWeight.w600,
-                                                    color:
-                                                        _selectedDivision ==
-                                                                division
-                                                            ? const Color(
-                                                              0xFF2196F3,
-                                                            )
-                                                            : Colors.black87,
-                                                  ),
-                                                ),
-                                              ),
-                                              // Selection indicator
-                                              if (_selectedDivision == division)
-                                                const Icon(
-                                                  Icons.check_circle,
-                                                  size: 16,
-                                                  color: Color(0xFF2196F3),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
-                                onChanged: (String? newValue) {
-                                  setState(() {
-                                    _selectedDivision = newValue;
-                                  });
-                                },
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-
-                      // Spacing between dropdown and tab bar
-                      const SizedBox(height: 16),
-
-                      // Tab Bar
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: TabBar(
-                          controller: _tabController,
-                          indicator: BoxDecoration(
-                            color: const Color(0xFF2196F3),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          indicatorSize: TabBarIndicatorSize.tab,
-                          indicatorPadding: EdgeInsets.zero,
-                          dividerColor: Colors.transparent,
-                          labelColor: Colors.white,
-                          unselectedLabelColor: Colors.grey[600],
-                          labelStyle: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                          unselectedLabelStyle: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 12,
-                          ),
-                          isScrollable: false,
-                          tabs: const [
-                            Tab(
-                              child: Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 8),
-                                child: Text(
-                                  'Preliminary',
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                            Tab(
-                              child: Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 8),
-                                child: Text(
-                                  'Standings',
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Tab Content
-                      Expanded(
-                        child: TabBarView(
-                          controller: _tabController,
-                          children: [
-                            _buildPreliminaryRoundsTab(),
-                            _buildStandingsTab(),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-        ),
+        child: SafeArea(child: _buildPlayoffsContent()),
       ),
-    );
-  }
-
-  Widget _buildPreliminaryRoundsTab() {
-    return Column(
-      children: [
-        // Scrollable content
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child:
-                _preliminaryMatches.isEmpty
-                    ? _buildEmptyMatchesState()
-                    : ListView.builder(
-                      itemCount: _preliminaryMatches.length,
-                      itemBuilder: (context, index) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _buildMatchCard(_preliminaryMatches[index]),
-                        );
-                      },
-                    ),
-          ),
-        ),
-        // Fixed buttons at bottom
-        if (_preliminaryMatches.isNotEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // Reshuffle Teams button
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed:
-                        _hasNoScores()
-                            ? _reshuffleTeams
-                            : _showResetScoresDialog,
-                    icon: const Icon(Icons.shuffle),
-                    label: const Text('Reshuffle Teams'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2196F3), // Always blue
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Start Scoring button
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed:
-                        _selectedMatch != null &&
-                                _selectedMatch!.team2 != 'Waiting for Opponent'
-                            ? _startScoring
-                            : null,
-                    icon: const Icon(Icons.sports_score),
-                    label: Text(
-                      _selectedMatch != null
-                          ? (_selectedMatch!.team2 == 'Waiting for Opponent'
-                              ? 'No Opponent Available'
-                              : (_playoffsStarted
-                                  ? (_playoffScores.containsKey(
-                                        _selectedMatch!.id,
-                                      )
-                                      ? 'Edit Scoring'
-                                      : 'Start Scoring')
-                                  : (_matchScores.containsKey(
-                                        _selectedMatch!.id,
-                                      )
-                                      ? 'Edit Scoring'
-                                      : 'Start Scoring')))
-                          : 'Start Scoring',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          _selectedMatch != null &&
-                                  _selectedMatch!.team2 !=
-                                      'Waiting for Opponent'
-                              ? const Color(0xFF2196F3)
-                              : Colors.grey[400],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
     );
   }
 
@@ -1256,7 +993,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     final team2Score = _getTeamScore(match.id, match.team2Id ?? '');
     final winningTeamId = _getWinningTeamId(match.id);
     final isSelected = _selectedMatch?.id == match.id;
-    final hasOpponent = match.team2 != 'Waiting for Opponent';
+    final hasOpponent = match.team2 != 'TBA';
 
     return GestureDetector(
       onTap: hasOpponent ? () => _selectMatch(match) : null,
@@ -1333,9 +1070,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       color: Colors.grey.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Center(
-                      child: Icon(Icons.block, color: Colors.grey, size: 24),
-                    ),
                   ),
                 ),
             ],
@@ -1362,9 +1096,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     String getTeamDisplayName(String teamName, String? teamId) {
       if (!isPlayoffMatch) return teamName;
 
-      // Handle "Waiting for Opponent" case
-      if (teamName == 'Waiting for Opponent') {
-        return 'Waiting for Opponent';
+      // Handle "TBA" case
+      if (teamName == 'TBA') {
+        return 'TBA';
       }
 
       // Find the team's seeding in standings
@@ -1446,7 +1180,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       getTeamDisplayName(match.team1, match.team1Id),
                       style: TextStyle(
                         color:
-                            match.team1 == 'Waiting for Opponent'
+                            match.team1 == 'TBA'
                                 ? Colors.grey[600]
                                 : (team1Won ? Colors.blue : Colors.grey[400]),
                         fontSize: 14,
@@ -1457,7 +1191,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     Text(
                       '$team1Score',
                       style: TextStyle(
-                        color: team1Won ? Colors.blue : Colors.grey[400],
+                        color:
+                            match.team1 == 'TBA'
+                                ? Colors.grey[600]
+                                : (team1Won ? Colors.blue : Colors.grey[400]),
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1489,16 +1226,32 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               ),
 
               // VS
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'VS',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child:
+                    isPlayoffMatch
+                        ? const Text(
+                          'VS',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                        : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(width: 8),
+                            const Text(
+                              'VS',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
               ),
 
               // Team 2 (Right side)
@@ -1509,7 +1262,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       getTeamDisplayName(match.team2, match.team2Id),
                       style: TextStyle(
                         color:
-                            match.team2 == 'Waiting for Opponent'
+                            match.team2 == 'TBA'
                                 ? Colors.grey[600]
                                 : (team2Won ? Colors.red : Colors.grey[400]),
                         fontSize: 14,
@@ -1520,7 +1273,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     Text(
                       '$team2Score',
                       style: TextStyle(
-                        color: team2Won ? Colors.red : Colors.grey[400],
+                        color:
+                            match.team2 == 'TBA'
+                                ? Colors.grey[600]
+                                : (team2Won ? Colors.red : Colors.grey[400]),
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1885,7 +1641,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   // Check if there are no scores entered
   bool _hasNoScores() {
     for (var match in _preliminaryMatches) {
-      if (match.team2 == 'Waiting for Opponent') continue;
+      if (match.team2 == 'TBA') continue;
       final scores = _matchScores[match.id];
       if (scores != null && scores.length >= 2) {
         final team1Score = scores[match.team1Id] ?? 0;
@@ -1899,15 +1655,21 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   }
 
   // Reshuffle teams method
-  void _reshuffleTeams() {
+  void _reshuffleTeams() async {
     // Clear the matches cache to force regeneration
     final cacheKey =
         '${widget.sportName}_${_selectedDivision ?? 'all'}_${_teams.map((t) => t.id).join('_')}';
     _matchesCache.remove(cacheKey);
 
-    // Clear any existing scores
+    // Clear any existing scores from memory
     _matchScores.clear();
     _selectedMatch = null;
+
+    // Clear scores from persistent storage
+    await _scoreService.clearAllScores();
+
+    // Reload scores to ensure UI is updated
+    await _loadScores();
 
     // Force rebuild
     setState(() {});
@@ -2111,10 +1873,100 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     }
   }
 
-  Widget _buildPlayoffsTab() {
-    if (!_playoffsStarted) {
-      return _buildEmptyPlayoffsState();
+  // Build preliminary rounds tab
+  Widget _buildPreliminaryRoundsTab() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshScores();
+    });
+
+    if (_preliminaryMatches.isEmpty) {
+      return _buildEmptyMatchesState();
     }
+
+    return Column(
+      children: [
+        // Matches List
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: _preliminaryMatches.length,
+            itemBuilder: (context, index) {
+              return _buildMatchCard(_preliminaryMatches[index]);
+            },
+          ),
+        ),
+        // Fixed buttons at bottom
+        if (_preliminaryMatches.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                // Reshuffle Teams button
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        _hasNoScores()
+                            ? _reshuffleTeams
+                            : _showResetScoresDialog,
+                    icon: const Icon(Icons.shuffle, size: 18),
+                    label: const Text('Reshuffle Teams'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          _hasNoScores()
+                              ? const Color(0xFF2196F3)
+                              : Colors.grey[400],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Start Scoring button
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _selectedMatch != null ? _startScoring : null,
+                    icon: const Icon(Icons.sports_score, size: 18),
+                    label: Text(
+                      _selectedMatch != null
+                          ? 'Start Scoring'
+                          : 'Select a Match',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          _selectedMatch != null
+                              ? const Color(0xFF2196F3)
+                              : Colors.grey[400],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPlayoffsTab() {
+    // Always show playoffs tab, but with different content based on playoff status
 
     return Column(
       children: [
@@ -2214,6 +2066,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   // Build Quarter Finals tab
   Widget _buildQuarterFinalsTab() {
+    // Refresh scores when this tab is displayed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshScores();
+    });
+
     final quarterFinals = _getQuarterFinals();
 
     return Column(
@@ -2279,6 +2136,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   // Build Semi Finals tab
   Widget _buildSemiFinalsTab() {
+    // Refresh scores when this tab is displayed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshScores();
+    });
+
     final semiFinals = _getSemiFinals();
 
     return Column(
@@ -2344,6 +2206,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   // Build Finals tab
   Widget _buildFinalsTab() {
+    // Refresh scores when this tab is displayed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshScores();
+    });
+
     final finals = _getFinals();
 
     return Column(
@@ -2407,19 +2274,376 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     );
   }
 
-  // Get Quarter Finals matches
+  // Get Quarter Finals matches directly without calling _playoffs getter
+  List<Match> _getQuarterFinalsDirect() {
+    final standings = _standings;
+    if (standings.length < 2) return [];
+
+    List<Match> quarterFinals = [];
+    int matchId = 1000;
+    int courtNumber = 1;
+    int timeSlot = 14;
+
+    // Calculate how many teams qualify (half of total teams, minimum 2)
+    int qualifyingTeams = (standings.length / 2).ceil();
+    if (qualifyingTeams < 2) qualifyingTeams = 2;
+    if (qualifyingTeams > standings.length) qualifyingTeams = standings.length;
+
+    // Create quarter-final matches with proper seeding
+    for (int i = 0; i < qualifyingTeams / 2; i++) {
+      final team1Index = i;
+      final team2Index = qualifyingTeams - 1 - i;
+
+      if (team2Index > team1Index) {
+        // Find teams by their standings
+        final team1 = _teams.firstWhere(
+          (t) => t.name == standings[team1Index].teamName,
+        );
+        final team2 = _teams.firstWhere(
+          (t) => t.name == standings[team2Index].teamName,
+        );
+
+        quarterFinals.add(
+          Match(
+            id: matchId.toString(),
+            day: 'Quarter Finals',
+            court: 'Court $courtNumber',
+            time: '$timeSlot:00',
+            team1: team1.name,
+            team2: team2.name,
+            team1Status: 'Not Checked-in',
+            team2Status: 'Not Checked-in',
+            team1Score: 0,
+            team2Score: 0,
+            team1Id: team1.id,
+            team2Id: team2.id,
+            team1Name: team1.name,
+            team2Name: team2.name,
+            isCompleted: false,
+            scheduledDate: DateTime.now().add(Duration(days: 1)),
+          ),
+        );
+
+        matchId++;
+        courtNumber++;
+        if (courtNumber > 4) {
+          courtNumber = 1;
+          timeSlot++;
+        }
+      }
+    }
+
+    return quarterFinals;
+  }
+
+  // Get Quarter Finals matches (legacy method for compatibility)
   List<Match> _getQuarterFinals() {
-    return _playoffs.where((match) => match.day == 'Quarter Finals').toList();
+    if (!_playoffsStarted) {
+      return _getQuarterFinalsPlaceholders();
+    }
+    return _getQuarterFinalsDirect();
   }
 
-  // Get Semi Finals matches
+  // Get Quarter Finals placeholder matches when playoffs haven't started
+  List<Match> _getQuarterFinalsPlaceholders() {
+    final standings = _standings;
+    if (standings.length < 2) return [];
+
+    List<Match> placeholders = [];
+    int matchId = 1000;
+    int courtNumber = 1;
+    int timeSlot = 14;
+
+    // Calculate how many teams would qualify (half of total teams, minimum 2)
+    int qualifyingTeams = (standings.length / 2).ceil();
+    if (qualifyingTeams < 2) qualifyingTeams = 2;
+    if (qualifyingTeams > standings.length) qualifyingTeams = standings.length;
+
+    // Create placeholder quarter-final matches
+    for (int i = 0; i < qualifyingTeams / 2; i++) {
+      final team1Index = i;
+      final team2Index = qualifyingTeams - 1 - i;
+
+      if (team2Index > team1Index) {
+        placeholders.add(
+          Match(
+            id: matchId.toString(),
+            day: 'Quarter Finals',
+            court: 'Court $courtNumber',
+            time: '$timeSlot:00',
+            team1: 'TBA',
+            team2: 'TBA',
+            team1Status: 'Not Checked-in',
+            team2Status: 'Not Checked-in',
+            team1Score: 0,
+            team2Score: 0,
+            team1Id: null,
+            team2Id: null,
+            team1Name: 'TBA',
+            team2Name: 'TBA',
+            isCompleted: false,
+            scheduledDate: DateTime.now().add(Duration(days: 1)),
+          ),
+        );
+
+        matchId++;
+        courtNumber++;
+        if (courtNumber > 4) {
+          courtNumber = 1;
+          timeSlot++;
+        }
+      }
+    }
+
+    return placeholders;
+  }
+
+  // Get Semi Finals matches directly without calling _playoffs getter
+  List<Match> _getSemiFinalsDirect() {
+    final quarterFinalsWinners = _getQuarterFinalsWinners();
+
+    List<Match> semiFinals = [];
+    int matchId = 2000;
+    int courtNumber = 1;
+    int timeSlot = 16;
+
+    // Create semi-final matches
+    if (quarterFinalsWinners.length >= 2) {
+      // Create semi-final matches with proper seeding
+      for (int i = 0; i < quarterFinalsWinners.length / 2; i++) {
+        final team1Index = i;
+        final team2Index = quarterFinalsWinners.length - 1 - i;
+
+        if (team2Index > team1Index) {
+          final team1 = quarterFinalsWinners[team1Index];
+          final team2 = quarterFinalsWinners[team2Index];
+
+          semiFinals.add(
+            Match(
+              id: matchId.toString(),
+              day: 'Semi Finals',
+              court: 'Court $courtNumber',
+              time: '$timeSlot:00',
+              team1: team1.name,
+              team2: team2.name,
+              team1Status: 'Not Checked-in',
+              team2Status: 'Not Checked-in',
+              team1Score: 0,
+              team2Score: 0,
+              team1Id: team1.id,
+              team2Id: team2.id,
+              team1Name: team1.name,
+              team2Name: team2.name,
+              isCompleted: false,
+              scheduledDate: DateTime.now().add(Duration(days: 2)),
+            ),
+          );
+        } else {
+          // Create placeholder match when not enough teams
+          semiFinals.add(
+            Match(
+              id: matchId.toString(),
+              day: 'Semi Finals',
+              court: 'Court $courtNumber',
+              time: '$timeSlot:00',
+              team1: 'TBA',
+              team2: 'TBA',
+              team1Status: 'Not Checked-in',
+              team2Status: 'Not Checked-in',
+              team1Score: 0,
+              team2Score: 0,
+              team1Id: null,
+              team2Id: null,
+              team1Name: 'TBA',
+              team2Name: 'TBA',
+              isCompleted: false,
+              scheduledDate: DateTime.now().add(Duration(days: 2)),
+            ),
+          );
+        }
+
+        matchId++;
+        courtNumber++;
+        if (courtNumber > 4) {
+          courtNumber = 1;
+          timeSlot++;
+        }
+      }
+    } else {
+      // Create placeholder matches when no quarter finals winners yet
+      semiFinals.add(
+        Match(
+          id: matchId.toString(),
+          day: 'Semi Finals',
+          court: 'Court $courtNumber',
+          time: '$timeSlot:00',
+          team1: 'TBA',
+          team2: 'TBA',
+          team1Status: 'Not Checked-in',
+          team2Status: 'Not Checked-in',
+          team1Score: 0,
+          team2Score: 0,
+          team1Id: null,
+          team2Id: null,
+          team1Name: 'TBA',
+          team2Name: 'TBA',
+          isCompleted: false,
+          scheduledDate: DateTime.now().add(Duration(days: 2)),
+        ),
+      );
+    }
+
+    return semiFinals;
+  }
+
+  // Get Semi Finals matches (legacy method for compatibility)
   List<Match> _getSemiFinals() {
-    return _playoffs.where((match) => match.day == 'Semi Finals').toList();
+    if (!_playoffsStarted) {
+      return _getSemiFinalsPlaceholders();
+    }
+    return _getSemiFinalsDirect();
   }
 
-  // Get Finals matches
+  // Get Semi Finals placeholder matches when playoffs haven't started
+  List<Match> _getSemiFinalsPlaceholders() {
+    List<Match> placeholders = [];
+    int matchId = 2000;
+    int courtNumber = 1;
+    int timeSlot = 16;
+
+    // Create 2 placeholder semi-final matches with "TBA" (4 teams from QF -> 2 SF matches)
+    for (int i = 0; i < 2; i++) {
+      placeholders.add(
+        Match(
+          id: matchId.toString(),
+          day: 'Semi Finals',
+          court: 'Court $courtNumber',
+          time: '$timeSlot:00',
+          team1: 'TBA',
+          team2: 'TBA',
+          team1Status: 'Not Checked-in',
+          team2Status: 'Not Checked-in',
+          team1Score: 0,
+          team2Score: 0,
+          team1Id: null,
+          team2Id: null,
+          team1Name: 'TBA',
+          team2Name: 'TBA',
+          isCompleted: false,
+          scheduledDate: DateTime.now().add(Duration(days: 2)),
+        ),
+      );
+
+      matchId++;
+      courtNumber++;
+      if (courtNumber > 4) {
+        courtNumber = 1;
+        timeSlot++;
+      }
+    }
+
+    return placeholders;
+  }
+
+  // Get Finals matches directly without calling _playoffs getter
+  List<Match> _getFinalsDirect() {
+    final semiFinalsWinners = _getSemiFinalsWinners();
+
+    List<Match> finals = [];
+    int matchId = 3000;
+    int courtNumber = 1;
+    int timeSlot = 18;
+
+    if (semiFinalsWinners.length >= 2) {
+      // Create final match with actual teams
+      final team1 = semiFinalsWinners[0];
+      final team2 = semiFinalsWinners[1];
+
+      finals.add(
+        Match(
+          id: matchId.toString(),
+          day: 'Finals',
+          court: 'Court $courtNumber',
+          time: '$timeSlot:00',
+          team1: team1.name,
+          team2: team2.name,
+          team1Status: 'Not Checked-in',
+          team2Status: 'Not Checked-in',
+          team1Score: 0,
+          team2Score: 0,
+          team1Id: team1.id,
+          team2Id: team2.id,
+          team1Name: team1.name,
+          team2Name: team2.name,
+          isCompleted: false,
+          scheduledDate: DateTime.now().add(Duration(days: 3)),
+        ),
+      );
+    } else {
+      // Create placeholder match when no semi finals winners yet
+      finals.add(
+        Match(
+          id: matchId.toString(),
+          day: 'Finals',
+          court: 'Court $courtNumber',
+          time: '$timeSlot:00',
+          team1: 'TBA',
+          team2: 'TBA',
+          team1Status: 'Not Checked-in',
+          team2Status: 'Not Checked-in',
+          team1Score: 0,
+          team2Score: 0,
+          team1Id: null,
+          team2Id: null,
+          team1Name: 'TBA',
+          team2Name: 'TBA',
+          isCompleted: false,
+          scheduledDate: DateTime.now().add(Duration(days: 3)),
+        ),
+      );
+    }
+
+    return finals;
+  }
+
+  // Get Finals matches (legacy method for compatibility)
   List<Match> _getFinals() {
-    return _playoffs.where((match) => match.day == 'Finals').toList();
+    if (!_playoffsStarted) {
+      return _getFinalsPlaceholders();
+    }
+    return _getFinalsDirect();
+  }
+
+  // Get Finals placeholder matches when playoffs haven't started
+  List<Match> _getFinalsPlaceholders() {
+    List<Match> placeholders = [];
+    int matchId = 3000;
+    int courtNumber = 1;
+    int timeSlot = 18;
+
+    // Create placeholder final match with "TBA"
+    placeholders.add(
+      Match(
+        id: matchId.toString(),
+        day: 'Finals',
+        court: 'Court $courtNumber',
+        time: '$timeSlot:00',
+        team1: 'TBA',
+        team2: 'TBA',
+        team1Status: 'Not Checked-in',
+        team2Status: 'Not Checked-in',
+        team1Score: 0,
+        team2Score: 0,
+        team1Id: null,
+        team2Id: null,
+        team1Name: 'TBA',
+        team2Name: 'TBA',
+        isCompleted: false,
+        scheduledDate: DateTime.now().add(Duration(days: 3)),
+      ),
+    );
+
+    return placeholders;
   }
 
   Widget _buildEmptyPlayoffsState() {

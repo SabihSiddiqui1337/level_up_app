@@ -43,6 +43,27 @@ class PhoneNumberFormatter extends TextInputFormatter {
   }
 }
 
+class AgeFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Remove all non-digit characters
+    String digitsOnly = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+
+    // Limit to 2 digits
+    if (digitsOnly.length > 2) {
+      digitsOnly = digitsOnly.substring(0, 2);
+    }
+
+    return TextEditingValue(
+      text: digitsOnly,
+      selection: TextSelection.collapsed(offset: digitsOnly.length),
+    );
+  }
+}
+
 class TeamRegistrationScreen extends StatefulWidget {
   final Team? team; // For editing existing team
   final Function(Team)? onSave;
@@ -502,6 +523,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _coachAgeController,
+                          inputFormatters: [AgeFormatter()],
                           decoration: InputDecoration(
                             labelText: 'Captain Age',
                             prefixIcon: const Icon(Icons.cake),
