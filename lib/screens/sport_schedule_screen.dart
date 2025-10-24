@@ -406,9 +406,24 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   }
 
   void _startScoring() {
+    print('DEBUG: _startScoring called');
+    print('DEBUG: _selectedMatch: ${_selectedMatch?.id}');
+    print('DEBUG: Main tab index: ${_tabController.index}');
+    print('DEBUG: Playoff sub-tab index: ${_playoffTabController.index}');
+    print(
+      'DEBUG: _isSelectedMatchInCurrentTab(): ${_isSelectedMatchInCurrentTab()}',
+    );
+
+    // Prevent cross-tab scoring
+    if (_selectedMatch == null || !_isSelectedMatchInCurrentTab()) {
+      print('DEBUG: Blocking scoring - no valid match selected in current tab');
+      return;
+    }
+
     if (_selectedMatch != null) {
       // Determine if this is a playoff match
       final isPlayoffMatch = _playoffs.contains(_selectedMatch!);
+      print('DEBUG: isPlayoffMatch: $isPlayoffMatch');
 
       // Check if playoffs have started and this is a playoff match
       if (_playoffsStarted && isPlayoffMatch) {
@@ -546,6 +561,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             ElevatedButton(
               onPressed: () async {
                 Navigator.of(context).pop();
+
+                // Save all current scores before starting playoffs
+                await _saveScores();
+                print('DEBUG: Saved all scores before starting playoffs');
+
                 setState(() {
                   _playoffsStarted = true;
                   _justRestartedPlayoffs =
@@ -1065,6 +1085,38 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _playoffTabController = TabController(length: 3, vsync: this);
+
+    // Add listeners to clear selected match when switching tabs
+    _tabController.addListener(() async {
+      print('DEBUG: Main tab changed to index: ${_tabController.index}');
+      print('DEBUG: indexIsChanging: ${_tabController.indexIsChanging}');
+      if (_tabController.indexIsChanging) {
+        print('DEBUG: Clearing selected match due to main tab change');
+        // Save scores before switching tabs
+        await _saveScores();
+        print('DEBUG: Saved scores before switching main tabs');
+        setState(() {
+          _selectedMatch = null;
+        });
+      }
+    });
+
+    _playoffTabController.addListener(() async {
+      print(
+        'DEBUG: Playoff tab changed to index: ${_playoffTabController.index}',
+      );
+      print('DEBUG: indexIsChanging: ${_playoffTabController.indexIsChanging}');
+      if (_playoffTabController.indexIsChanging) {
+        print('DEBUG: Clearing selected match due to playoff tab change');
+        // Save scores before switching playoff tabs
+        await _saveScores();
+        print('DEBUG: Saved scores before switching playoff tabs');
+        setState(() {
+          _selectedMatch = null;
+        });
+      }
+    });
+
     _loadTeams();
     _loadScores();
   }
@@ -1254,8 +1306,13 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     final isSelected = _selectedMatch?.id == match.id;
     final hasOpponent = match.team2 != 'TBA';
 
+    // Check if this is a preliminary match that should be locked
+    final isPreliminaryMatch =
+        match.day == 'Day 1' || match.day == 'Preliminary';
+    final isLocked = _playoffsStarted && isPreliminaryMatch;
+
     return GestureDetector(
-      onTap: hasOpponent ? () => _selectMatch(match) : null,
+      onTap: (hasOpponent && !isLocked) ? () => _selectMatch(match) : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
@@ -1413,34 +1470,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               ),
               Row(
                 children: [
-                  if (_playoffsStarted && !isPlayoffMatch) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.red[600],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.lock, color: Colors.white, size: 12),
-                          SizedBox(width: 4),
-                          Text(
-                            'Locked',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -1964,6 +1993,88 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     return false;
   }
 
+  // Debug method to check button state
+  void _debugButtonState() {
+    print('DEBUG: === BUTTON STATE DEBUG ===');
+    print('DEBUG: _selectedMatch: ${_selectedMatch?.id}');
+    print('DEBUG: Main tab index: ${_tabController.index}');
+    print('DEBUG: Playoff sub-tab index: ${_playoffTabController.index}');
+    print(
+      'DEBUG: _isSelectedMatchInCurrentTab(): ${_isSelectedMatchInCurrentTab()}',
+    );
+    print(
+      'DEBUG: Button should be enabled: ${_selectedMatch != null && _isSelectedMatchInCurrentTab()}',
+    );
+    print('DEBUG: === END BUTTON STATE DEBUG ===');
+  }
+
+  // Check if the selected match belongs to the current tab
+  bool _isSelectedMatchInCurrentTab() {
+    if (_selectedMatch == null) {
+      print('DEBUG: _isSelectedMatchInCurrentTab - No selected match');
+      return false;
+    }
+
+    print(
+      'DEBUG: _isSelectedMatchInCurrentTab - Selected match ID: ${_selectedMatch!.id}',
+    );
+    print('DEBUG: Main tab index: ${_tabController.index}');
+    print('DEBUG: Playoff sub-tab index: ${_playoffTabController.index}');
+
+    // Check if we're in the preliminary tab and the match is a preliminary match
+    if (_tabController.index == 0) {
+      // Preliminary tab
+      final isInPreliminary = _preliminaryMatches.any(
+        (match) => match.id == _selectedMatch!.id,
+      );
+      print('DEBUG: Is in preliminary matches: $isInPreliminary');
+      print('DEBUG: Preliminary matches count: ${_preliminaryMatches.length}');
+      print('DEBUG: Selected match day: ${_selectedMatch!.day}');
+      return isInPreliminary;
+    }
+
+    // Check if we're in the playoffs tab and the match is a playoff match
+    if (_tabController.index == 1) {
+      // Playoffs tab - need to check which specific playoff sub-tab we're in
+      final playoffSubTabIndex = _playoffTabController.index;
+
+      if (playoffSubTabIndex == 0) {
+        // Quarter Finals tab
+        final quarterFinals = _getQuarterFinalsDirect();
+        final isInQuarterFinals = quarterFinals.any(
+          (match) => match.id == _selectedMatch!.id,
+        );
+        print('DEBUG: Is in quarter finals: $isInQuarterFinals');
+        print('DEBUG: Quarter finals count: ${quarterFinals.length}');
+        print('DEBUG: Selected match day: ${_selectedMatch!.day}');
+        return isInQuarterFinals;
+      } else if (playoffSubTabIndex == 1) {
+        // Semi Finals tab
+        final semiFinals = _getSemiFinalsDirect();
+        final isInSemiFinals = semiFinals.any(
+          (match) => match.id == _selectedMatch!.id,
+        );
+        print('DEBUG: Is in semi finals: $isInSemiFinals');
+        print('DEBUG: Semi finals count: ${semiFinals.length}');
+        print('DEBUG: Selected match day: ${_selectedMatch!.day}');
+        return isInSemiFinals;
+      } else if (playoffSubTabIndex == 2) {
+        // Finals tab
+        final finals = _getFinalsDirect();
+        final isInFinals = finals.any(
+          (match) => match.id == _selectedMatch!.id,
+        );
+        print('DEBUG: Is in finals: $isInFinals');
+        print('DEBUG: Finals count: ${finals.length}');
+        print('DEBUG: Selected match day: ${_selectedMatch!.day}');
+        return isInFinals;
+      }
+    }
+
+    print('DEBUG: Returning false - no match found in current tab');
+    return false;
+  }
+
   // Reshuffle teams method
   void _reshuffleTeams() async {
     print('DEBUG: RESHUFFLE STARTING - CLEARING EVERYTHING');
@@ -2370,6 +2481,34 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
     return Column(
       children: [
+        // Locked message when playoffs have started
+        if (_playoffsStarted)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.red[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.red[200]!, width: 1),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.lock, color: Colors.red[600], size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Preliminary rounds locked - restart playoffs to edit scores',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.red[700],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         // Matches List
         Expanded(
           child: ListView.builder(
@@ -2422,27 +2561,38 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 const SizedBox(width: 12),
                 // Start Scoring button
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _selectedMatch != null ? _startScoring : null,
-                    icon: const Icon(Icons.sports_score, size: 18),
-                    label: Text(
-                      _selectedMatch != null
-                          ? (_hasScoresForSelectedMatch()
-                              ? 'Edit Scoring'
-                              : 'Start Scoring')
-                          : 'Select a Match',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          _selectedMatch != null
-                              ? const Color(0xFF2196F3)
-                              : Colors.grey[400],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
+                  child: Builder(
+                    builder: (context) {
+                      _debugButtonState(); // Debug button state
+                      return ElevatedButton.icon(
+                        onPressed:
+                            (_selectedMatch != null &&
+                                    _isSelectedMatchInCurrentTab())
+                                ? _startScoring
+                                : null,
+                        icon: const Icon(Icons.sports_score, size: 18),
+                        label: Text(
+                          _selectedMatch != null &&
+                                  _isSelectedMatchInCurrentTab()
+                              ? (_hasScoresForSelectedMatch()
+                                  ? 'Edit Scoring'
+                                  : 'Start Scoring')
+                              : 'Select a Match',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              (_selectedMatch != null &&
+                                      _isSelectedMatchInCurrentTab())
+                                  ? const Color(0xFF2196F3)
+                                  : Colors.grey[400],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -2593,25 +2743,38 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             child: Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _selectedMatch != null ? _startScoring : null,
-                    icon: const Icon(Icons.sports_score),
-                    label: Text(
-                      _selectedMatch != null
-                          ? 'Start Scoring'
-                          : 'Start Scoring',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          _selectedMatch != null
-                              ? const Color(0xFF2196F3)
-                              : Colors.grey[400],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
+                  child: Builder(
+                    builder: (context) {
+                      _debugButtonState(); // Debug button state
+                      return ElevatedButton.icon(
+                        onPressed:
+                            (_selectedMatch != null &&
+                                    _isSelectedMatchInCurrentTab())
+                                ? _startScoring
+                                : null,
+                        icon: const Icon(Icons.sports_score),
+                        label: Text(
+                          _selectedMatch != null &&
+                                  _isSelectedMatchInCurrentTab()
+                              ? (_hasScoresForSelectedMatch()
+                                  ? 'Edit Scoring'
+                                  : 'Start Scoring')
+                              : 'Select a Match',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              (_selectedMatch != null &&
+                                      _isSelectedMatchInCurrentTab())
+                                  ? const Color(0xFF2196F3)
+                                  : Colors.grey[400],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -2663,25 +2826,38 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             child: Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _selectedMatch != null ? _startScoring : null,
-                    icon: const Icon(Icons.sports_score),
-                    label: Text(
-                      _selectedMatch != null
-                          ? 'Start Scoring'
-                          : 'Start Scoring',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          _selectedMatch != null
-                              ? const Color(0xFF2196F3)
-                              : Colors.grey[400],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
+                  child: Builder(
+                    builder: (context) {
+                      _debugButtonState(); // Debug button state
+                      return ElevatedButton.icon(
+                        onPressed:
+                            (_selectedMatch != null &&
+                                    _isSelectedMatchInCurrentTab())
+                                ? _startScoring
+                                : null,
+                        icon: const Icon(Icons.sports_score),
+                        label: Text(
+                          _selectedMatch != null &&
+                                  _isSelectedMatchInCurrentTab()
+                              ? (_hasScoresForSelectedMatch()
+                                  ? 'Edit Scoring'
+                                  : 'Start Scoring')
+                              : 'Select a Match',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              (_selectedMatch != null &&
+                                      _isSelectedMatchInCurrentTab())
+                                  ? const Color(0xFF2196F3)
+                                  : Colors.grey[400],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -2733,25 +2909,38 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             child: Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _selectedMatch != null ? _startScoring : null,
-                    icon: const Icon(Icons.sports_score),
-                    label: Text(
-                      _selectedMatch != null
-                          ? 'Start Scoring'
-                          : 'Start Scoring',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          _selectedMatch != null
-                              ? const Color(0xFF2196F3)
-                              : Colors.grey[400],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
+                  child: Builder(
+                    builder: (context) {
+                      _debugButtonState(); // Debug button state
+                      return ElevatedButton.icon(
+                        onPressed:
+                            (_selectedMatch != null &&
+                                    _isSelectedMatchInCurrentTab())
+                                ? _startScoring
+                                : null,
+                        icon: const Icon(Icons.sports_score),
+                        label: Text(
+                          _selectedMatch != null &&
+                                  _isSelectedMatchInCurrentTab()
+                              ? (_hasScoresForSelectedMatch()
+                                  ? 'Edit Scoring'
+                                  : 'Start Scoring')
+                              : 'Select a Match',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              (_selectedMatch != null &&
+                                      _isSelectedMatchInCurrentTab())
+                                  ? const Color(0xFF2196F3)
+                                  : Colors.grey[400],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
