@@ -2,8 +2,8 @@
 
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import '../utils/snackbar_utils.dart';
 import '../utils/navigation_utils.dart';
+import '../utils/snackbar_utils.dart';
 import 'signup_screen.dart';
 import 'main_navigation_screen.dart';
 import 'forgot_password_screen.dart';

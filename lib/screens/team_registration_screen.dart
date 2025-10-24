@@ -96,7 +96,14 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         _selectedDivision = 'Adult 18+';
       }
 
+      // Load existing players and trigger UI update
+      _players.clear();
       _players.addAll(widget.team!.players);
+
+      // Force UI update to show existing players
+      if (mounted) {
+        setState(() {});
+      }
     }
 
     // Add listeners to track form changes

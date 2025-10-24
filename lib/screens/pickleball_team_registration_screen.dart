@@ -76,13 +76,29 @@ class _PickleballTeamRegistrationScreenState
   @override
   void initState() {
     super.initState();
+
+    // Add a small delay to ensure proper initialization
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeForm();
+    });
+  }
+
+  void _initializeForm() {
     if (widget.team != null) {
       _teamNameController.text = widget.team!.name;
       _coachNameController.text = widget.team!.coachName;
       _coachPhoneController.text = widget.team!.coachPhone;
       _coachEmailController.text = widget.team!.coachEmail;
       _selectedDuprRating = widget.team!.division;
+
+      // Load existing players and trigger UI update
+      _players.clear();
       _players.addAll(widget.team!.players);
+
+      // Force UI update to show existing players
+      if (mounted) {
+        setState(() {});
+      }
     }
 
     // Add listeners to track form changes
@@ -294,7 +310,22 @@ class _PickleballTeamRegistrationScreenState
               _isSaving = false;
             });
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+              SnackBar(
+                content: Text(
+                  'Error: $e',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                margin: const EdgeInsets.only(left: 16, right: 16, bottom: 100),
+                elevation: 4,
+              ),
             );
           }
         }
@@ -306,17 +337,39 @@ class _PickleballTeamRegistrationScreenState
           SnackBar(
             content: Text(
               PickleballScreenKeys.addPlayerMessage,
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
             ),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            margin: const EdgeInsets.only(left: 16, right: 16, bottom: 100),
+            elevation: 4,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
               'Please fill in all required fields',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
             ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            margin: EdgeInsets.only(left: 16, right: 16, bottom: 100),
+            elevation: 4,
           ),
         );
       }

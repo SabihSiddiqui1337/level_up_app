@@ -77,10 +77,60 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
               onUpdate: (updatedTeam) {
                 widget.teamService.updateTeam(updatedTeam);
                 setState(() {});
+
+                // Show success snackbar
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Team "${updatedTeam.name}" updated successfully',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    backgroundColor: const Color(0xFF38A169),
+                    duration: const Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    margin: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      bottom: 100, // Position above bottom navigation
+                    ),
+                    elevation: 4,
+                  ),
+                );
               },
               onDelete: (teamId) {
                 widget.teamService.deleteTeam(teamId);
                 setState(() {});
+
+                // Show success snackbar
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Team deleted successfully',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    backgroundColor: Color(0xFF38A169),
+                    duration: Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    margin: EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      bottom: 80, // Position above bottom navigation
+                    ),
+                    elevation: 4,
+                  ),
+                );
               },
             ),
       ),
@@ -97,10 +147,60 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
               onUpdate: (updatedTeam) {
                 widget.pickleballTeamService.updateTeam(updatedTeam);
                 setState(() {});
+
+                // Show success snackbar
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Team "${updatedTeam.name}" updated successfully',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    backgroundColor: const Color(0xFF38A169),
+                    duration: const Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    margin: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      bottom: 100, // Position above bottom navigation
+                    ),
+                    elevation: 4,
+                  ),
+                );
               },
               onDelete: (teamId) {
                 widget.pickleballTeamService.deleteTeam(teamId);
                 setState(() {});
+
+                // Show success snackbar
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Team deleted successfully',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    backgroundColor: Color(0xFF38A169),
+                    duration: Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    margin: EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      bottom: 80, // Position above bottom navigation
+                    ),
+                    elevation: 4,
+                  ),
+                );
               },
             ),
       ),

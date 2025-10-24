@@ -4,6 +4,7 @@ import '../models/match.dart';
 import '../models/standing.dart';
 import '../services/team_service.dart';
 import '../services/pickleball_team_service.dart';
+import '../services/score_service.dart';
 import '../keys/schedule_screen/schedule_screen_keys.dart';
 import 'main_navigation_screen.dart';
 import 'match_scoring_screen.dart';
@@ -29,6 +30,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   late TabController _tabController;
   final TeamService _teamService = TeamService();
   final PickleballTeamService _pickleballTeamService = PickleballTeamService();
+  final ScoreService _scoreService = ScoreService();
 
   // Division selection state
   String? _selectedDivision;
@@ -119,7 +121,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     isPlayoffMatch
                         ? _playoffScores[_selectedMatch!.id]
                         : _matchScores[_selectedMatch!.id],
-                onScoresUpdated: (scores) {
+                onScoresUpdated: (scores) async {
                   print('Scores updated: $scores');
                   setState(() {
                     if (isPlayoffMatch) {
@@ -129,6 +131,19 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     }
                     _selectedMatch = null; // Clear selection after scoring
                   });
+
+                  // Save scores to persistent storage
+                  try {
+                    if (isPlayoffMatch) {
+                      await _scoreService.savePlayoffScores(_playoffScores);
+                    } else {
+                      await _scoreService.savePreliminaryScores(_matchScores);
+                    }
+                    print('Scores saved to storage successfully');
+                  } catch (e) {
+                    print('Error saving scores to storage: $e');
+                  }
+
                   print(
                     'Match scores after update: ${isPlayoffMatch ? _playoffScores : _matchScores}',
                   );
@@ -309,39 +324,38 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           playedAgainst[team.name] = <String>{};
         }
 
-        // Generate matches ensuring each team plays at least 2 games, max 3
+        // Generate exactly 3 games per team using a more robust algorithm
         Map<String, int> gamesPlayed = {};
         for (var team in sortedTeams) {
           gamesPlayed[team.name] = 0;
         }
 
-        int maxAttempts = 200; // Increased attempts
-        int attempts = 0;
+        // Keep generating matches until every team has exactly 3 games
+        int maxIterations = 1000; // Prevent infinite loops
+        int iterations = 0;
 
-        while (attempts < maxAttempts) {
-          // Find teams that need more games (minimum 2, maximum 3)
-          List<dynamic> teamsNeedingGames =
-              sortedTeams.where((team) {
-                int games = gamesPlayed[team.name]!;
-                return games < 3; // Allow up to 3 games
-              }).toList();
+        while (sortedTeams.any((team) => gamesPlayed[team.name]! < 3) &&
+            iterations < maxIterations) {
+          iterations++;
 
-          if (teamsNeedingGames.isEmpty) break;
+          // Find teams that still need games
+          List<dynamic> availableTeams =
+              sortedTeams.where((team) => gamesPlayed[team.name]! < 3).toList();
 
-          // Try to create a match between two teams that haven't played each other
-          bool matchCreated = false;
-          for (int i = 0; i < teamsNeedingGames.length && !matchCreated; i++) {
-            for (
-              int j = i + 1;
-              j < teamsNeedingGames.length && !matchCreated;
-              j++
-            ) {
-              String team1Name = teamsNeedingGames[i].name;
-              String team2Name = teamsNeedingGames[j].name;
+          if (availableTeams.length < 2) {
+            break; // Need at least 2 teams to create a match
+          }
+
+          // Try to find two teams that haven't played each other
+          bool matchFound = false;
+
+          for (int i = 0; i < availableTeams.length && !matchFound; i++) {
+            for (int j = i + 1; j < availableTeams.length && !matchFound; j++) {
+              String team1Name = availableTeams[i].name;
+              String team2Name = availableTeams[j].name;
 
               // Check if these teams haven't played each other yet
-              if (!playedAgainst[team1Name]!.contains(team2Name) &&
-                  !playedAgainst[team2Name]!.contains(team1Name)) {
+              if (!playedAgainst[team1Name]!.contains(team2Name)) {
                 // Create the match
                 matches.add(
                   Match(
@@ -355,8 +369,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     team2Status: 'Not Checked-in',
                     team1Score: 0,
                     team2Score: 0,
-                    team1Id: teamsNeedingGames[i].id,
-                    team2Id: teamsNeedingGames[j].id,
+                    team1Id: availableTeams[i].id,
+                    team2Id: availableTeams[j].id,
                     team1Name: team1Name,
                     team2Name: team2Name,
                   ),
@@ -374,18 +388,63 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                   timeSlot += 1; // Move to next hour
                 }
 
-                matchCreated = true;
+                matchFound = true;
               }
             }
           }
 
-          if (!matchCreated) {
-            // If we can't create more matches with current constraints, break
-            break;
-          }
+          // If no match was found, we need to allow some teams to play each other again
+          if (!matchFound) {
+            // Find the two teams with the fewest games
+            availableTeams.sort(
+              (a, b) => gamesPlayed[a.name]!.compareTo(gamesPlayed[b.name]!),
+            );
 
-          attempts++;
+            if (availableTeams.length >= 2) {
+              String team1Name = availableTeams[0].name;
+              String team2Name = availableTeams[1].name;
+
+              // Create the match even if they've played before
+              matches.add(
+                Match(
+                  id: '${matchId++}',
+                  day: 'Day 1',
+                  court: 'Court $courtNumber',
+                  time: '$timeSlot:00 AM',
+                  team1: team1Name,
+                  team2: team2Name,
+                  team1Status: 'Not Checked-in',
+                  team2Status: 'Not Checked-in',
+                  team1Score: 0,
+                  team2Score: 0,
+                  team1Id: availableTeams[0].id,
+                  team2Id: availableTeams[1].id,
+                  team1Name: team1Name,
+                  team2Name: team2Name,
+                ),
+              );
+
+              // Update tracking
+              playedAgainst[team1Name]!.add(team2Name);
+              playedAgainst[team2Name]!.add(team1Name);
+              gamesPlayed[team1Name] = gamesPlayed[team1Name]! + 1;
+              gamesPlayed[team2Name] = gamesPlayed[team2Name]! + 1;
+
+              // Alternate courts and time slots
+              courtNumber = (courtNumber % 3) + 1; // 3 courts max
+              if (courtNumber == 1) {
+                timeSlot += 1; // Move to next hour
+              }
+            }
+          }
         }
+
+        // Debug: Print final games played
+        print('Final games played: $gamesPlayed');
+        print('Total matches created: ${matches.length}');
+        print(
+          'Teams with less than 3 games: ${gamesPlayed.entries.where((e) => e.value < 3).map((e) => e.key).toList()}',
+        );
       }
     }
 
@@ -587,13 +646,15 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadTeams();
+    _loadScores();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reload teams when screen becomes visible
+    // Reload teams and scores when screen becomes visible
     _loadTeams();
+    _loadScores();
   }
 
   Future<void> _loadTeams() async {
@@ -601,9 +662,29 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     await _pickleballTeamService.loadTeams();
     if (mounted) {
       setState(() {
+        // Clear the matches cache to force regeneration with new teams
+        _matchesCache.clear();
         _updateDivisions();
         // Trigger rebuild to show updated teams
       });
+    }
+  }
+
+  Future<void> _loadScores() async {
+    try {
+      final preliminaryScores = await _scoreService.loadPreliminaryScores();
+      final playoffScores = await _scoreService.loadPlayoffScores();
+
+      if (mounted) {
+        setState(() {
+          _matchScores.clear();
+          _matchScores.addAll(preliminaryScores);
+          _playoffScores.clear();
+          _playoffScores.addAll(playoffScores);
+        });
+      }
+    } catch (e) {
+      print('Error loading scores: $e');
     }
   }
 

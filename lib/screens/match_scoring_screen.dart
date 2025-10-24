@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/match.dart';
+import '../utils/snackbar_utils.dart';
 
 class MatchScoringScreen extends StatefulWidget {
   final Match match;
@@ -60,22 +61,19 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
       widget.onScoresUpdated(scores);
 
       // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Scores saved successfully!'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
+      SnackbarUtils.showSuccess(
+        context,
+        message: 'Scores saved successfully!',
+        duration: const Duration(seconds: 4),
       );
 
-      // Navigate back
-      Navigator.pop(context);
+      // Navigate back with cleanup
+      SnackbarUtils.popWithCleanup(context);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error saving scores: $e'),
-          backgroundColor: Colors.red,
-        ),
+      SnackbarUtils.showError(
+        context,
+        message: 'Error saving scores: $e',
+        duration: const Duration(seconds: 5),
       );
     } finally {
       if (mounted) {

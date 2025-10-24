@@ -45,28 +45,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             // App Feedback
             _buildSettingsCard([
-              _buildSettingsItem(
-                'App Feedback',
-                Icons.feedback,
-                () {
-                  _navigateToAppFeedback();
-                },
-                trailing: Icons.keyboard_arrow_right,
-              ),
+              _buildSettingsItem('App Feedback', Icons.feedback, () {
+                _navigateToAppFeedback();
+              }, trailing: Icons.keyboard_arrow_right),
             ]),
 
             const SizedBox(height: 16),
 
             // About
             _buildSettingsCard([
-              _buildSettingsItem(
-                'About',
-                Icons.info,
-                () {
-                  _navigateToAbout();
-                },
-                trailing: Icons.keyboard_arrow_right,
-              ),
+              _buildSettingsItem('About', Icons.info, () {
+                _navigateToAbout();
+              }, trailing: Icons.keyboard_arrow_right),
             ]),
 
             const SizedBox(height: 32),
@@ -75,10 +65,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Center(
               child: Text(
                 'v1.0.0 + 1',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: Colors.grey[600], fontSize: 14),
               ),
             ),
 
@@ -117,9 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.grey[200]!,
-        ),
+        border: Border.all(color: Colors.grey[200]!),
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withOpacity(0.1),
@@ -157,7 +142,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     );
   }
-
 
   void _navigateToProfile() async {
     await Navigator.push(
@@ -332,9 +316,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 decoration: BoxDecoration(
                   color: const Color(0xFFE3F2FD),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: const Color(0xFF90CAF9),
-                  ),
+                  border: Border.all(color: const Color(0xFF90CAF9)),
                 ),
                 child: Column(
                   children: [
@@ -368,10 +350,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                       _emailController.text.isNotEmpty
                           ? _emailController.text
                           : 'user@example.com',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
                     ),
                   ],
                 ),
@@ -560,9 +539,16 @@ class _AppFeedbackScreenState extends State<AppFeedbackScreen> {
   void _submitFeedback() {
     if (_feedbackController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your feedback'),
+        SnackBar(
+          content: const Text(
+            'Please enter your feedback',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          ),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          margin: const EdgeInsets.only(left: 16, right: 16, bottom: 100),
+          elevation: 4,
         ),
       );
       return;
@@ -570,9 +556,16 @@ class _AppFeedbackScreenState extends State<AppFeedbackScreen> {
 
     // Show success message
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Thank you for your feedback!'),
+      SnackBar(
+        content: const Text(
+          'Thank you for your feedback!',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        ),
         backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        margin: const EdgeInsets.only(left: 16, right: 16, bottom: 100),
+        elevation: 4,
       ),
     );
 
@@ -660,38 +653,38 @@ class AboutScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-              // App Icon
-              Center(
-                child: Container(
-                  width: 85,
-                  height: 85,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: Image.asset(
-                      'assets/level_up_sport.png',
-                      width: 85,
-                      height: 85,
-                      fit: BoxFit.cover,
+            // App Icon
+            Center(
+              child: Container(
+                width: 85,
+                height: 85,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
                     ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Image.asset(
+                    'assets/level_up_sport.png',
+                    width: 85,
+                    height: 85,
+                    fit: BoxFit.cover,
                   ),
                 ),
               ),
+            ),
             const SizedBox(height: 15),
-            
+
             // Version
             Center(
               child: Text(
-                'Version: v1.0.0 + 1',  
+                'Version: v1.0.0 + 1',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w500,
@@ -700,23 +693,18 @@ class AboutScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 15),
-            
+
             // Rate Us as a settings row
             _buildSettingsCard([
-              _buildSettingsItem(
-                'Rate Us',
-                Icons.star,
-                () {
-                  // Handle rate us functionality
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Thank you for rating our app!'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                },
-                trailing: Icons.keyboard_arrow_right,
-              ),
+              _buildSettingsItem('Rate Us', Icons.star, () {
+                // Handle rate us functionality
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Thank you for rating our app!'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }, trailing: Icons.keyboard_arrow_right),
             ]),
           ],
         ),
@@ -729,9 +717,7 @@ class AboutScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.grey[200]!,
-        ),
+        border: Border.all(color: Colors.grey[200]!),
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withOpacity(0.1),

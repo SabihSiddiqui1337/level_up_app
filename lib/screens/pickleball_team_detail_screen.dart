@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/pickleball_team.dart';
 import 'pickleball_team_registration_screen.dart';
+import 'main_navigation_screen.dart';
+import '../utils/snackbar_utils.dart';
 
 class PickleballTeamDetailScreen extends StatefulWidget {
   final PickleballTeam team;
@@ -372,7 +374,12 @@ class _PickleballTeamDetailScreenState
                 setState(() {
                   _currentTeam = updatedTeam; // Update the current team
                 });
-                Navigator.pop(context); // Navigate back to team detail
+                // Navigate back to My Teams tab with snackbar cleanup
+                SnackbarUtils.navigateWithCleanup(
+                  context,
+                  const MainNavigationScreen(initialIndex: 2), // My Teams tab
+                  clearStack: true,
+                );
               },
             ),
       ),
