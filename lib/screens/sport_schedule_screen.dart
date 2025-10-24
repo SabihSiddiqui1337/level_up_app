@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/simple_app_bar.dart';
 import '../models/match.dart';
 import '../models/standing.dart';
@@ -57,19 +61,50 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   // Bottom navigation state for playoffs
   int _bottomNavIndex = 0;
 
+  // Store reshuffled matches directly
+  List<Match>? _reshuffledMatches;
+
   // Helper method to get preliminary matches directly without getter recursion
-  List<Match> _getPreliminaryMatchesDirect() {
+  List<Match> _getPreliminaryMatchesDirect({bool shouldShuffle = false}) {
     final teams = _teams;
     if (teams.isEmpty) return [];
 
     // Create a cache key based on teams and division
+    // Sort team IDs to ensure consistent cache key regardless of team loading order
+    final sortedTeamIds = teams.map((t) => t.id).toList()..sort();
     String cacheKey =
-        '${widget.sportName}_${_selectedDivision ?? 'all'}_${teams.map((t) => t.id).join('_')}';
+        '${widget.sportName}_${_selectedDivision ?? 'all'}_${sortedTeamIds.join('_')}_shuffle_$shouldShuffle';
 
-    // Return cached matches if available
-    if (_matchesCache.containsKey(cacheKey)) {
+    // For shuffle operations, add timestamp to ensure unique cache key
+    if (shouldShuffle) {
+      cacheKey += '_${DateTime.now().millisecondsSinceEpoch}';
+    }
+
+    // Return cached matches if available (but not for reshuffle operations)
+    if (_matchesCache.containsKey(cacheKey) && !shouldShuffle) {
+      print('DEBUG: Using cached matches for key: $cacheKey');
+      print('DEBUG: Cache size: ${_matchesCache.length}');
       return _matchesCache[cacheKey]!;
     }
+
+    // For shuffle operations, always generate new matches
+    if (shouldShuffle) {
+      print(
+        'DEBUG: Shuffle requested - bypassing cache and generating new matches',
+      );
+    }
+
+    // Try to load from persistent storage (synchronous for now)
+    // final storedMatches = await _loadMatchesFromStorage(cacheKey);
+    // if (storedMatches != null) {
+    //   print('DEBUG: Using stored matches for key: $cacheKey');
+    //   _matchesCache[cacheKey] = storedMatches;
+    //   return storedMatches;
+    // }
+
+    print('DEBUG: Cache miss - generating new matches for key: $cacheKey');
+    print('DEBUG: Current cache keys: ${_matchesCache.keys.toList()}');
+    print('DEBUG: Number of teams: ${teams.length}');
 
     // Generate matches from registered teams
     List<Match> matches = [];
@@ -102,17 +137,48 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         gamesPlayed[team.id] = 0;
       }
 
-      // Generate matches ensuring each team plays exactly 3 games
-      while (availableTeams.length >= 2) {
-        // Shuffle teams for randomization
+      // Shuffle teams once at the beginning if requested
+      if (shouldShuffle) {
+        print('DEBUG: Shuffling teams for reshuffle');
         availableTeams.shuffle();
+        print(
+          'DEBUG: Teams after shuffle: ${availableTeams.map((t) => t.name).toList()}',
+        );
+
+        // Also shuffle the gamesPlayed map keys to randomize the order
+        final shuffledGamesPlayed = <String, int>{};
+        final teamIds = gamesPlayed.keys.toList()..shuffle();
+        for (final teamId in teamIds) {
+          shuffledGamesPlayed[teamId] = gamesPlayed[teamId]!;
+        }
+        gamesPlayed.clear();
+        gamesPlayed.addAll(shuffledGamesPlayed);
+        print('DEBUG: Shuffled games played order');
+      }
+
+      // Generate matches ensuring each team plays exactly 3 games
+      int maxAttempts = 1000; // Prevent infinite loops
+      int attempts = 0;
+
+      while (availableTeams.length >= 2 && attempts < maxAttempts) {
+        attempts++;
 
         // Find two teams that haven't played each other and haven't played 3 games
         bool matchFound = false;
-        for (int i = 0; i < availableTeams.length - 1; i++) {
-          for (int j = i + 1; j < availableTeams.length; j++) {
-            final team1 = availableTeams[i];
-            final team2 = availableTeams[j];
+
+        // If shuffling, randomize the search order
+        List<int> indices = List.generate(
+          availableTeams.length,
+          (index) => index,
+        );
+        if (shouldShuffle) {
+          indices.shuffle();
+        }
+
+        for (int i = 0; i < indices.length - 1; i++) {
+          for (int j = i + 1; j < indices.length; j++) {
+            final team1 = availableTeams[indices[i]];
+            final team2 = availableTeams[indices[j]];
 
             // Create match key for uniqueness check
             final matchKey = '${team1.id}_${team2.id}';
@@ -123,6 +189,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 !usedMatches.contains(reverseMatchKey) &&
                 gamesPlayed[team1.id]! < 3 &&
                 gamesPlayed[team2.id]! < 3) {
+              if (shouldShuffle) {
+                print(
+                  'DEBUG: Found valid match: ${team1.name} vs ${team2.name}',
+                );
+              }
               // Create match
               matches.add(
                 Match(
@@ -178,7 +249,18 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             }
           }
           if (allTeamsPlayed3Games) break;
+
+          // If we can't find a match and not all teams have played 3 games,
+          // remove teams that have already played 3 games to avoid infinite loop
+          availableTeams.removeWhere((team) => gamesPlayed[team.id]! >= 3);
         }
+      }
+
+      // Log if we hit the max attempts limit
+      if (attempts >= maxAttempts) {
+        print(
+          'WARNING: Match generation hit max attempts limit ($maxAttempts) for division $division',
+        );
       }
 
       // Validation: Ensure no team plays more than 3 games
@@ -194,6 +276,21 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
     // Cache the matches for stability
     _matchesCache[cacheKey] = matches;
+    print('DEBUG: Generated ${matches.length} matches and cached them');
+    print('DEBUG: Cache size after generation: ${_matchesCache.length}');
+
+    // Debug: Show first few matches to verify shuffling
+    if (shouldShuffle && matches.isNotEmpty) {
+      print('DEBUG: First 3 shuffled matches:');
+      for (int i = 0; i < math.min(3, matches.length); i++) {
+        final match = matches[i];
+        print('DEBUG: Match ${i + 1}: ${match.team1} vs ${match.team2}');
+      }
+    }
+
+    // Save to persistent storage (asynchronous)
+    _saveMatchesToStorage(cacheKey, matches);
+
     return matches;
   }
 
@@ -207,13 +304,21 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     }
 
     // Filter by selected division if one is selected
+    List<dynamic> filteredTeams;
     if (_selectedDivision != null) {
-      return allTeams
-          .where((team) => team.division == _selectedDivision)
-          .toList();
+      filteredTeams =
+          allTeams.where((team) => team.division == _selectedDivision).toList();
+    } else {
+      filteredTeams = allTeams;
     }
 
-    return allTeams;
+    // Sort teams by ID to ensure consistent order
+    filteredTeams.sort((a, b) => a.id.compareTo(b.id));
+
+    print(
+      'DEBUG: _teams getter called - returning ${filteredTeams.length} teams',
+    );
+    return filteredTeams;
   }
 
   // Update available divisions
@@ -254,10 +359,63 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     });
   }
 
+  // Save matches to persistent storage
+  Future<void> _saveMatchesToStorage(
+    String cacheKey,
+    List<Match> matches,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final matchesJson = matches.map((match) => match.toJson()).toList();
+      await prefs.setString('matches_$cacheKey', json.encode(matchesJson));
+      print('DEBUG: Saved matches to storage for key: $cacheKey');
+    } catch (e) {
+      print('DEBUG: Error saving matches to storage: $e');
+    }
+  }
+
+  // Completely reset all playoff data
+  Future<void> _resetAllPlayoffData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Clear all playoff-related keys
+      await prefs.remove('playoff_scores');
+      await prefs.remove('quarter_finals_scores');
+      await prefs.remove('semi_finals_scores');
+      await prefs.remove('finals_scores');
+      await prefs.remove('playoffs_started');
+
+      // Also clear any other potential score keys
+      final keys = prefs.getKeys();
+      for (String key in keys) {
+        if (key.contains('score') ||
+            key.contains('playoff') ||
+            key.contains('quarter') ||
+            key.contains('semi') ||
+            key.contains('final')) {
+          await prefs.remove(key);
+          print('DEBUG: Removed key: $key');
+        }
+      }
+
+      print('DEBUG: All playoff data completely reset');
+    } catch (e) {
+      print('DEBUG: Error resetting playoff data: $e');
+    }
+  }
+
   void _startScoring() {
     if (_selectedMatch != null) {
       // Determine if this is a playoff match
       final isPlayoffMatch = _playoffs.contains(_selectedMatch!);
+
+      // Check if playoffs have started and this is a playoff match
+      if (_playoffsStarted && isPlayoffMatch) {
+        // Show dialog explaining that scores cannot be edited once playoffs have started
+        _showPlayoffScoreEditRestrictionDialog();
+        return;
+      }
 
       // Navigate to dedicated scoring screen
       Navigator.push(
@@ -277,7 +435,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     } else {
                       _matchScores[_selectedMatch!.id] = scores;
                     }
-                    _selectedMatch = null; // Clear selection after scoring
+                    // Clear selection after saving scores
+                    _selectedMatch = null;
                     // Clear standings cache to force recalculation
                     _cachedStandings = null;
                     _lastStandingsCacheKey = null;
@@ -389,6 +548,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 Navigator.of(context).pop();
                 setState(() {
                   _playoffsStarted = true;
+                  _justRestartedPlayoffs =
+                      false; // Reset the flag when starting playoffs again
                 });
                 // Switch to Playoffs bottom navigation
                 setState(() {
@@ -424,22 +585,45 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               onPressed: () async {
                 Navigator.of(context).pop();
                 print('Restarting playoffs - clearing all scores');
+
+                // Clear all playoff scores from storage first
+                print('DEBUG: Clearing playoff scores from storage...');
+                await _scoreService.savePlayoffsStarted(false);
+                await _scoreService.saveQuarterFinalsScores({});
+                await _scoreService.saveSemiFinalsScores({});
+                await _scoreService.saveFinalsScores({});
+                await _scoreService.savePlayoffScores({});
+
+                // Use the more aggressive clearing method
+                await _resetAllPlayoffData();
+                print('DEBUG: All playoff data completely reset');
+
                 setState(() {
                   _playoffsStarted = false;
-                  _playoffScores.clear(); // Clear all playoff scores
+                  _playoffScores
+                      .clear(); // Clear all playoff scores from memory
                   _selectedMatch = null; // Clear selected match
                   _justRestartedPlayoffs = true; // Set flag to prevent reload
                   // Clear standings cache to force recalculation
                   _cachedStandings = null;
                   _lastStandingsCacheKey = null;
                 });
-                // Save playoff state and clear all playoff scores
-                await _scoreService.savePlayoffsStarted(_playoffsStarted);
-                await _scoreService.saveQuarterFinalsScores({});
-                await _scoreService.saveSemiFinalsScores({});
-                await _scoreService.saveFinalsScores({});
-                await _scoreService.savePlayoffScores({});
-                print('All playoff scores cleared from storage');
+
+                // Force a rebuild to ensure UI reflects the cleared state
+                if (mounted) {
+                  setState(() {});
+                }
+
+                // Verify that scores are actually cleared
+                final verifyPlayoffScores =
+                    await _scoreService.loadPlayoffScores();
+                print(
+                  'DEBUG: Verification - playoff scores after clear: $verifyPlayoffScores',
+                );
+                print(
+                  'DEBUG: Verification - _playoffScores in memory: $_playoffScores',
+                );
+                print('All playoff scores cleared from storage and memory');
               },
               child: const Text('Restart Playoffs'),
             ),
@@ -451,8 +635,15 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   // Get teams from service instead of hardcoded data
   List<Match> get _preliminaryMatches {
-    // Use the direct method to avoid duplication
-    return _getPreliminaryMatchesDirect();
+    // If we have reshuffled matches, use them
+    if (_reshuffledMatches != null) {
+      print('DEBUG: Using reshuffled matches: ${_reshuffledMatches!.length}');
+      return _reshuffledMatches!;
+    }
+
+    // Otherwise use the direct method to avoid duplication
+    // Always use non-shuffled version for normal display
+    return _getPreliminaryMatchesDirect(shouldShuffle: false);
   }
 
   // Get standings from registered teams
@@ -681,15 +872,20 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       }
     }
 
-    // SEMI FINALS - Create semi-final matches based on quarter final results
+    // SEMI FINALS - Always create 2 semi-final matches
     final quarterFinalsWinners = _getQuarterFinalsWinners();
-    if (quarterFinalsWinners.length >= 2) {
-      // Create semi-final matches with proper seeding
-      for (int i = 0; i < quarterFinalsWinners.length / 2; i++) {
+
+    // Always create 2 semi-final matches for consistency
+    for (int i = 0; i < 2; i++) {
+      if (quarterFinalsWinners.length >= 2 &&
+          i < quarterFinalsWinners.length / 2) {
+        // Create semi-final matches with actual teams when we have winners
         final team1Index = i;
         final team2Index = quarterFinalsWinners.length - 1 - i;
 
-        if (team2Index > team1Index) {
+        if (team2Index > team1Index &&
+            team1Index < quarterFinalsWinners.length &&
+            team2Index < quarterFinalsWinners.length) {
           final team1 = quarterFinalsWinners[team1Index];
           final team2 = quarterFinalsWinners[team2Index];
 
@@ -711,11 +907,25 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               team2Name: team2.name,
             ),
           );
+        } else {
+          // Create TBA match if we don't have enough winners yet
+          playoffMatches.add(
+            Match(
+              id: '${matchId++}',
+              day: 'Semi Finals',
+              court: 'Court ${(i % 3) + 1}',
+              time: '${timeSlot + i}:00 PM',
+              team1: 'TBA',
+              team2: 'TBA',
+              team1Status: 'TBA',
+              team2Status: 'TBA',
+              team1Score: 0,
+              team2Score: 0,
+            ),
+          );
         }
-      }
-    } else {
-      // Create waiting matches for semi-finals
-      for (int i = 0; i < 2; i++) {
+      } else {
+        // Create waiting matches for semi-finals when no winners yet
         playoffMatches.add(
           Match(
             id: '${matchId++}',
@@ -862,10 +1072,17 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Only reload if we don't have scores loaded yet
-    if (_matchScores.isEmpty) {
+    print(
+      'DEBUG: didChangeDependencies called - _matchScores.isEmpty: ${_matchScores.isEmpty}, _teams.isEmpty: ${_teams.isEmpty}',
+    );
+    // Only reload if we don't have scores loaded yet AND we haven't already loaded teams
+    // This prevents clearing the matches cache unnecessarily
+    if (_matchScores.isEmpty && _teams.isEmpty) {
+      print('DEBUG: Loading teams and scores in didChangeDependencies');
       _loadTeams();
       _loadScores();
+    } else {
+      print('DEBUG: Skipping load in didChangeDependencies');
     }
   }
 
@@ -887,8 +1104,26 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     await _pickleballTeamService.loadTeams();
     if (mounted) {
       setState(() {
-        // Clear the matches cache to force regeneration with new teams
-        _matchesCache.clear();
+        // Only clear the matches cache if teams have actually changed
+        // This prevents unnecessary regeneration when navigating back and forth
+        final currentTeamIds = _teams.map((t) => t.id).toList()..sort();
+        final cacheKeys = _matchesCache.keys.toList();
+        bool teamsChanged = false;
+
+        for (String key in cacheKeys) {
+          if (!key.contains(currentTeamIds.join('_'))) {
+            teamsChanged = true;
+            break;
+          }
+        }
+
+        if (teamsChanged) {
+          print('DEBUG: Teams changed - clearing matches cache');
+          _matchesCache.clear();
+        } else {
+          print('DEBUG: Teams unchanged - keeping matches cache');
+        }
+
         // Clear standings cache to force recalculation
         _cachedStandings = null;
         _lastStandingsCacheKey = null;
@@ -903,7 +1138,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       // Don't reload scores if we just restarted playoffs
       if (_justRestartedPlayoffs) {
         print('Skipping score reload - just restarted playoffs');
-        _justRestartedPlayoffs = false; // Reset flag
+        // Don't reset the flag here - let it be reset when playoffs are started again
         return;
       }
 
@@ -911,17 +1146,40 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       final playoffScores = await _scoreService.loadPlayoffScores();
       final playoffsStarted = await _scoreService.loadPlayoffsStarted();
 
-      print('Loading scores - Preliminary: $preliminaryScores');
-      print('Loading scores - Playoff: $playoffScores');
-      print('Loading scores - Playoffs started: $playoffsStarted');
+      print('DEBUG: Loading scores - Preliminary: $preliminaryScores');
+      print('DEBUG: Loading scores - Playoff: $playoffScores');
+      print('DEBUG: Loading scores - Playoffs started: $playoffsStarted');
+      print('DEBUG: Current _playoffScores in memory: $_playoffScores');
 
+      // Only update state if widget is still mounted
       if (mounted) {
         setState(() {
           // Don't clear existing scores, just update them
           _matchScores.clear();
           _matchScores.addAll(preliminaryScores);
-          _playoffScores.clear();
-          _playoffScores.addAll(playoffScores);
+
+          // Only load playoff scores if playoffs have actually started
+          // This prevents loading old scores when starting playoffs fresh
+          if (playoffsStarted) {
+            // Only load scores if we don't have any scores already
+            // This prevents reloading old scores after restart
+            if (_playoffScores.isEmpty) {
+              _playoffScores.clear();
+              _playoffScores.addAll(playoffScores);
+              print(
+                'DEBUG: Loaded playoff scores from storage: $playoffScores',
+              );
+            } else {
+              print(
+                'DEBUG: Skipping playoff score reload - scores already in memory',
+              );
+            }
+          } else {
+            // Clear playoff scores if playoffs haven't started
+            _playoffScores.clear();
+            print('DEBUG: Cleared playoff scores - playoffs not started');
+          }
+
           _playoffsStarted = playoffsStarted;
         });
 
@@ -930,6 +1188,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       }
     } catch (e) {
       print('Error loading scores: $e');
+      // Don't rethrow the error to prevent app crashes
     }
   }
 
@@ -1090,7 +1349,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     final team2Won = winningTeamId == match.team2Id;
 
     // Check if this is a playoff match
-    final isPlayoffMatch = _playoffs.contains(match);
+    final isPlayoffMatch =
+        match.day == 'Quarter Finals' ||
+        match.day == 'Semi Finals' ||
+        match.day == 'Finals';
 
     // Get seeding information for playoff matches
     String getTeamDisplayName(String teamName, String? teamId) {
@@ -1149,20 +1411,55 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.grey[700],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'Match',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
+              Row(
+                children: [
+                  if (_playoffsStarted && !isPlayoffMatch) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.red[600],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock, color: Colors.white, size: 12),
+                          SizedBox(width: 4),
+                          Text(
+                            'Locked',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[700],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'Match',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ],
           ),
@@ -1654,25 +1951,181 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     return true; // No scores found
   }
 
+  // Check if the selected match has scores
+  bool _hasScoresForSelectedMatch() {
+    if (_selectedMatch == null) return false;
+
+    final scores = _matchScores[_selectedMatch!.id];
+    if (scores != null && scores.length >= 2) {
+      final team1Score = scores[_selectedMatch!.team1Id] ?? 0;
+      final team2Score = scores[_selectedMatch!.team2Id] ?? 0;
+      return team1Score > 0 || team2Score > 0;
+    }
+    return false;
+  }
+
   // Reshuffle teams method
   void _reshuffleTeams() async {
-    // Clear the matches cache to force regeneration
-    final cacheKey =
-        '${widget.sportName}_${_selectedDivision ?? 'all'}_${_teams.map((t) => t.id).join('_')}';
-    _matchesCache.remove(cacheKey);
+    print('DEBUG: RESHUFFLE STARTING - CLEARING EVERYTHING');
 
-    // Clear any existing scores from memory
+    // Clear everything completely
+    _matchesCache.clear();
     _matchScores.clear();
     _selectedMatch = null;
+    _cachedStandings = null;
+    _lastStandingsCacheKey = null;
+    _reshuffledMatches = null; // Clear reshuffled matches
 
-    // Clear scores from persistent storage
+    // Clear scores from storage
     await _scoreService.clearAllScores();
 
-    // Reload scores to ensure UI is updated
-    await _loadScores();
+    // Generate completely new matches
+    print('DEBUG: GENERATING NEW SHUFFLED MATCHES');
+    final teams = _teams;
+    if (teams.isNotEmpty) {
+      // Shuffle teams directly
+      final shuffledTeams = List.from(teams);
+      shuffledTeams.shuffle();
+      print(
+        'DEBUG: Teams shuffled: ${shuffledTeams.map((t) => t.name).toList()}',
+      );
 
-    // Force rebuild
-    setState(() {});
+      // Generate matches with shuffled teams
+      final newMatches = _generateMatchesForTeams(shuffledTeams);
+      print('DEBUG: Generated ${newMatches.length} new matches');
+
+      // Store the new matches in state
+      _reshuffledMatches = newMatches;
+      print('DEBUG: Stored ${newMatches.length} reshuffled matches in state');
+
+      // Show first few matches
+      if (newMatches.isNotEmpty) {
+        print('DEBUG: First 3 new matches:');
+        for (int i = 0; i < math.min(3, newMatches.length); i++) {
+          final match = newMatches[i];
+          print('DEBUG: ${match.team1} vs ${match.team2}');
+        }
+      }
+    }
+
+    // Single UI update with new matches
+    if (mounted) {
+      setState(() {
+        print('DEBUG: UI UPDATED WITH NEW MATCHES - SINGLE UPDATE');
+      });
+    }
+  }
+
+  // Generate matches for a specific set of teams
+  List<Match> _generateMatchesForTeams(List<dynamic> teams) {
+    List<Match> matches = [];
+    int matchId = 1;
+    int courtNumber = 1;
+    int timeSlot = 10; // Start at 10 AM
+
+    // Group teams by division
+    Map<String, List<dynamic>> teamsByDivision = {};
+    for (var team in teams) {
+      final division = team.division ?? 'Open';
+      if (!teamsByDivision.containsKey(division)) {
+        teamsByDivision[division] = [];
+      }
+      teamsByDivision[division]!.add(team);
+    }
+
+    // Generate matches for each division separately
+    for (String division in teamsByDivision.keys) {
+      final divisionTeams = teamsByDivision[division]!;
+      if (divisionTeams.length < 2) continue;
+
+      // Create a copy of teams for this division
+      List<dynamic> availableTeams = List.from(divisionTeams);
+      Map<String, int> gamesPlayed = {};
+      Set<String> usedMatches = {};
+
+      // Initialize games played counter
+      for (var team in availableTeams) {
+        gamesPlayed[team.id] = 0;
+      }
+
+      // Generate matches ensuring each team plays exactly 3 games
+      int maxAttempts = 1000;
+      int attempts = 0;
+
+      while (availableTeams.length >= 2 && attempts < maxAttempts) {
+        attempts++;
+
+        // Find two teams that haven't played each other and haven't played 3 games
+        bool matchFound = false;
+        for (int i = 0; i < availableTeams.length - 1; i++) {
+          for (int j = i + 1; j < availableTeams.length; j++) {
+            final team1 = availableTeams[i];
+            final team2 = availableTeams[j];
+
+            // Create match key for uniqueness check
+            final matchKey = '${team1.id}_${team2.id}';
+            final reverseMatchKey = '${team2.id}_${team1.id}';
+
+            // Check if teams haven't played each other and haven't reached game limit
+            if (!usedMatches.contains(matchKey) &&
+                !usedMatches.contains(reverseMatchKey) &&
+                gamesPlayed[team1.id]! < 3 &&
+                gamesPlayed[team2.id]! < 3) {
+              // Create match
+              matches.add(
+                Match(
+                  id: matchId.toString(),
+                  day: 'Day 1',
+                  time: '${timeSlot}:00 AM',
+                  court: 'Court $courtNumber',
+                  team1: team1.name,
+                  team1Id: team1.id,
+                  team2: team2.name,
+                  team2Id: team2.id,
+                  team1Status: 'pending',
+                  team2Status: 'pending',
+                  team1Score: 0,
+                  team2Score: 0,
+                ),
+              );
+
+              // Mark teams as having played each other
+              usedMatches.add(matchKey);
+              usedMatches.add(reverseMatchKey);
+
+              // Update games played counter
+              gamesPlayed[team1.id] = gamesPlayed[team1.id]! + 1;
+              gamesPlayed[team2.id] = gamesPlayed[team2.id]! + 1;
+
+              // Remove teams that have played 3 games
+              availableTeams.removeWhere((team) => gamesPlayed[team.id]! >= 3);
+
+              matchId++;
+              courtNumber++;
+              if (courtNumber > 4) {
+                courtNumber = 1;
+                timeSlot += 2; // 2-hour intervals
+              }
+
+              matchFound = true;
+              break;
+            }
+          }
+          if (matchFound) break;
+        }
+
+        if (!matchFound) {
+          // Remove teams that have played their maximum games
+          availableTeams.removeWhere((team) => gamesPlayed[team.id]! >= 3);
+        }
+      }
+
+      if (attempts >= maxAttempts) {
+        print('WARNING: Max attempts reached for division $division');
+      }
+    }
+
+    return matches;
   }
 
   // Show dialog when trying to reshuffle with scores
@@ -1689,6 +2142,38 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Show dialog explaining playoff score edit restriction
+  void _showPlayoffScoreEditRestrictionDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Playoffs in Progress'),
+          content: const Text(
+            'To edit playoff scores, you\'ll need to restart the playoffs first. This will reset the entire playoff bracket and allow you to make changes.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _restartPlayoffs();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Restart Playoffs'),
             ),
           ],
         );
@@ -1942,7 +2427,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     icon: const Icon(Icons.sports_score, size: 18),
                     label: Text(
                       _selectedMatch != null
-                          ? 'Start Scoring'
+                          ? (_hasScoresForSelectedMatch()
+                              ? 'Edit Scoring'
+                              : 'Start Scoring')
                           : 'Select a Match',
                     ),
                     style: ElevatedButton.styleFrom(
