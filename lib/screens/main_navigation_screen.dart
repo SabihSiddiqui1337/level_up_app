@@ -108,8 +108,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
     ];
 
-    // Only show "My Team" for regular users (not admins/scoring users)
-    if (userRole == 'user') {
+    // Show "My Team" for all users except owners (admins)
+    if (userRole != 'owner') {
       baseItems.add(
         NavigationItem(
           screen: MyTeamScreen(

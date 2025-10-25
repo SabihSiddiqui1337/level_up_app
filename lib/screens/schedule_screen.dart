@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/custom_app_bar.dart';
 import 'sport_schedule_screen.dart';
 import '../keys/schedule_screen/schedule_screen_keys.dart';
@@ -14,6 +15,33 @@ class ScheduleScreen extends StatefulWidget {
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
   bool _isExpanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExpansionState();
+  }
+
+  Future<void> _loadExpansionState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final isExpanded = prefs.getBool('schedule_expansion_state') ?? false;
+      setState(() {
+        _isExpanded = isExpanded;
+      });
+    } catch (e) {
+      print('Error loading expansion state: $e');
+    }
+  }
+
+  Future<void> _saveExpansionState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('schedule_expansion_state', _isExpanded);
+    } catch (e) {
+      print('Error saving expansion state: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +83,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           setState(() {
                             _isExpanded = !_isExpanded;
                           });
+                          _saveExpansionState();
                         },
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
