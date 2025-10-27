@@ -87,7 +87,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   List<Match>? _reshuffledMatches;
 
   // Games per team in preliminary rounds
-  int _gamesPerTeam = 3; // Default: each team plays 3 games
+  int _gamesPerTeam = 1; // Default: each team plays 1 game
+  int _preliminaryGameWinningScore = 11; // Default: 11 points
   bool _hasShownGamesPerTeamDialog = false;
 
   // Helper method to get preliminary matches directly without getter recursion
@@ -1047,11 +1048,18 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 match: _selectedMatch!,
                 initialScores: initialScoresToPass,
                 matchFormat: '1game', // Preliminary rounds are always 1 game
-                gameWinningScore: 11, // Preliminary rounds use 11 points
+                gameWinningScore: _preliminaryGameWinningScore,
                 canAdjustSettings:
                     false, // Don't allow adjusting settings for preliminaries
                 onScoresUpdated: (scores) async {
                   // Save to memory first
+                  print('DEBUG: ===== SAVING SCORES =====');
+                  print('DEBUG: Match ID: ${_selectedMatch!.id}');
+                  print('DEBUG: Match team1Id: ${_selectedMatch!.team1Id}');
+                  print('DEBUG: Match team2Id: ${_selectedMatch!.team2Id}');
+                  print('DEBUG: Scores being saved: $scores');
+                  print('DEBUG: Scores keys: ${scores.keys.toList()}');
+
                   setState(() {
                     if (isPlayoffMatch) {
                       _playoffScores[_selectedMatch!
@@ -1062,6 +1070,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       );
                     }
                   });
+
+                  print('DEBUG: After save, checking _matchScores');
+                  print(
+                    'DEBUG: _matchScores keys: ${_matchScores.keys.toList()}',
+                  );
+                  print(
+                    'DEBUG: _matchScores[${_selectedMatch!.id}]: ${_matchScores[_selectedMatch!.id]}',
+                  );
 
                   // Save scores to persistent storage
                   try {
@@ -1082,12 +1098,16 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                   }
 
                   // Clear selection and cache after saving
-                  setState(() {
-                    _selectedMatch = null;
-                    // Clear standings cache to force recalculation
-                    _cachedStandings = null;
-                    _lastStandingsCacheKey = null;
-                  });
+                  if (mounted) {
+                    setState(() {
+                      _selectedMatch = null;
+                      // Clear standings cache to force recalculation
+                      _cachedStandings = null;
+                      _lastStandingsCacheKey = null;
+                      // Also clear matches cache key to force recalculation
+                      _matchesCache.clear();
+                    });
+                  }
                 },
               ),
         ),
@@ -1152,10 +1172,13 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   }
 
   String? _getWinningTeamId(String matchId) {
+    print('DEBUG: _getWinningTeamId called for matchId: $matchId');
     // Check if this is a playoff match ID (very high numbers)
     final matchIdNum = int.tryParse(matchId) ?? 0;
     final isPlayoffMatch =
         matchIdNum >= 1000000; // Playoff matches start at 1 million
+
+    print('DEBUG: isPlayoffMatch: $isPlayoffMatch');
 
     if (isPlayoffMatch) {
       // For playoff matches, check playoff scores first
@@ -1188,29 +1211,46 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     } else {
       // For preliminary matches, check preliminary scores first
       final preliminaryScores = _matchScores[matchId];
-      if (preliminaryScores != null && preliminaryScores.length >= 2) {
-        // Extract team IDs and scores, handling both team-level and game-level formats
-        final teamScores = <String, int>{};
-        preliminaryScores.forEach((key, value) {
-          // Key format could be teamId or teamId_game1
-          if (key.endsWith('_game1')) {
-            final teamId = key.replaceAll('_game1', '');
-            teamScores[teamId] = value;
-          } else {
-            // Team-level format
-            teamScores[key] = value;
+
+      if (preliminaryScores != null && preliminaryScores.isNotEmpty) {
+        // Scores from SemiFinalsScoringScreen are already in team-level format (teamId: score)
+        // after being converted by _convertScoresForPreliminaries
+
+        final teamIds = preliminaryScores.keys.toList();
+
+        if (teamIds.length >= 2) {
+          final team1Id = teamIds[0];
+          final team2Id = teamIds[1];
+          final team1Score = preliminaryScores[team1Id] ?? 0;
+          final team2Score = preliminaryScores[team2Id] ?? 0;
+
+          print(
+            'DEBUG: _getWinningTeamId for match $matchId: team1Id=$team1Id (score=$team1Score), team2Id=$team2Id (score=$team2Score)',
+          );
+
+          if (team1Score > team2Score) {
+            print('DEBUG: _getWinningTeamId - Winner is $team1Id');
+            return team1Id;
           }
-        });
-
-        if (teamScores.length >= 2) {
-          final teamIds = teamScores.keys.toList();
-          final team1Score = teamScores[teamIds[0]] ?? 0;
-          final team2Score = teamScores[teamIds[1]] ?? 0;
-
-          if (team1Score > team2Score) return teamIds[0];
-          if (team2Score > team1Score) return teamIds[1];
+          if (team2Score > team1Score) {
+            print('DEBUG: _getWinningTeamId - Winner is $team2Id');
+            return team2Id;
+          }
+          print('DEBUG: _getWinningTeamId - Tie');
           return null; // Tie
         }
+      }
+
+      if (preliminaryScores == null) {
+        print('DEBUG: _getWinningTeamId - No scores found for match $matchId');
+      } else if (preliminaryScores.isEmpty) {
+        print(
+          'DEBUG: _getWinningTeamId - Scores map is empty for match $matchId',
+        );
+      } else if (preliminaryScores.keys.length < 2) {
+        print(
+          'DEBUG: _getWinningTeamId - Only ${preliminaryScores.keys.length} team(s) in scores for match $matchId',
+        );
       }
     }
 
@@ -1730,143 +1770,204 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       barrierDismissible: false, // Don't allow dismissing by tapping outside
       builder: (BuildContext context) {
         int selectedGames = _gamesPerTeam;
+        int selectedScore = _preliminaryGameWinningScore;
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
               title: Text('Preliminary Rounds Settings'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'How many games should each team play?',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => setDialogState(() => selectedGames = 1),
-                          child: Container(
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            decoration: BoxDecoration(
-                              color:
-                                  selectedGames == 1
-                                      ? Color(0xFF2196F3)
-                                      : Colors.grey[300],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '1 Game',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+              contentPadding: EdgeInsets.fromLTRB(24, 20, 24, 24),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'How many games should each team play?',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => setDialogState(() => selectedGames = 2),
-                          child: Container(
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            decoration: BoxDecoration(
-                              color:
-                                  selectedGames == 2
-                                      ? Color(0xFF2196F3)
-                                      : Colors.grey[300],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '2 Games',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => setDialogState(() => selectedGames = 3),
-                          child: Container(
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            decoration: BoxDecoration(
-                              color:
-                                  selectedGames == 3
-                                      ? Color(0xFF2196F3)
-                                      : Colors.grey[300],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '3 Games',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue[200]!),
                     ),
-                    child: Row(
+                    const SizedBox(height: 16),
+                    Row(
                       children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: Colors.blue[700],
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
                         Expanded(
-                          child: Text(
-                            'Matches will be automatically generated based on this setting.',
-                            style: TextStyle(
-                              color: Colors.blue[900],
-                              fontSize: 13,
+                          child: GestureDetector(
+                            onTap:
+                                () => setDialogState(() => selectedGames = 1),
+                            child: Container(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              decoration: BoxDecoration(
+                                color:
+                                    selectedGames == 1
+                                        ? Color(0xFF2196F3)
+                                        : Colors.grey[300],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '1 Game',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap:
+                                () => setDialogState(() => selectedGames = 2),
+                            child: Container(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              decoration: BoxDecoration(
+                                color:
+                                    selectedGames == 2
+                                        ? Color(0xFF2196F3)
+                                        : Colors.grey[300],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '2 Games',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap:
+                                () => setDialogState(() => selectedGames = 3),
+                            child: Container(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              decoration: BoxDecoration(
+                                color:
+                                    selectedGames == 3
+                                        ? Color(0xFF2196F3)
+                                        : Colors.grey[300],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '3 Games',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 24),
+                    Divider(),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Game Winning Score:',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap:
+                                () => setDialogState(() => selectedScore = 11),
+                            child: Container(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              decoration: BoxDecoration(
+                                color:
+                                    selectedScore == 11
+                                        ? Color(0xFF2196F3)
+                                        : Colors.grey[300],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '11 Points',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap:
+                                () => setDialogState(() => selectedScore = 15),
+                            child: Container(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              decoration: BoxDecoration(
+                                color:
+                                    selectedScore == 15
+                                        ? Color(0xFF2196F3)
+                                        : Colors.grey[300],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '15 Points',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
               ),
               actions: [
+                TextButton(
+                  onPressed: () {
+                    // Close the dialog
+                    Navigator.of(context).pop();
+                    // Navigate back to Schedule Screen
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder:
+                            (context) => MainNavigationScreen(initialIndex: 3),
+                      ),
+                    );
+                  },
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                  ),
+                ),
                 ElevatedButton(
                   onPressed: () {
                     setState(() {
                       _gamesPerTeam = selectedGames;
+                      _preliminaryGameWinningScore = selectedScore;
                       // Clear matches cache to regenerate with new setting
                       _matchesCache.clear();
                     });
@@ -2317,9 +2418,21 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       // Only count matches that have actual scores entered
       if (match.team1Id != null && match.team2Id != null) {
         final scores = _matchScores[match.id];
-        if (scores != null && scores.length >= 2) {
-          final team1Score = scores[match.team1Id!] ?? 0;
-          final team2Score = scores[match.team2Id!] ?? 0;
+        if (scores != null && scores.isNotEmpty) {
+          // Extract team-level scores from game-level format
+          final teamLevelScores = <String, int>{};
+          scores.forEach((key, value) {
+            // Handle both team-level format (teamId: score) and game-level format (teamId_game1: score)
+            if (key.endsWith('_game1')) {
+              final teamId = key.replaceAll('_game1', '');
+              teamLevelScores[teamId] = value;
+            } else {
+              teamLevelScores[key] = value;
+            }
+          });
+
+          final team1Score = teamLevelScores[match.team1Id!] ?? 0;
+          final team2Score = teamLevelScores[match.team2Id!] ?? 0;
 
           // Only count if at least one team has scored (game has been played)
           if (team1Score > 0 || team2Score > 0) {
@@ -2344,13 +2457,27 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       }
 
       final scores = _matchScores[match.id];
-      if (scores != null && scores.length >= 2) {
-        final teamIds = scores.keys.toList();
+      if (scores != null && scores.isNotEmpty) {
+        // Extract team-level scores from game-level format (teamId_game1 -> teamId)
+        final teamLevelScores = <String, int>{};
+        scores.forEach((key, value) {
+          // Handle both team-level format (teamId: score) and game-level format (teamId_game1: score)
+          if (key.endsWith('_game1')) {
+            final teamId = key.replaceAll('_game1', '');
+            teamLevelScores[teamId] = value;
+          } else {
+            // Direct team-level format
+            teamLevelScores[key] = value;
+          }
+        });
+
+        // Get unique team IDs
+        final teamIds = teamLevelScores.keys.toList();
         if (teamIds.length >= 2) {
           final team1Id = teamIds[0];
           final team2Id = teamIds[1];
-          final team1Score = scores[team1Id] ?? 0;
-          final team2Score = scores[team2Id] ?? 0;
+          final team1Score = teamLevelScores[team1Id] ?? 0;
+          final team2Score = teamLevelScores[team2Id] ?? 0;
 
           // Only process if both teams have valid IDs and scores are meaningful
           if (team1Id.isNotEmpty &&
@@ -2623,13 +2750,25 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         final cacheKeys = _matchesCache.keys.toList();
         bool teamsChanged = false;
 
-        // Show games per team dialog on first load if not shown yet
-        if (!_hasShownGamesPerTeamDialog && _teams.isNotEmpty) {
-          _hasShownGamesPerTeamDialog = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _showGamesPerTeamDialog();
+        // Show games per team dialog on first load if not shown yet and no scores exist
+        // After scores are loaded, check if any scores exist
+        // If scores exist, don't show dialog; if no scores, show dialog
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          // Wait for scores to be loaded, then check
+          Future.delayed(Duration(milliseconds: 100), () {
+            if (mounted && !_hasShownGamesPerTeamDialog && _teams.isNotEmpty) {
+              // Check if there are no scores - only show dialog if no scores exist
+              final hasNoScores = _hasNoScores();
+              if (hasNoScores) {
+                _hasShownGamesPerTeamDialog = true;
+                _showGamesPerTeamDialog();
+              } else {
+                // Scores exist, mark as shown to prevent showing dialog
+                _hasShownGamesPerTeamDialog = true;
+              }
+            }
           });
-        }
+        });
 
         for (String key in cacheKeys) {
           if (!key.contains(currentTeamIds.join('_'))) {
@@ -3711,6 +3850,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     final winningTeamId = _getWinningTeamId(match.id);
     final isSelected = _selectedMatch?.id == match.id;
 
+    // Debug logging
+    print(
+      'DEBUG: _buildMatchCard for ${match.id}: team1Score=$team1Score, team2Score=$team2Score, winningTeamId=$winningTeamId',
+    );
+    print(
+      'DEBUG: match.team1Id=${match.team1Id}, match.team2Id=${match.team2Id}',
+    );
+
     // Debug logging to track selection
     if (isSelected) {
       print(
@@ -3844,6 +3991,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     final hasScores = team1Score > 0 || team2Score > 0;
     final team1Won = winningTeamId == match.team1Id;
     final team2Won = winningTeamId == match.team2Id;
+
+    // Debug logging
+    print(
+      'DEBUG: _buildNormalMatchCard: team1Won=$team1Won, team2Won=$team2Won, hasScores=$hasScores',
+    );
 
     // Check if this is a playoff match
     final isPlayoffMatch =
@@ -4015,6 +4167,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
+                          const Icon(
+                            Icons.emoji_events,
+                            color: Colors.amber,
+                            size: 16,
+                          ),
                           const SizedBox(width: 4),
                           const Text(
                             'Winner',
@@ -4399,10 +4556,23 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     for (var match in _preliminaryMatches) {
       if (match.team2 == 'TBA') continue;
       final scores = _matchScores[match.id];
-      if (scores != null && scores.length >= 2) {
-        final team1Score = scores[match.team1Id] ?? 0;
-        final team2Score = scores[match.team2Id] ?? 0;
-        if (team1Score > 0 || team2Score > 0) {
+      if (scores != null && scores.isNotEmpty) {
+        // Check both team-level and game-level formats
+        final team1Id = match.team1Id ?? '';
+        final team2Id = match.team2Id ?? '';
+
+        // Check team-level format
+        final team1Score = scores[team1Id] ?? 0;
+        final team2Score = scores[team2Id] ?? 0;
+
+        // Check game-level format (teamId_game1)
+        final team1Game1Score = scores['${team1Id}_game1'] ?? 0;
+        final team2Game1Score = scores['${team2Id}_game1'] ?? 0;
+
+        if (team1Score > 0 ||
+            team2Score > 0 ||
+            team1Game1Score > 0 ||
+            team2Game1Score > 0) {
           return false; // Found a score > 0
         }
       }
@@ -4591,14 +4761,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         gamesPlayed[team.id] = 0;
       }
 
-      // Generate matches ensuring each team plays exactly 3 games
+      // Generate matches ensuring each team plays exactly _gamesPerTeam games
       int maxAttempts = 1000;
       int attempts = 0;
 
       while (availableTeams.length >= 2 && attempts < maxAttempts) {
         attempts++;
 
-        // Find two teams that haven't played each other and haven't played 3 games
+        // Find two teams that haven't played each other and haven't played _gamesPerTeam games
         bool matchFound = false;
         for (int i = 0; i < availableTeams.length - 1; i++) {
           for (int j = i + 1; j < availableTeams.length; j++) {
@@ -4612,8 +4782,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             // Check if teams haven't played each other and haven't reached game limit
             if (!usedMatches.contains(matchKey) &&
                 !usedMatches.contains(reverseMatchKey) &&
-                gamesPlayed[team1.id]! < 3 &&
-                gamesPlayed[team2.id]! < 3) {
+                gamesPlayed[team1.id]! < _gamesPerTeam &&
+                gamesPlayed[team2.id]! < _gamesPerTeam) {
               // Create match
               matches.add(
                 Match(
@@ -4640,8 +4810,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               gamesPlayed[team1.id] = gamesPlayed[team1.id]! + 1;
               gamesPlayed[team2.id] = gamesPlayed[team2.id]! + 1;
 
-              // Remove teams that have played 3 games
-              availableTeams.removeWhere((team) => gamesPlayed[team.id]! >= 3);
+              // Remove teams that have played _gamesPerTeam games
+              availableTeams.removeWhere(
+                (team) => gamesPlayed[team.id]! >= _gamesPerTeam,
+              );
 
               matchId++;
               courtNumber++;
@@ -4659,7 +4831,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
         if (!matchFound) {
           // Remove teams that have played their maximum games
-          availableTeams.removeWhere((team) => gamesPlayed[team.id]! >= 3);
+          availableTeams.removeWhere(
+            (team) => gamesPlayed[team.id]! >= _gamesPerTeam,
+          );
         }
       }
 

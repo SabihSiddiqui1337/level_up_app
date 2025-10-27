@@ -669,17 +669,16 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
   ) {
     final convertedScores = <String, dynamic>{};
 
-    final teamIds = {};
-    scores.forEach((key, value) {
-      if (key.endsWith('_game1')) {
-        final teamId = key.replaceAll('_game1', '');
-        teamIds[teamId] = value ?? 0;
-      }
-    });
+    // Always include both teams, even if one has 0 score
+    if (widget.match.team1Id != null && widget.match.team2Id != null) {
+      final team1Id = widget.match.team1Id!;
+      final team2Id = widget.match.team2Id!;
+      final team1Key = '${team1Id}_game1';
+      final team2Key = '${team2Id}_game1';
 
-    teamIds.forEach((teamId, score) {
-      convertedScores[teamId] = score;
-    });
+      convertedScores[team1Id] = scores[team1Key] ?? 0;
+      convertedScores[team2Id] = scores[team2Key] ?? 0;
+    }
 
     return convertedScores;
   }
