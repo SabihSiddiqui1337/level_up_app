@@ -86,6 +86,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   // Store reshuffled matches directly
   List<Match>? _reshuffledMatches;
 
+  // Games per team in preliminary rounds
+  int _gamesPerTeam = 3; // Default: each team plays 3 games
+  bool _hasShownGamesPerTeamDialog = false;
+
   // Helper method to get preliminary matches directly without getter recursion
   List<Match> _getPreliminaryMatchesDirect({bool shouldShuffle = false}) {
     final teams = _teams;
@@ -152,14 +156,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         gamesPlayed.addAll(shuffledGamesPlayed);
       }
 
-      // Generate matches ensuring each team plays exactly 3 games
+      // Generate matches ensuring each team plays exactly _gamesPerTeam games
       int maxAttempts = 1000; // Prevent infinite loops
       int attempts = 0;
 
       while (availableTeams.length >= 2 && attempts < maxAttempts) {
         attempts++;
 
-        // Find two teams that haven't played each other and haven't played 3 games
+        // Find two teams that haven't played each other and haven't played _gamesPerTeam games
         bool matchFound = false;
 
         // If shuffling, randomize the search order
@@ -183,8 +187,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             // Check if teams haven't played each other and haven't reached game limit
             if (!usedMatches.contains(matchKey) &&
                 !usedMatches.contains(reverseMatchKey) &&
-                gamesPlayed[team1.id]! < 3 &&
-                gamesPlayed[team2.id]! < 3) {
+                gamesPlayed[team1.id]! < _gamesPerTeam &&
+                gamesPlayed[team2.id]! < _gamesPerTeam) {
               // Create match
               matches.add(
                 Match(
@@ -231,19 +235,21 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
         // If no match found, break to avoid infinite loop
         if (!matchFound) {
-          // Check if all teams have played 3 games
-          bool allTeamsPlayed3Games = true;
+          // Check if all teams have played _gamesPerTeam games
+          bool allTeamsPlayedXGames = true;
           for (var entry in gamesPlayed.entries) {
-            if (entry.value < 3) {
-              allTeamsPlayed3Games = false;
+            if (entry.value < _gamesPerTeam) {
+              allTeamsPlayedXGames = false;
               break;
             }
           }
-          if (allTeamsPlayed3Games) break;
+          if (allTeamsPlayedXGames) break;
 
-          // If we can't find a match and not all teams have played 3 games,
-          // remove teams that have already played 3 games to avoid infinite loop
-          availableTeams.removeWhere((team) => gamesPlayed[team.id]! >= 3);
+          // If we can't find a match and not all teams have played _gamesPerTeam games,
+          // remove teams that have already played _gamesPerTeam games to avoid infinite loop
+          availableTeams.removeWhere(
+            (team) => gamesPlayed[team.id]! >= _gamesPerTeam,
+          );
         }
       }
 
@@ -254,11 +260,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         );
       }
 
-      // Validation: Ensure no team plays more than 3 games
+      // Validation: Ensure no team plays more than _gamesPerTeam games
       for (var entry in gamesPlayed.entries) {
-        if (entry.value > 3) {
+        if (entry.value > _gamesPerTeam) {
           print(
-            'ERROR: Team ${entry.key} played ${entry.value} games (should be max 3)',
+            'ERROR: Team ${entry.key} played ${entry.value} games (should be max $_gamesPerTeam)',
           );
         }
         print('DEBUG: Team ${entry.key} played ${entry.value} games');
@@ -1718,6 +1724,168 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     );
   }
 
+  void _showGamesPerTeamDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Don't allow dismissing by tapping outside
+      builder: (BuildContext context) {
+        int selectedGames = _gamesPerTeam;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Preliminary Rounds Settings'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'How many games should each team play?',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setDialogState(() => selectedGames = 1),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            decoration: BoxDecoration(
+                              color:
+                                  selectedGames == 1
+                                      ? Color(0xFF2196F3)
+                                      : Colors.grey[300],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '1 Game',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setDialogState(() => selectedGames = 2),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            decoration: BoxDecoration(
+                              color:
+                                  selectedGames == 2
+                                      ? Color(0xFF2196F3)
+                                      : Colors.grey[300],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '2 Games',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setDialogState(() => selectedGames = 3),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            decoration: BoxDecoration(
+                              color:
+                                  selectedGames == 3
+                                      ? Color(0xFF2196F3)
+                                      : Colors.grey[300],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '3 Games',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue[200]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: Colors.blue[700],
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Matches will be automatically generated based on this setting.',
+                            style: TextStyle(
+                              color: Colors.blue[900],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _gamesPerTeam = selectedGames;
+                      // Clear matches cache to regenerate with new setting
+                      _matchesCache.clear();
+                    });
+                    Navigator.of(context).pop();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF2196F3),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text('Confirm'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   // Show Game Settings Dialog with initial values (for editing)
   void _showGameSettingsDialogWithValues(
     String currentFormat,
@@ -2454,6 +2622,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         final currentTeamIds = _teams.map((t) => t.id).toList()..sort();
         final cacheKeys = _matchesCache.keys.toList();
         bool teamsChanged = false;
+
+        // Show games per team dialog on first load if not shown yet
+        if (!_hasShownGamesPerTeamDialog && _teams.isNotEmpty) {
+          _hasShownGamesPerTeamDialog = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _showGamesPerTeamDialog();
+          });
+        }
 
         for (String key in cacheKeys) {
           if (!key.contains(currentTeamIds.join('_'))) {
@@ -3720,43 +3896,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       ),
       child: Column(
         children: [
-          // Date and Match Type
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '${match.day} - ${match.time}',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[700],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'Match',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-
           const SizedBox(height: 16),
 
           // Teams and Scores
@@ -3794,6 +3933,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
+                          const Icon(
+                            Icons.emoji_events,
+                            color: Colors.amber,
+                            size: 16,
+                          ),
                           const SizedBox(width: 4),
                           const Text(
                             'Winner',
@@ -5142,7 +5286,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                             label: Text(
                               _allQuarterFinalsScoresSet
                                   ? 'Go to Semi Finals'
-                                  : 'Complete All Scores',
+                                  : 'Complete all Games',
                             ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor:
@@ -5274,7 +5418,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         label: Text(
                           _allSemiFinalsScoresSet
                               ? 'Go to Finals'
-                              : 'Complete All Scores',
+                              : 'Complete all Games',
                           textAlign: TextAlign.center,
                         ),
                         style: ElevatedButton.styleFrom(
