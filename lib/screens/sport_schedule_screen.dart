@@ -13,7 +13,6 @@ import '../services/pickleball_team_service.dart';
 import '../services/score_service.dart';
 import '../keys/schedule_screen/schedule_screen_keys.dart';
 import 'main_navigation_screen.dart';
-import 'match_scoring_screen.dart';
 
 class SportScheduleScreen extends StatefulWidget {
   final String sportName;
@@ -860,11 +859,22 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           }
         }
 
-        // If settings are already saved for this round, skip the Game Settings screen
-        if (existingFormat != null &&
-            existingScore != null &&
-            hasAnyRoundScores) {
+        // Check if THIS specific match has scores
+        final thisMatchScores = _playoffScores[_selectedMatch!.id];
+        final hasThisMatchScores =
+            thisMatchScores != null &&
+            thisMatchScores.values.any((value) => value > 0);
+
+        // If settings are already saved for this round OR this specific match has scores, skip the Game Settings screen
+        if ((existingFormat != null &&
+                existingScore != null &&
+                hasAnyRoundScores) ||
+            hasThisMatchScores) {
           // Navigate directly to scoring screen with saved settings
+          // Use defaults if settings are missing but scores exist
+          final formatToUse = existingFormat ?? 'bestof3';
+          final scoreToUse = existingScore ?? 15;
+
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -872,8 +882,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                   (context) => SemiFinalsScoringScreen(
                     match: _selectedMatch!,
                     initialScores: _playoffScores[_selectedMatch!.id],
-                    matchFormat: existingFormat,
-                    gameWinningScore: existingScore,
+                    matchFormat: formatToUse,
+                    gameWinningScore: scoreToUse,
                     canAdjustSettings: false, // Disable after first scoring
                     isFirstCard:
                         !hasAnyRoundScores, // First card only if no scores exist yet
@@ -1006,29 +1016,44 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         return;
       }
 
-      // Navigate to regular scoring screen for other matches
+      // Navigate to semi-finals scoring screen with 1 game format for preliminary matches
+      // Convert preliminary scores from team-level to game-level format
+      Map<String, dynamic>? initialScoresToPass;
+      if (isPlayoffMatch) {
+        initialScoresToPass = _playoffScores[_selectedMatch!.id];
+      } else {
+        // Convert team-level scores to game-level format for preliminary matches
+        final teamScores = _matchScores[_selectedMatch!.id];
+        if (teamScores != null && teamScores.isNotEmpty) {
+          initialScoresToPass = {};
+          teamScores.forEach((teamId, score) {
+            initialScoresToPass!['${teamId}_game1'] = score;
+          });
+        }
+      }
+
       Navigator.push(
         context,
         MaterialPageRoute(
           builder:
-              (context) => MatchScoringScreen(
+              (context) => SemiFinalsScoringScreen(
                 match: _selectedMatch!,
-                initialScores:
-                    isPlayoffMatch
-                        ? _playoffScores[_selectedMatch!.id]
-                        : _matchScores[_selectedMatch!.id],
+                initialScores: initialScoresToPass,
+                matchFormat: '1game', // Preliminary rounds are always 1 game
+                gameWinningScore: 11, // Preliminary rounds use 11 points
+                canAdjustSettings:
+                    false, // Don't allow adjusting settings for preliminaries
                 onScoresUpdated: (scores) async {
+                  // Save to memory first
                   setState(() {
                     if (isPlayoffMatch) {
-                      _playoffScores[_selectedMatch!.id] = scores;
+                      _playoffScores[_selectedMatch!
+                          .id] = Map<String, int>.from(scores);
                     } else {
-                      _matchScores[_selectedMatch!.id] = scores;
+                      _matchScores[_selectedMatch!.id] = Map<String, int>.from(
+                        scores,
+                      );
                     }
-                    // Clear selection after saving scores
-                    _selectedMatch = null;
-                    // Clear standings cache to force recalculation
-                    _cachedStandings = null;
-                    _lastStandingsCacheKey = null;
                   });
 
                   // Save scores to persistent storage
@@ -1048,6 +1073,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                   } catch (e) {
                     print('Error saving scores to storage: $e');
                   }
+
+                  // Clear selection and cache after saving
+                  setState(() {
+                    _selectedMatch = null;
+                    // Clear standings cache to force recalculation
+                    _cachedStandings = null;
+                    _lastStandingsCacheKey = null;
+                  });
                 },
               ),
         ),
@@ -1091,7 +1124,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       // For preliminary matches, check preliminary scores first
       final preliminaryScores = _matchScores[matchId];
       if (preliminaryScores != null) {
-        final score = preliminaryScores[teamId] ?? 0;
+        // Try team-level format first (teamId: score)
+        var score = preliminaryScores[teamId] ?? 0;
+
+        // If not found, try game-level format (teamId_game1: score)
+        if (score == 0 && preliminaryScores.containsKey('${teamId}_game1')) {
+          score = preliminaryScores['${teamId}_game1'] ?? 0;
+        }
+
         if (score > 0) {
           print(
             'DEBUG: _getTeamScore - Found preliminary score for match $matchId, team $teamId: $score',
@@ -1142,10 +1182,23 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       // For preliminary matches, check preliminary scores first
       final preliminaryScores = _matchScores[matchId];
       if (preliminaryScores != null && preliminaryScores.length >= 2) {
-        final teamIds = preliminaryScores.keys.toList();
-        if (teamIds.length >= 2) {
-          final team1Score = preliminaryScores[teamIds[0]] ?? 0;
-          final team2Score = preliminaryScores[teamIds[1]] ?? 0;
+        // Extract team IDs and scores, handling both team-level and game-level formats
+        final teamScores = <String, int>{};
+        preliminaryScores.forEach((key, value) {
+          // Key format could be teamId or teamId_game1
+          if (key.endsWith('_game1')) {
+            final teamId = key.replaceAll('_game1', '');
+            teamScores[teamId] = value;
+          } else {
+            // Team-level format
+            teamScores[key] = value;
+          }
+        });
+
+        if (teamScores.length >= 2) {
+          final teamIds = teamScores.keys.toList();
+          final team1Score = teamScores[teamIds[0]] ?? 0;
+          final team2Score = teamScores[teamIds[1]] ?? 0;
 
           if (team1Score > team2Score) return teamIds[0];
           if (team2Score > team1Score) return teamIds[1];
@@ -3740,11 +3793,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(
-                            Icons.emoji_events,
-                            color: Colors.amber,
-                            size: 16,
-                          ),
                           const SizedBox(width: 4),
                           const Text(
                             'Winner',
@@ -3822,11 +3870,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(
-                            Icons.emoji_events,
-                            color: Colors.amber,
-                            size: 16,
-                          ),
                           const SizedBox(width: 4),
                           const Text(
                             'Winner',
@@ -4250,9 +4293,18 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     // Check for regular matches (single game)
     final scores = _matchScores[_selectedMatch!.id];
     if (scores != null && scores.length >= 2) {
+      // Check both team-level format (teamId: score) and game-level format (teamId_game1: score)
       final team1Score = scores[_selectedMatch!.team1Id] ?? 0;
       final team2Score = scores[_selectedMatch!.team2Id] ?? 0;
-      return team1Score > 0 || team2Score > 0;
+
+      // Also check for game-level format keys
+      final team1Game1Score = scores['${_selectedMatch!.team1Id}_game1'] ?? 0;
+      final team2Game1Score = scores['${_selectedMatch!.team2Id}_game1'] ?? 0;
+
+      return team1Score > 0 ||
+          team2Score > 0 ||
+          team1Game1Score > 0 ||
+          team2Game1Score > 0;
     }
     return false;
   }
@@ -4644,13 +4696,12 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       vertical: 5,
                     ),
                   ),
-                  isExpanded: false,
+                  isExpanded: true,
                   items:
                       _availableDivisions.map((String division) {
                         return DropdownMenuItem<String>(
                           value: division,
                           child: Row(
-                            mainAxisSize: MainAxisSize.min,
                             children: [
                               if (_selectedDivision == division) ...[
                                 const Icon(
@@ -4660,8 +4711,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                                 ),
                                 const SizedBox(width: 8),
                               ],
-                              Flexible(
-                                fit: FlexFit.loose,
+                              Expanded(
                                 child: Text(
                                   division,
                                   style: const TextStyle(fontSize: 14),
@@ -5073,12 +5123,16 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
                           return ElevatedButton.icon(
                             onPressed:
-                                (_allQuarterFinalsScoresSet)
+                                _allQuarterFinalsScoresSet
                                     ? () {
                                       // Navigate to Semi Finals tab (index 1)
                                       _playoffTabController.animateTo(1);
                                     }
-                                    : null, // Disabled when scores not complete
+                                    : () {
+                                      _showCompleteScoresDialog(
+                                        'Quarter Finals',
+                                      );
+                                    },
                             icon: Icon(
                               _allQuarterFinalsScoresSet
                                   ? Icons.arrow_forward
@@ -5228,10 +5282,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                                   ? Colors.green
                                   : Colors.grey[400],
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 4,
-                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -6343,9 +6394,7 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          '${widget.match.day} - ${widget.matchFormat == '1game' ? '1 Game' : 'Best of 3'}',
-        ),
+        title: Text('Game Score'),
         backgroundColor: Colors.grey[900],
         foregroundColor: Colors.white,
         leading: IconButton(
@@ -6739,14 +6788,30 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
       return const SizedBox.shrink();
     }
 
-    final team1GamesWon = _getGamesWon(widget.match.team1Id!);
-    final team2GamesWon = _getGamesWon(widget.match.team2Id!);
-
     String? winner;
-    if (team1GamesWon >= 2) {
-      winner = widget.match.team1;
-    } else if (team2GamesWon >= 2) {
-      winner = widget.match.team2;
+
+    if (widget.matchFormat == '1game') {
+      // For 1 game format, check if a team has won (reached winning score and ahead by 2)
+      final team1Score = _scores['${widget.match.team1Id}_game1'] ?? 0;
+      final team2Score = _scores['${widget.match.team2Id}_game1'] ?? 0;
+
+      if (team1Score >= widget.gameWinningScore &&
+          team1Score >= team2Score + 2) {
+        winner = widget.match.team1;
+      } else if (team2Score >= widget.gameWinningScore &&
+          team2Score >= team1Score + 2) {
+        winner = widget.match.team2;
+      }
+    } else {
+      // For best of 3 format, check if a team won 2 games
+      final team1GamesWon = _getGamesWon(widget.match.team1Id!);
+      final team2GamesWon = _getGamesWon(widget.match.team2Id!);
+
+      if (team1GamesWon >= 2) {
+        winner = widget.match.team1;
+      } else if (team2GamesWon >= 2) {
+        winner = widget.match.team2;
+      }
     }
 
     if (winner == null) return const SizedBox.shrink();
@@ -6761,7 +6826,6 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.emoji_events, color: Colors.yellow[600], size: 24),
           const SizedBox(width: 8),
           Text(
             'Winner: $winner',
@@ -6951,7 +7015,9 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
         _isLoading = true;
       });
       try {
-        await widget.onScoresUpdated(_scores);
+        // Convert scores from game-level format to team-level format for preliminary matches
+        final scoresToSave = _convertScoresForPreliminaries(_scores);
+        await widget.onScoresUpdated(scoresToSave);
         if (mounted) {
           Navigator.of(context).pop();
         }
@@ -7029,7 +7095,9 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
     });
 
     try {
-      await widget.onScoresUpdated(_scores);
+      // Convert scores from game-level format to team-level format for preliminary matches
+      final scoresToSave = _convertScoresForPreliminaries(_scores);
+      await widget.onScoresUpdated(scoresToSave);
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -7049,5 +7117,29 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
         });
       }
     }
+  }
+
+  // Convert scores from game-level format to team-level format for preliminary matches
+  Map<String, dynamic> _convertScoresForPreliminaries(
+    Map<String, dynamic> scores,
+  ) {
+    final convertedScores = <String, dynamic>{};
+
+    // Extract team IDs and their Game 1 scores
+    final teamIds = {};
+    scores.forEach((key, value) {
+      // Key format: teamId_game1
+      if (key.endsWith('_game1')) {
+        final teamId = key.replaceAll('_game1', '');
+        teamIds[teamId] = value ?? 0;
+      }
+    });
+
+    // Create the converted scores map
+    teamIds.forEach((teamId, score) {
+      convertedScores[teamId] = score;
+    });
+
+    return convertedScores;
   }
 }

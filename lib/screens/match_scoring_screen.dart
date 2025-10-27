@@ -401,8 +401,21 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
             valueListenable: controller,
             builder: (context, value, child) {
               final currentScore = int.tryParse(value.text) ?? 0;
+
+              // Get the opponent score
+              final opponentController =
+                  controller == _team1ScoreController
+                      ? _team2ScoreController
+                      : _team1ScoreController;
+              final opponentScore = int.tryParse(opponentController.text) ?? 0;
+
+              // Determine if this team has won (reached minScore and ahead by 2)
+              final hasWon =
+                  currentScore >= maxScore && currentScore >= opponentScore + 2;
+
               final minusDisabled = currentScore <= 0;
-              final plusDisabled = currentScore >= maxScore;
+              final plusDisabled =
+                  hasWon; // Disable plus button if team has won
 
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
