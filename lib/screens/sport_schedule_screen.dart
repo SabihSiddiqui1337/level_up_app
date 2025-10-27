@@ -802,22 +802,115 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           ),
         );*/
 
-      // Check if playoffs have started and this is a playoff match
-      if (_playoffsStarted && isPlayoffMatch) {
-        // Show dialog explaining that scores cannot be edited once playoffs have started
-        _showPlayoffScoreEditRestrictionDialog();
-        return;
+      // Only restrict editing for QF matches if later rounds have started
+      // SF and Finals should always be able to score once playoffs have started
+      if (_playoffsStarted &&
+          isPlayoffMatch &&
+          _selectedMatch!.day == 'Quarter Finals') {
+        // Check if SF or Finals have any scores - if yes, QF editing is restricted
+        bool hasLaterRoundScores = false;
+        for (var entry in _playoffScores.entries) {
+          final scores = entry.value;
+          if (scores.values.any((value) => value > 0)) {
+            // Check if this match ID belongs to SF or Finals
+            try {
+              final semiFinals = _getSemiFinalsDirect();
+              final finals = _getFinalsDirect();
+              if (semiFinals.any((m) => m.id == entry.key) ||
+                  finals.any((m) => m.id == entry.key)) {
+                hasLaterRoundScores = true;
+                break;
+              }
+            } catch (e) {
+              // If we can't determine, allow editing
+              print('Error checking match type: $e');
+            }
+          }
+        }
+
+        // If later rounds have scores, restrict QF editing
+        if (hasLaterRoundScores) {
+          _showPlayoffScoreEditRestrictionDialog();
+          return;
+        }
       }
 
       // Get the match format for this tab
       final currentTab = _getCurrentTabName();
       final matchFormat = _matchFormats[currentTab] ?? 'bestof3';
 
+      // For SF and Finals, check if settings are already saved
+      if ((isSemiFinalsMatch || _selectedMatch!.day == 'Finals') &&
+          _selectedMatch!.day != 'Quarter Finals') {
+        final existingFormat = _matchFormats[currentTab];
+        final existingScore = _gameWinningScores[currentTab];
+
+        // Check if ANY match in this round has non-zero scores
+        bool hasAnyRoundScores = false;
+        final roundMatches =
+            _selectedMatch!.day == 'Semi Finals'
+                ? _getSemiFinalsDirect()
+                : _getFinalsDirect();
+        for (var match in roundMatches) {
+          final matchScores = _playoffScores[match.id];
+          if (matchScores != null &&
+              matchScores.values.any((value) => value > 0)) {
+            hasAnyRoundScores = true;
+            break;
+          }
+        }
+
+        // If settings are already saved for this round, skip the Game Settings screen
+        if (existingFormat != null &&
+            existingScore != null &&
+            hasAnyRoundScores) {
+          // Navigate directly to scoring screen with saved settings
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => SemiFinalsScoringScreen(
+                    match: _selectedMatch!,
+                    initialScores: _playoffScores[_selectedMatch!.id],
+                    matchFormat: existingFormat,
+                    gameWinningScore: existingScore,
+                    canAdjustSettings: false, // Disable after first scoring
+                    isFirstCard:
+                        !hasAnyRoundScores, // First card only if no scores exist yet
+                    onScoresUpdated: (scores) async {
+                      setState(() {
+                        _playoffScores[_selectedMatch!
+                            .id] = Map<String, int>.from(scores);
+                        _selectedMatch = null;
+                        _cachedStandings = null;
+                        _lastStandingsCacheKey = null;
+                      });
+                      try {
+                        await _scoreService.savePlayoffScores(_playoffScores);
+                        if (_selectedMatch!.day == 'Semi Finals') {
+                          await _scoreService.saveSemiFinalsScores(
+                            _playoffScores,
+                          );
+                        } else if (_selectedMatch!.day == 'Finals') {
+                          await _scoreService.saveFinalsScores(_playoffScores);
+                        }
+                      } catch (e) {
+                        print('Error saving scores to storage: $e');
+                      }
+                    },
+                  ),
+            ),
+          );
+          return;
+        }
+
+        // Show Game Settings dialog if settings not already saved
+        _showGameSettingsDialog();
+        return;
+      }
+
       // For QF matches, always use the SemiFinals scoring screen which adapts to format
-      // For SF and Finals, always use SemiFinals scoring screen
-      if (isSemiFinalsMatch ||
-          _selectedMatch!.day == 'Finals' ||
-          _selectedMatch!.day == 'Quarter Finals') {
+      if (_selectedMatch!.day == 'Quarter Finals') {
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -825,22 +918,62 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 (context) => SemiFinalsScoringScreen(
                   match: _selectedMatch!,
                   initialScores: _playoffScores[_selectedMatch!.id],
-                  matchFormat:
-                      _selectedMatch!.day == 'Quarter Finals'
-                          ? matchFormat
-                          : 'bestof3',
-                  gameWinningScore:
-                      _selectedMatch!.day == 'Quarter Finals'
-                          ? (_gameWinningScores[currentTab] ?? 11)
-                          : 15,
-                  canAdjustSettings:
-                      _selectedMatch!.day ==
-                      'Quarter Finals', // Only allow for QF
+                  matchFormat: matchFormat,
+                  gameWinningScore: _gameWinningScores[currentTab] ?? 11,
+                  canAdjustSettings: _selectedMatch!.day == 'Quarter Finals',
                   onSettingsChange:
-                      _selectedMatch!.day == 'Quarter Finals'
-                          ? () {}
-                          : null, // Only allow for QF
+                      _selectedMatch!.day == 'Quarter Finals' ? () {} : null,
                   onScoresUpdated: (scores) async {
+                    // Check if this is Finals and if there's a winner
+                    if (_selectedMatch!.day == 'Finals') {
+                      // Calculate winner
+                      final team1GamesWon = _getGamesWonFromScores(
+                        scores,
+                        _selectedMatch!.team1Id!,
+                      );
+                      final team2GamesWon = _getGamesWonFromScores(
+                        scores,
+                        _selectedMatch!.team2Id!,
+                      );
+                      String? winnerName;
+                      if (team1GamesWon >= 2) {
+                        winnerName = _selectedMatch!.team1;
+                      } else if (team2GamesWon >= 2) {
+                        winnerName = _selectedMatch!.team2;
+                      }
+
+                      // If there's a winner, show confirmation dialog
+                      if (winnerName != null) {
+                        final shouldSave = await showDialog<bool>(
+                          context: context,
+                          builder: (BuildContext context) {
+                            return AlertDialog(
+                              title: const Text('Confirm Winner'),
+                              content: Text(
+                                'Are you sure the winner of the tournament is $winnerName?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed:
+                                      () => Navigator.of(context).pop(false),
+                                  child: const Text('Cancel'),
+                                ),
+                                ElevatedButton(
+                                  onPressed:
+                                      () => Navigator.of(context).pop(true),
+                                  child: const Text('Confirm'),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+
+                        if (shouldSave != true) {
+                          return; // User cancelled
+                        }
+                      }
+                    }
+
                     setState(() {
                       _playoffScores[_selectedMatch!
                           .id] = Map<String, int>.from(scores);
@@ -1207,9 +1340,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Start Playoffs'),
+          title: const Text('Go to Playoffs'),
           content: const Text(
-            'Are you sure you want to start the playoffs? This will begin the elimination rounds based on current standings.',
+            'Are you sure you want to go to the playoffs? This will begin the elimination rounds based on current standings.',
           ),
           actions: [
             TextButton(
@@ -1259,7 +1392,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                   true,
                 );
               },
-              child: const Text('Start Playoffs'),
+              child: const Text('Go to Playoffs'),
             ),
           ],
         );
@@ -1475,9 +1608,21 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                                   await _scoreService.savePlayoffScores(
                                     _playoffScores,
                                   );
-                                  await _scoreService.saveQuarterFinalsScores(
-                                    _playoffScores,
-                                  );
+                                  // Save to appropriate round storage
+                                  if (_selectedMatch!.day == 'Quarter Finals') {
+                                    await _scoreService.saveQuarterFinalsScores(
+                                      _playoffScores,
+                                    );
+                                  } else if (_selectedMatch!.day ==
+                                      'Semi Finals') {
+                                    await _scoreService.saveSemiFinalsScores(
+                                      _playoffScores,
+                                    );
+                                  } else if (_selectedMatch!.day == 'Finals') {
+                                    await _scoreService.saveFinalsScores(
+                                      _playoffScores,
+                                    );
+                                  }
                                 } catch (e) {
                                   print('Error saving scores to storage: $e');
                                 }
@@ -2672,15 +2817,13 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     // Determine what to display
     String displayText;
     if (game3DidntHappen) {
-      // Game 3 wasn't needed - always show "-" regardless of stored score
+      // Game 3 wasn't needed - show "-"
       displayText = '-';
-    } else if (gameNumber == 3 && (score == null || score == 0)) {
-      // For Game 3, show "--" if score is 0 or null
-      displayText = '-';
-    } else if (score != null && score > 0) {
+    } else if (score != null) {
+      // Show the actual score (even if 0)
       displayText = '$score';
     } else {
-      // Score is 0 or null
+      // No score entered yet - show 0
       displayText = '0';
     }
 
@@ -2725,31 +2868,61 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   bool _isGame3NotNeeded(String matchId, String teamId) {
     if (teamId.isEmpty) return false;
 
-    // Get the opponent ID
-    final match = _getSemiFinals().firstWhere(
+    // Get the opponent ID - try QF first, then SF, then Finals
+    Match match = _getQuarterFinals().firstWhere(
       (m) => m.id == matchId,
       orElse:
-          () => _getFinals().firstWhere(
-            (m) => m.id == matchId,
-            orElse:
-                () => Match(
-                  id: matchId,
-                  day: '',
-                  court: '',
-                  time: '',
-                  team1: '',
-                  team2: '',
-                  team1Status: '',
-                  team2Status: '',
-                  team1Score: 0,
-                  team2Score: 0,
-                  team1Id: null,
-                  team2Id: null,
-                  team1Name: null,
-                  team2Name: null,
-                ),
+          () => Match(
+            id: '',
+            day: '',
+            court: '',
+            time: '',
+            team1: '',
+            team2: '',
+            team1Status: '',
+            team2Status: '',
+            team1Score: 0,
+            team2Score: 0,
+            team1Id: null,
+            team2Id: null,
+            team1Name: null,
+            team2Name: null,
+            isCompleted: false,
+            scheduledDate: null,
           ),
     );
+
+    // If not found in QF, try SF
+    if (match.id == '') {
+      match = _getSemiFinals().firstWhere(
+        (m) => m.id == matchId,
+        orElse:
+            () => Match(
+              id: matchId,
+              day: '',
+              court: '',
+              time: '',
+              team1: '',
+              team2: '',
+              team1Status: '',
+              team2Status: '',
+              team1Score: 0,
+              team2Score: 0,
+              team1Id: null,
+              team2Id: null,
+              team1Name: null,
+              team2Name: null,
+            ),
+      );
+    }
+
+    // If still not found, try Finals
+    if (match.id == matchId && match.day == '') {
+      match = _getFinals().firstWhere(
+        (m) => m.id == matchId,
+        orElse: () => match,
+      );
+    }
 
     // Get opponent ID
     String? opponentId;
@@ -2761,11 +2934,20 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
     if (opponentId == null || opponentId.isEmpty) return false;
 
+    // Check if Game 3 scores exist - if they do, Game 3 was played
+    final team3Score = _getGameScore(matchId, teamId, 3);
+    final opponent3Score = _getGameScore(matchId, opponentId, 3);
+
+    // If any Game 3 score exists, Game 3 was played
+    if (team3Score != null || opponent3Score != null) {
+      return false; // Game 3 was played
+    }
+
     // Check if either team won 2 games (match decided)
     final teamGamesWon = _getGamesWon(matchId, teamId);
     final opponentGamesWon = _getGamesWon(matchId, opponentId);
 
-    // Game 3 is not needed if someone won 2 games
+    // Game 3 is not needed if someone won 2 games AND Game 3 wasn't played
     return teamGamesWon >= 2 || opponentGamesWon >= 2;
   }
 
@@ -2905,6 +3087,32 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     return gamesWon;
   }
 
+  // Get games won from a scores map (for Finals confirmation)
+  int _getGamesWonFromScores(Map<String, dynamic> scores, String teamId) {
+    int gamesWon = 0;
+    final minScore = 15; // Finals always use 15 points
+
+    for (int i = 1; i <= 3; i++) {
+      final teamKey = '${teamId}_game$i';
+      final teamScore = scores[teamKey] ?? 0;
+
+      // Find opponent score
+      int? opponentScore;
+      for (var key in scores.keys) {
+        if (key.startsWith('${teamId}_game') || key == teamKey) continue;
+        if (key.endsWith('_game$i')) {
+          opponentScore = scores[key] ?? 0;
+          break;
+        }
+      }
+
+      if (teamScore >= minScore && teamScore >= (opponentScore ?? 0) + 2) {
+        gamesWon++;
+      }
+    }
+    return gamesWon;
+  }
+
   int _getGamesWon(String matchId, String? teamId) {
     if (teamId == null) return 0;
 
@@ -3012,8 +3220,22 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         _getGameScore(match.id, match.team2Id ?? '', 3) != null;
     final showBestOf3 = _matchFormats['QF'] == 'bestof3' || hasGame3Scores;
 
+    // Check if SF has started - if yes, disable QF editing
+    bool hasSFStarted = false;
+    final semiFinals = _getSemiFinalsDirect();
+    for (var sfMatch in semiFinals) {
+      final matchScores = _playoffScores[sfMatch.id];
+      if (matchScores != null && matchScores.values.any((value) => value > 0)) {
+        hasSFStarted = true;
+        break;
+      }
+    }
+
     return GestureDetector(
-      onTap: _authService.canScore ? () => _selectMatch(match) : null,
+      onTap:
+          (_authService.canScore && !hasSFStarted)
+              ? () => _selectMatch(match)
+              : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 20),
         decoration: BoxDecoration(
@@ -3753,7 +3975,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             child: ElevatedButton.icon(
               onPressed: _startPlayoffs,
               icon: const Icon(Icons.play_arrow),
-              label: const Text('Start Playoffs'),
+              label: const Text('Go to Playoffs'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
@@ -3808,7 +4030,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       });
                     },
                     icon: const Icon(Icons.sports_esports),
-                    label: const Text('Start Playoffs'),
+                    label: const Text('Go to Playoffs'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
@@ -5723,7 +5945,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               child: Text(
                 _playoffsStarted
                     ? 'Complete all preliminary rounds to generate playoff matches automatically'
-                    : 'Complete all preliminary rounds and click "Start Playoffs" to begin the elimination rounds',
+                    : 'Complete all preliminary rounds and click "Go to Playoffs" to begin the elimination rounds',
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey[700],
@@ -6602,7 +6824,9 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
-              title: const Text('Reset Match Settings'),
+              title: Text(
+                isFirstCard ? 'Reset Match Settings' : 'Unsaved Changes',
+              ),
               content: Text(
                 isFirstCard
                     ? 'The match settings will be reset and you\'ll need to enter them again. Are you sure you want to go back?'
