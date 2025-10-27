@@ -69,6 +69,16 @@ class AuthService {
         role: 'scoring',
         createdAt: DateTime.now(),
       ),
+      User(
+        id: '6',
+        email: 'Istiqlal@levelupsports.com',
+        password: 'admin123',
+        name: 'Istiqlal Admin',
+        username: 'Istiqlal',
+        phone: '555-000-0000',
+        role: 'management',
+        createdAt: DateTime.now(),
+      ),
     ];
     await _saveUsers();
     print('AuthService initialized with ${_users.length} admin users');
@@ -260,10 +270,16 @@ class AuthService {
   // Check if user is logged in
   bool get isLoggedIn => _currentUser != null;
 
-  // Check if user can score (has scoring or owner role)
+  // Check if user can score (has scoring, owner, or management role)
   bool get canScore =>
       _currentUser != null &&
-      (_currentUser!.role == 'scoring' || _currentUser!.role == 'owner');
+      (_currentUser!.role == 'scoring' ||
+          _currentUser!.role == 'owner' ||
+          _currentUser!.role == 'management');
+
+  // Check if user has management role
+  bool get isManagement =>
+      _currentUser != null && _currentUser!.role == 'management';
 
   // Check if email exists
   Future<bool> checkEmailExists(String email) async {

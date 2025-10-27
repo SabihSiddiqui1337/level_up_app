@@ -30,51 +30,51 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
             colors: [Color(0xFFE3F2FD), Colors.white],
           ),
         ),
-            child: SafeArea(
-              child: Column(
-                children: [
-                  // Title
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Text(
-                      'Upcoming Events',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFFE67E22),
-                        letterSpacing: 1.2,
-                      ),
-                    ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Title
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  'Upcoming Events',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFFE67E22),
+                    letterSpacing: 1.2,
                   ),
-
-                  // Events List
-                  Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      children: [
-                        _buildSimpleEventCard(
-                          'BasketBall Tournament 2025',
-                          'Sat. Nov. 8. 2025',
-                          'Masjid Istiqlal',
-                          '123 Main Street,\nSugar Land, TX\n77498',
-                        ),
-                        const SizedBox(height: 16),
-                        _buildSimpleEventCard(
-                          'Thanksgiving Picketball Tournament',
-                          'Sat. Nov. 22. 2025',
-                          'Masjid Istiqlal',
-                          '123 Main Street,\nSugar Land, TX\n77498',
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Registration Cart
-                ],
+                ),
               ),
-            ),
+
+              // Events List
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    _buildSimpleEventCard(
+                      'BasketBall Tournament 2025',
+                      'Sat. Nov. 8. 2025',
+                      'Masjid Istiqlal',
+                      '123 Main Street,\nSugar Land, TX\n77498',
+                    ),
+                    const SizedBox(height: 16),
+                    _buildSimpleEventCard(
+                      'Winter Pickleball Tournament',
+                      'Sat. Nov. 8. 2025',
+                      'Pickle Point',
+                      '12002 Southwest Fwy,\nMeadows Place, TX\n77477',
+                    ),
+                  ],
+                ),
+              ),
+
+              // Registration Cart
+            ],
           ),
-        );
+        ),
+      ),
+    );
   }
 
   Widget _buildSimpleEventCard(

@@ -5,7 +5,7 @@ import '../models/team.dart';
 import '../models/pickleball_team.dart';
 import '../widgets/custom_app_bar.dart';
 
-class GameSelectionScreen extends StatelessWidget {
+class GameSelectionScreen extends StatefulWidget {
   final Function(Team) onSave;
   final Function(PickleballTeam)? onSavePickleball;
   final VoidCallback? onHomePressed;
@@ -18,9 +18,14 @@ class GameSelectionScreen extends StatelessWidget {
   });
 
   @override
+  State<GameSelectionScreen> createState() => _GameSelectionScreenState();
+}
+
+class _GameSelectionScreenState extends State<GameSelectionScreen> {
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: CustomAppBar(onHomePressed: onHomePressed),
+      appBar: CustomAppBar(onHomePressed: widget.onHomePressed),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -34,32 +39,34 @@ class GameSelectionScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 32),
-            Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                children: [
-                  _buildGameCard(
-                    context,
-                    'Basketball',
-                    Icons.sports_basketball,
-                    const Color(0xFF2196F3),
-                    () => _navigateToTeamRegistration(context, 'Basketball'),
-                  ),
-                  _buildGameCard(
-                    context,
-                    'Pickleball',
-                    Icons.sports_tennis,
-                    const Color(0xFF38A169),
-                    () => _navigateToPickleballRegistration(context),
-                  ),
-                ],
-              ),
-            ),
+            Expanded(child: _buildRegularGameSelection()),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildRegularGameSelection() {
+    return GridView.count(
+      crossAxisCount: 2,
+      crossAxisSpacing: 16,
+      mainAxisSpacing: 16,
+      children: [
+        _buildGameCard(
+          context,
+          'Basketball',
+          Icons.sports_basketball,
+          const Color(0xFF2196F3),
+          () => _navigateToTeamRegistration(context, 'Basketball'),
+        ),
+        _buildGameCard(
+          context,
+          'Pickleball',
+          Icons.sports_tennis,
+          const Color(0xFF38A169),
+          () => _navigateToPickleballRegistration(context),
+        ),
+      ],
     );
   }
 
@@ -125,7 +132,7 @@ class GameSelectionScreen extends StatelessWidget {
                   division: team.division,
                 );
 
-                onSave(teamWithGame);
+                widget.onSave(teamWithGame);
                 Navigator.pop(context); // Go back to home screen
               },
             ),
@@ -140,8 +147,8 @@ class GameSelectionScreen extends StatelessWidget {
         builder:
             (context) => PickleballTeamRegistrationScreen(
               onSave: (team) {
-                if (onSavePickleball != null) {
-                  onSavePickleball!(team);
+                if (widget.onSavePickleball != null) {
+                  widget.onSavePickleball!(team);
                 }
                 Navigator.pop(context); // Go back to home screen
               },

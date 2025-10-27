@@ -45,7 +45,7 @@ class _PlayoffsScreenState extends State<PlayoffsScreen> {
       _tournamentTitle = 'Basketball Tournament 2025';
     } else if (pickleballTeams.isNotEmpty) {
       _teams = pickleballTeams;
-      _tournamentTitle = 'Thanksgiving Pickleball Tournament';
+      _tournamentTitle = 'Winter Pickleball Tournament';
     }
 
     // Calculate standings

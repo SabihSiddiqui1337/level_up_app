@@ -72,11 +72,11 @@ class PickleballScreenKeys {
   static const String loadError = 'Error loading team data';
 
   // Tournament Info
-  static const String tournamentTitle = 'Pickleball Tournament 2025';
+  static const String tournamentTitle = 'Winter Pickleball Tournament';
   static const String tournamentDate = 'Sat. Nov. 8. 2025';
-  static const String tournamentLocation = 'Masjid Istiqlal';
+  static const String tournamentLocation = 'Pickle Point';
   static const String tournamentAddress =
-      '123 Main Street,\nSugar Land, TX\n77498';
+      '12002 Southwest Fwy,\nMeadows Place, TX\n77477';
 
   // Hints
   static const String teamNameHint = 'Enter your team name';

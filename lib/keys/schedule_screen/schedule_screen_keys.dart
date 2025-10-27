@@ -11,8 +11,7 @@ class ScheduleScreenKeys {
 
   // Tournament Titles
   static const String basketballTournament = 'BasketBall Tournament 2025';
-  static const String pickleballTournament =
-      'Thanksgiving Picketball Tournament';
+  static const String pickleballTournament = 'Winter Pickleball Tournament';
 
   // Sport Schedule Screen
   static const String preliminaryRounds = 'Preliminary Rounds';

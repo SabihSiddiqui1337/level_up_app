@@ -240,6 +240,36 @@ class ScoreService {
     }
   }
 
+  // Save playoff state for a specific division
+  Future<void> savePlayoffsStartedForDivision(
+    String division,
+    bool playoffsStarted,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = '${_playoffsStartedKey}_$division';
+      await prefs.setBool(key, playoffsStarted);
+      print(
+        'Saved playoffs started state for division $division: $playoffsStarted',
+      );
+    } catch (e) {
+      print('Error saving playoffs started state for division $division: $e');
+    }
+  }
+
+  // Load playoff state for a specific division
+  Future<bool> loadPlayoffsStartedForDivision(String division) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = '${_playoffsStartedKey}_$division';
+      final playoffsStarted = prefs.getBool(key) ?? false;
+      return playoffsStarted;
+    } catch (e) {
+      print('Error loading playoffs started state for division $division: $e');
+      return false;
+    }
+  }
+
   // Save playoff state
   Future<void> savePlayoffsStarted(bool playoffsStarted) async {
     try {

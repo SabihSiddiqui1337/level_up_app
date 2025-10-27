@@ -77,36 +77,14 @@ class _PickleballTeamRegistrationScreenState
   @override
   void initState() {
     super.initState();
-
-    // Add a small delay to ensure proper initialization
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeForm();
-    });
-  }
-
-  void _initializeForm() {
     if (widget.team != null) {
       _teamNameController.text = widget.team!.name;
       _coachNameController.text = widget.team!.coachName;
       _coachPhoneController.text = widget.team!.coachPhone;
       _coachEmailController.text = widget.team!.coachEmail;
       _selectedDuprRating = widget.team!.division;
-
-      // Load existing players and trigger UI update
-      _players.clear();
       _players.addAll(widget.team!.players);
-
-      // Force UI update to show existing players
-      if (mounted) {
-        setState(() {});
-      }
     }
-
-    // Add listeners to track form changes
-    _teamNameController.addListener(_onFormChanged);
-    _coachNameController.addListener(_onFormChanged);
-    _coachPhoneController.addListener(_onFormChanged);
-    _coachEmailController.addListener(_onFormChanged);
   }
 
   @override
@@ -118,35 +96,34 @@ class _PickleballTeamRegistrationScreenState
     super.dispose();
   }
 
-  void _onFormChanged() {
-    if (mounted) {
-      setState(() {
-        // This will trigger a rebuild to update button state
-      });
-    }
-  }
-
   bool _isFormComplete() {
     // Check if all required fields are filled
-    return _teamNameController.text.trim().isNotEmpty &&
-        _coachNameController.text.trim().isNotEmpty &&
-        _coachPhoneController.text.trim().isNotEmpty &&
-        _coachEmailController.text.trim().isNotEmpty &&
-        _players.isNotEmpty;
+    final isManagement = _authService.isManagement;
+
+    if (isManagement) {
+      // For management users, only require team name
+      return _teamNameController.text.trim().isNotEmpty;
+    } else {
+      // For regular users, require all fields
+      return _teamNameController.text.trim().isNotEmpty &&
+          _coachNameController.text.trim().isNotEmpty &&
+          _coachPhoneController.text.trim().isNotEmpty &&
+          _coachEmailController.text.trim().isNotEmpty &&
+          _players.isNotEmpty;
+    }
   }
 
   void _addPlayer() {
     if (_players.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Maximum 1 player allowed for pickleball'),
-          backgroundColor: Colors.orange,
+          content: Text('Maximum 1 player allowed'),
+          backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
-    print('_addPlayer called'); // Debug print
     showDialog(
       context: context,
       builder:
@@ -155,8 +132,6 @@ class _PickleballTeamRegistrationScreenState
               setState(() {
                 _players.add(player);
               });
-              print('Player added: ${player.name}'); // Debug print
-              print('Total players: ${_players.length}'); // Debug print
             },
           ),
     );
@@ -178,54 +153,28 @@ class _PickleballTeamRegistrationScreenState
   }
 
   void _deletePlayer(int index) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Delete Player'),
-          content: const Text('Are you sure you want to delete this player?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _players.removeAt(index);
-                });
-                Navigator.pop(context);
-              },
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
-    );
+    setState(() {
+      _players.removeAt(index);
+    });
   }
 
   Future<void> _saveTeam() async {
     if (_isSaving) return; // Prevent rapid clicking
 
-    print('_saveTeam called - validating form'); // Debug print
-
     if (_formKey.currentState!.validate() && _players.isNotEmpty) {
       setState(() {
         _isSaving = true;
       });
-      print('Form validation passed - creating team'); // Debug print
 
       // Generate unique ID for new teams
       String teamId;
       if (widget.team != null) {
         // Editing existing team - keep same ID
         teamId = widget.team!.id;
-        print('Editing existing pickleball team with ID: $teamId');
       } else {
         // Creating new team - generate unique ID with random component
         teamId =
             'pickleball_${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch}_${DateTime.now().hashCode}';
-        print('Creating new pickleball team with ID: $teamId');
       }
 
       final currentUser = _authService.currentUser;
@@ -245,10 +194,6 @@ class _PickleballTeamRegistrationScreenState
         isPrivate:
             !isAdmin, // Regular users create private teams, admins create public teams
       );
-      print('Team created with ${team.players.length} players'); // Debug print
-      print(
-        'Team players: ${team.players.map((p) => p.name).toList()}',
-      ); // Debug print
 
       // Create default event for pickleball tournament
       const event = Event(
@@ -259,91 +204,27 @@ class _PickleballTeamRegistrationScreenState
         address: PickleballScreenKeys.tournamentAddress,
       );
 
-      print('Navigating to process registration screen'); // Debug print
-      print(
-        'Team data: name=${team.name}, captain=${team.coachName}, players=${team.players.length}',
-      ); // Debug print
-
-      // Add a small delay to ensure UI updates
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      // If editing an existing team, call onSave callback
-      if (widget.team != null && widget.onSave != null) {
-        widget.onSave!(team);
+      // Navigate to process registration screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) {
+            return PickleballProcessRegistrationScreen(
+              team: team,
+              event: event,
+            );
+          },
+        ),
+      ).then((_) {
+        // Reset saving state when returning
         setState(() {
           _isSaving = false;
         });
-      } else {
-        // Navigate to process registration screen for new teams
-        if (!mounted) return;
-
-        try {
-          Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) {
-                    print(
-                      'Building PickleballProcessRegistrationScreen',
-                    ); // Debug print
-                    return PickleballProcessRegistrationScreen(
-                      team: team,
-                      event: event,
-                    );
-                  },
-                ),
-              )
-              .then((_) {
-                // Reset flags after navigation completes
-                setState(() {
-                  _isSaving = false;
-                });
-                print('Navigation completed, flags reset'); // Debug print
-              })
-              .catchError((error, stackTrace) {
-                print('Navigation error: $error'); // Debug print
-                print('Stack trace: $stackTrace'); // Debug print
-                if (mounted) {
-                  setState(() {
-                    _isSaving = false;
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: $error'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              });
-        } catch (e, stackTrace) {
-          print('Exception during navigation: $e'); // Debug print
-          print('Stack trace: $stackTrace'); // Debug print
-          if (mounted) {
-            setState(() {
-              _isSaving = false;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Error: $e',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                backgroundColor: Colors.red,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                margin: const EdgeInsets.only(left: 16, right: 16, bottom: 100),
-                elevation: 4,
-              ),
-            );
-          }
-        }
-      }
+      });
     } else {
-      print('Form validation failed or no players'); // Debug print
+      setState(() {
+        _isSaving = false;
+      });
       if (_players.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -355,41 +236,81 @@ class _PickleballTeamRegistrationScreenState
                 fontWeight: FontWeight.w500,
               ),
             ),
-            backgroundColor: Colors.orange,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            margin: const EdgeInsets.only(left: 16, right: 16, bottom: 100),
-            elevation: 4,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Please fill in all required fields',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
             backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            margin: EdgeInsets.only(left: 16, right: 16, bottom: 100),
-            elevation: 4,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     }
   }
 
+  Future<void> _saveManagementTeam() async {
+    if (_isSaving) return;
+
+    if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isSaving = true;
+      });
+
+      // Use existing team ID if updating, generate new one if creating
+      final teamId =
+          widget.team?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
+
+      final currentUser = _authService.currentUser;
+
+      final team = PickleballTeam(
+        id: teamId,
+        name: _teamNameController.text,
+        coachName: 'Management Created',
+        coachPhone: '000-000-0000',
+        coachEmail: 'management@levelupsports.com',
+        players: [], // Empty players list for management
+        registrationDate: widget.team?.registrationDate ?? DateTime.now(),
+        division: _selectedDuprRating,
+        createdByUserId: currentUser?.id,
+        isPrivate: false, // Public team
+      );
+
+      // Save the team
+      if (widget.onSave != null) {
+        widget.onSave!(team);
+      }
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.team == null
+                ? 'Team "${team.name}" created successfully!'
+                : 'Team "${team.name}" updated successfully!',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      // Reset form only if creating new team
+      if (widget.team == null) {
+        _teamNameController.clear();
+        setState(() {
+          _selectedDuprRating = PickleballScreenKeys.duprRatingUnder35;
+        });
+      }
+
+      setState(() {
+        _isSaving = false;
+      });
+    } else {
+      setState(() {
+        _isSaving = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isManagement = _authService.isManagement;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(PickleballScreenKeys.screenTitle),
@@ -404,315 +325,376 @@ class _PickleballTeamRegistrationScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Team Information Section
-              Card(
-                elevation: 4,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Team Information',
-                        style: Theme.of(
-                          context,
-                        ).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF38A169),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _teamNameController,
-                        textCapitalization: TextCapitalization.words,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        maxLength: 30,
-                        inputFormatters: [LengthLimitingTextInputFormatter(30)],
-                        decoration: const InputDecoration(
-                          labelText: 'Team Name',
-                          prefixIcon: Icon(Icons.sports_basketball),
-                          border: OutlineInputBorder(),
-                          counterText: '', // Hide character counter
-                        ),
-                        onChanged: (value) {
-                          // Clear validation error when user starts typing
-                          if (value.isNotEmpty) {
-                            _formKey.currentState?.validate();
-                          }
-                        },
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter team name';
-                          }
-                          if (value.length > 30) {
-                            return 'Team name must be 30 characters or less';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _coachNameController,
-                        textCapitalization: TextCapitalization.words,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        decoration: const InputDecoration(
-                          labelText: 'Team Captain Name',
-                          prefixIcon: Icon(Icons.person),
-                          border: OutlineInputBorder(),
-                        ),
-                        onChanged: (value) {
-                          // Clear validation error when user starts typing
-                          if (value.isNotEmpty) {
-                            _formKey.currentState?.validate();
-                          }
-                        },
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter team captain name';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _coachPhoneController,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        decoration: const InputDecoration(
-                          labelText: 'Captain Phone Number',
-                          prefixIcon: Icon(Icons.phone),
-                          border: OutlineInputBorder(),
-                          hintText: 'XXX-XXX-XXXX',
-                        ),
-                        keyboardType: TextInputType.phone,
-                        maxLength: 12, // 10 digits + 2 dashes
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(
-                            10,
-                          ), // Only allow 10 digits
-                          PhoneNumberFormatter(), // Custom formatter
-                        ],
-                        onChanged: (value) {
-                          // Clear validation error when user starts typing
-                          if (value.isNotEmpty) {
-                            _formKey.currentState?.validate();
-                          }
-                        },
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter phone number';
-                          }
-                          // Remove dashes for validation
-                          final digitsOnly = value.replaceAll('-', '');
-                          if (digitsOnly.length != 10) {
-                            return 'Enter 10-digit number';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _coachEmailController,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        decoration: const InputDecoration(
-                          labelText: 'Captain Email',
-                          prefixIcon: Icon(Icons.email),
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.emailAddress,
-                        onChanged: (value) {
-                          // Clear validation error when user starts typing
-                          if (value.isNotEmpty) {
-                            _formKey.currentState?.validate();
-                          }
-                        },
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter email';
-                          }
-                          if (!value.contains('@')) {
-                            return 'Please enter a valid email';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: _selectedDuprRating,
-                        decoration: InputDecoration(
-                          labelText: 'DUPR Rating',
-                          prefixIcon: const Icon(Icons.star),
-                          border: const OutlineInputBorder(),
-                        ),
-                        items:
-                            _duprRatings.map((String rating) {
-                              return DropdownMenuItem<String>(
-                                value: rating,
-                                child: Text(rating),
-                              );
-                            }).toList(),
-                        onChanged: (String? newValue) {
-                          setState(() {
-                            _selectedDuprRating = newValue!;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Players Section
-              Card(
-                elevation: 4,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Players (${_players.length})',
-                            style: Theme.of(
-                              context,
-                            ).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF38A169),
-                            ),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: _players.isNotEmpty ? null : _addPlayer,
-                            icon: const Icon(Icons.add),
-                            label: Text(
-                              _players.isNotEmpty
-                                  ? 'Max 1 Player'
-                                  : PickleballScreenKeys.addPlayerButton,
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  _players.isNotEmpty
-                                      ? Colors.grey
-                                      : const Color(0xFF38A169),
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      if (_players.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(32),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey[300]!),
-                          ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.people_outline,
-                                size: 64,
-                                color: Colors.grey[400],
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No players added yet',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey[600],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Add 1 player to your pickleball team',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      else
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _players.length,
-                          itemBuilder: (context, index) {
-                            final player = _players[index];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: const Color(0xFF38A169),
-                                  child: Text(
-                                    player.name[0].toUpperCase(),
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                                title: Text(player.name),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.edit),
-                                      onPressed: () => _editPlayer(index),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete),
-                                      onPressed: () => _deletePlayer(index),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Save Button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed:
-                      (_isSaving || !_isFormComplete()) ? null : _saveTeam,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF38A169),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child:
-                      _isSaving
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                            'Next',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                ),
-              ),
+              if (isManagement) _buildManagementForm() else _buildRegularForm(),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildManagementForm() {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Quick Team Registration (Management)',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF38A169),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Team Name Field
+            TextFormField(
+              controller: _teamNameController,
+              textCapitalization: TextCapitalization.words,
+              autocorrect: false,
+              enableSuggestions: false,
+              maxLength: 30,
+              inputFormatters: [LengthLimitingTextInputFormatter(30)],
+              decoration: const InputDecoration(
+                labelText: 'Team Name',
+                prefixIcon: Icon(Icons.sports_tennis),
+                border: OutlineInputBorder(),
+                counterText: '',
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter team name';
+                }
+                if (value.length > 30) {
+                  return 'Team name must be 30 characters or less';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 24),
+
+            // DUPR Rating Field
+            DropdownButtonFormField<String>(
+              value: _selectedDuprRating,
+              decoration: InputDecoration(
+                labelText: 'DUPR Rating',
+                prefixIcon: const Icon(Icons.star),
+                border: const OutlineInputBorder(),
+              ),
+              items:
+                  _duprRatings.map((String rating) {
+                    return DropdownMenuItem<String>(
+                      value: rating,
+                      child: Text(rating),
+                    );
+                  }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  _selectedDuprRating = value!;
+                });
+              },
+            ),
+            const SizedBox(height: 32),
+
+            // Save Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isSaving ? null : _saveManagementTeam,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF38A169),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child:
+                    _isSaving
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text(
+                          widget.team == null ? 'Create Team' : 'Update Team',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRegularForm() {
+    return Column(
+      children: [
+        // Team Information Section
+        Card(
+          elevation: 4,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Team Information',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF38A169),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _teamNameController,
+                  textCapitalization: TextCapitalization.words,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  maxLength: 30,
+                  inputFormatters: [LengthLimitingTextInputFormatter(30)],
+                  decoration: const InputDecoration(
+                    labelText: 'Team Name',
+                    prefixIcon: Icon(Icons.sports_basketball),
+                    border: OutlineInputBorder(),
+                    counterText: '',
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter team name';
+                    }
+                    if (value.length > 30) {
+                      return 'Team name must be 30 characters or less';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _coachNameController,
+                  textCapitalization: TextCapitalization.words,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Team Captain Name',
+                    prefixIcon: Icon(Icons.person),
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter team captain name';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _coachPhoneController,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Captain Phone Number',
+                    prefixIcon: Icon(Icons.phone),
+                    border: OutlineInputBorder(),
+                    hintText: 'XXX-XXX-XXXX',
+                  ),
+                  keyboardType: TextInputType.phone,
+                  maxLength: 12,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                    PhoneNumberFormatter(),
+                  ],
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter phone number';
+                    }
+                    final digitsOnly = value.replaceAll('-', '');
+                    if (digitsOnly.length != 10) {
+                      return 'Enter 10-digit number';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _coachEmailController,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Captain Email',
+                    prefixIcon: Icon(Icons.email),
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter email';
+                    }
+                    if (!value.contains('@')) {
+                      return 'Please enter a valid email';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _selectedDuprRating,
+                  decoration: InputDecoration(
+                    labelText: 'DUPR Rating',
+                    prefixIcon: const Icon(Icons.star),
+                    border: const OutlineInputBorder(),
+                  ),
+                  items:
+                      _duprRatings.map((String rating) {
+                        return DropdownMenuItem<String>(
+                          value: rating,
+                          child: Text(rating),
+                        );
+                      }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedDuprRating = value!;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Players Section
+        Card(
+          elevation: 4,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Players',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF38A169),
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: _players.isNotEmpty ? null : _addPlayer,
+                      icon: const Icon(Icons.add),
+                      label: Text(
+                        _players.isNotEmpty
+                            ? 'Max Players Added'
+                            : 'Add Player',
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            _players.isNotEmpty
+                                ? Colors.grey[400]
+                                : const Color(0xFF38A169),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (_players.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'No players added yet. Click "Add Player" to get started.',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  )
+                else
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _players.length,
+                    itemBuilder: (context, index) {
+                      final player = _players[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: const Color(0xFF38A169),
+                            child: Text(
+                              '${index + 1}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          title: Text(player.name),
+                          subtitle: Text('DUPR: ${player.duprRating}'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                onPressed: () => _editPlayer(index),
+                                icon: const Icon(Icons.edit),
+                                color: const Color(0xFF2196F3),
+                              ),
+                              IconButton(
+                                onPressed: () => _deletePlayer(index),
+                                icon: const Icon(Icons.delete),
+                                color: Colors.red,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Save Button
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: (_isSaving || !_isFormComplete()) ? null : _saveTeam,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF38A169),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child:
+                _isSaving
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : Text(
+                      widget.team == null ? 'Next' : 'Update Team',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -732,133 +714,92 @@ class _PickleballPlayerDialog extends StatefulWidget {
 class _PickleballPlayerDialogState extends State<_PickleballPlayerDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _ageController = TextEditingController();
+  String _selectedDuprRating = PickleballScreenKeys.duprRatingUnder35;
+
+  final List<String> _duprRatings = [
+    PickleballScreenKeys.duprRatingUnder35,
+    PickleballScreenKeys.duprRatingOver4,
+  ];
 
   @override
   void initState() {
     super.initState();
     if (widget.player != null) {
       _nameController.text = widget.player!.name;
-      // For pickleball, we'll use a default age since we only store name
-      _ageController.text = '25'; // Default age
+      _selectedDuprRating = widget.player!.duprRating;
     }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _ageController.dispose();
     super.dispose();
-  }
-
-  void _savePlayer() {
-    print('_savePlayer called'); // Debug print
-    print(
-      'Name: "${_nameController.text}", Age: "${_ageController.text}"',
-    ); // Debug print
-
-    if (_formKey.currentState!.validate()) {
-      print('Form validation passed'); // Debug print
-      final player = PickleballPlayer(
-        id:
-            widget.player?.id ??
-            DateTime.now().millisecondsSinceEpoch.toString(),
-        name: _nameController.text,
-        duprRating:
-            PickleballScreenKeys.duprRatingUnder35, // Default DUPR rating
-      );
-
-      print('Player created: ${player.name}'); // Debug print
-      widget.onSave(player);
-      Navigator.pop(context);
-    } else {
-      print('Form validation failed!'); // Debug print
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(widget.player == null ? 'Add Player' : 'Edit Player'),
-      contentPadding: const EdgeInsets.all(16),
-      content: SizedBox(
-        width: MediaQuery.of(context).size.width * 0.8,
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _nameController,
-                  textCapitalization: TextCapitalization.words,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Player Name',
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (value) {
-                    if (value.isNotEmpty) {
-                      _formKey.currentState?.validate();
-                    }
-                  },
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter player name';
-                    }
-                    return null;
-                  },
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Player Name',
+                  border: OutlineInputBorder(),
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _ageController,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Age',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(2),
-                  ],
-                  onChanged: (value) {
-                    if (value.isNotEmpty) {
-                      _formKey.currentState?.validate();
-                    }
-                  },
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter age';
-                    }
-                    final age = int.tryParse(value);
-                    if (age == null) {
-                      return 'Invalid age';
-                    }
-                    if (age < 1 || age > 99) {
-                      return 'Age must be between 1 and 99';
-                    }
-                    return null;
-                  },
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter player name';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedDuprRating,
+                decoration: const InputDecoration(
+                  labelText: 'DUPR Rating',
+                  border: OutlineInputBorder(),
                 ),
-              ],
-            ),
+                items:
+                    _duprRatings.map((String rating) {
+                      return DropdownMenuItem<String>(
+                        value: rating,
+                        child: Text(rating),
+                      );
+                    }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedDuprRating = value!;
+                  });
+                },
+              ),
+            ],
           ),
         ),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: _savePlayer,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF2196F3),
-            foregroundColor: Colors.white,
-          ),
+          onPressed: () {
+            if (_formKey.currentState!.validate()) {
+              final player = PickleballPlayer(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                name: _nameController.text,
+                duprRating: _selectedDuprRating,
+              );
+              widget.onSave(player);
+              Navigator.of(context).pop();
+            }
+          },
           child: Text(widget.player == null ? 'Add Player' : 'Update Player'),
         ),
       ],
