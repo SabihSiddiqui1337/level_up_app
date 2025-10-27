@@ -5086,7 +5086,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                             ),
                             label: Text(
                               _allQuarterFinalsScoresSet
-                                  ? 'Start Semi Finals'
+                                  ? 'Go to Semi Finals'
                                   : 'Complete All Scores',
                             ),
                             style: ElevatedButton.styleFrom(
@@ -5218,7 +5218,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         ),
                         label: Text(
                           _allSemiFinalsScoresSet
-                              ? 'Start Finals'
+                              ? 'Go to Finals'
                               : 'Complete All Scores',
                           textAlign: TextAlign.center,
                         ),
