@@ -122,9 +122,11 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
       // Validate scores using exact winning score rule
       String? validationError;
 
-      // Skip validation if both scores are 0 (no game played)
+      // Allow resetting to 0-0 (no validation error)
+      // But check if there are actual scores entered, then validate them
       if (team1Score == 0 && team2Score == 0) {
-        validationError = 'Please enter scores for both teams';
+        // No validation needed - allow saving 0-0 to reset scores
+        validationError = null;
       }
       // Check if game has a winner using exact winning score rule
       else {

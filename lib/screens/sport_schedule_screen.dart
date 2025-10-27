@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/simple_app_bar.dart';
 import '../models/match.dart';
 import '../models/standing.dart';
-import '../models/team.dart';
 import '../services/auth_service.dart';
 import '../services/team_service.dart';
 import '../services/pickleball_team_service.dart';
@@ -63,6 +62,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   Map<String, bool> _playoffsStartedByDivision = {};
   final Map<String, Map<String, int>> _playoffScores = {};
   bool _justRestartedPlayoffs = false;
+
+  // Match format per tab: '1game' or 'bestof3'
+  Map<String, String> _matchFormats =
+      {}; // Key: 'QF', 'SF', 'Finals', Value: '1game' or 'bestof3'
 
   // Check if playoffs have started for a specific division
   bool _playoffsStartedForDivision(String division) {
@@ -389,6 +392,56 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     }
   }
 
+  // Get current tab name (QF, SF, or Finals)
+  String _getCurrentTabName() {
+    if (_tabController.index == 1) {
+      // Playoffs tab
+      final playoffSubTabIndex = _playoffTabController.index;
+      if (playoffSubTabIndex == 0) return 'QF'; // Quarter Finals
+      if (playoffSubTabIndex == 1) return 'SF'; // Semi Finals
+      if (playoffSubTabIndex == 2) return 'Finals';
+    }
+    return 'QF'; // Default
+  }
+
+  // Show dialog to select match format
+  Future<String?> _showMatchFormatDialog() {
+    return showDialog<String>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Match Total Games'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  title: const Text('1 Game'),
+                  leading: Radio<String>(
+                    value: '1game',
+                    groupValue:
+                        _matchFormats[_getCurrentTabName()] ?? 'bestof3',
+                    onChanged: (value) {
+                      Navigator.pop(context, value);
+                    },
+                  ),
+                ),
+                ListTile(
+                  title: const Text('Best of 3'),
+                  leading: Radio<String>(
+                    value: 'bestof3',
+                    groupValue:
+                        _matchFormats[_getCurrentTabName()] ?? 'bestof3',
+                    onChanged: (value) {
+                      Navigator.pop(context, value);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+    );
+  }
+
   void _startScoring() {
     // Check if user has scoring permissions
     if (!_authService.canScore) {
@@ -406,6 +459,23 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       final isPlayoffMatch = _playoffs.contains(_selectedMatch!);
       final isSemiFinalsMatch = _selectedMatch!.day == 'Semi Finals';
 
+      // For QF matches, always ask for match format
+      if (isPlayoffMatch && _selectedMatch!.day == 'Quarter Finals') {
+        final currentTab = _getCurrentTabName();
+
+        // Always show dialog for QF matches
+        _showMatchFormatDialog().then((format) {
+          if (format != null) {
+            setState(() {
+              _matchFormats[currentTab] = format;
+            });
+            // Call _startScoring again after format is set
+            _startScoring();
+          }
+        });
+        return;
+      }
+
       // Check if playoffs have started and this is a playoff match
       if (_playoffsStarted && isPlayoffMatch) {
         // Show dialog explaining that scores cannot be edited once playoffs have started
@@ -413,8 +483,15 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         return;
       }
 
-      // Navigate to custom Semi Finals scoring screen for best-of-3 games (SF and Finals only)
-      if (isSemiFinalsMatch || _selectedMatch!.day == 'Finals') {
+      // Get the match format for this tab
+      final currentTab = _getCurrentTabName();
+      final matchFormat = _matchFormats[currentTab] ?? 'bestof3';
+
+      // For QF matches, always use the SemiFinals scoring screen which adapts to format
+      // For SF and Finals, always use SemiFinals scoring screen
+      if (isSemiFinalsMatch ||
+          _selectedMatch!.day == 'Finals' ||
+          _selectedMatch!.day == 'Quarter Finals') {
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -422,6 +499,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 (context) => SemiFinalsScoringScreen(
                   match: _selectedMatch!,
                   initialScores: _playoffScores[_selectedMatch!.id],
+                  matchFormat:
+                      _selectedMatch!.day == 'Quarter Finals'
+                          ? matchFormat
+                          : 'bestof3',
                   onScoresUpdated: (scores) async {
                     setState(() {
                       _playoffScores[_selectedMatch!
@@ -818,7 +899,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         return AlertDialog(
           title: const Text('Restart Playoffs'),
           content: const Text(
-            'Are you sure you want to restart the playoffs? This will clear all playoff scores and reset the bracket, but keep your preliminary scores.',
+            'This will clear all Quarter Finals, Semi Finals, and Finals scores. Your preliminary round scores will be kept.',
           ),
           actions: [
             TextButton(
@@ -1356,16 +1437,16 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
     for (var match in semiFinals) {
       if (match.team1Id != null && match.team2Id != null) {
-        // Use _getTeamScore method to get scores consistently
-        final team1Score = _getTeamScore(match.id, match.team1Id!);
-        final team2Score = _getTeamScore(match.id, match.team2Id!);
+        // Use _getGamesWon for best-of-3 scoring (SF and Finals)
+        final team1GamesWon = _getGamesWon(match.id, match.team1Id);
+        final team2GamesWon = _getGamesWon(match.id, match.team2Id);
 
-        if (team1Score > 0 || team2Score > 0) {
-          if (team1Score > team2Score) {
+        if (team1GamesWon >= 2 || team2GamesWon >= 2) {
+          if (team1GamesWon >= 2) {
             // Team 1 won
             final team = _teams.firstWhere((t) => t.id == match.team1Id);
             winners.add(team);
-          } else if (team2Score > team1Score) {
+          } else if (team2GamesWon >= 2) {
             // Team 2 won
             final team = _teams.firstWhere((t) => t.id == match.team2Id);
             winners.add(team);
@@ -1604,8 +1685,15 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     final team1Seeding = _getTeamSeeding(match.team1Id);
     final team2Seeding = _getTeamSeeding(match.team2Id);
 
+    // Check if SF is locked (when Finals has started)
+    final isSemiFinalsLocked =
+        _hasFinalsScores && _authService.canScore && match.day == 'Semi Finals';
+
     return GestureDetector(
-      onTap: _authService.canScore ? () => _selectMatch(match) : null,
+      onTap:
+          (_authService.canScore && !isSemiFinalsLocked)
+              ? () => _selectMatch(match)
+              : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 20),
         decoration: BoxDecoration(
@@ -1648,7 +1736,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(width: 20), // Gap before games
                       Expanded(
                         child: Text(
                           'GAME 1',
@@ -1660,6 +1747,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           textAlign: TextAlign.center,
                         ),
                       ),
+                      const SizedBox(width: 8), // Gap between game columns
                       Expanded(
                         child: Text(
                           'GAME 2',
@@ -1671,6 +1759,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           textAlign: TextAlign.center,
                         ),
                       ),
+                      const SizedBox(width: 8), // Gap between game columns
                       Expanded(
                         child: Text(
                           'GAME 3',
@@ -1690,7 +1779,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                             fontSize: 10,
                             fontWeight: FontWeight.w500,
                           ),
-                          textAlign: TextAlign.center,
+                          textAlign: TextAlign.right,
                         ),
                       ),
                     ],
@@ -1795,16 +1884,21 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             ),
           ),
         ),
-        const SizedBox(width: 20), // Gap before games
         // Game 1
         Expanded(
           child: _buildGameScoreCell(match.id, teamId ?? '', 1, game1Score),
         ),
 
+        // Gap between game columns
+        const SizedBox(width: 8),
+
         // Game 2
         Expanded(
           child: _buildGameScoreCell(match.id, teamId ?? '', 2, game2Score),
         ),
+
+        // Gap between game columns
+        const SizedBox(width: 8),
 
         // Game 3
         Expanded(
@@ -1838,6 +1932,22 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     // Check if this team won this specific game
     final isWinner = _didTeamWinGame(matchId, teamId, gameNumber);
 
+    // For game 3, check if the match was decided in 2 games (Game 3 didn't happen)
+    final bool game3DidntHappen =
+        gameNumber == 3 && _isGame3NotNeeded(matchId, teamId);
+
+    // Determine what to display
+    String displayText;
+    if (game3DidntHappen) {
+      // Game 3 wasn't needed - always show "-" regardless of stored score
+      displayText = '-';
+    } else if (score != null && score > 0) {
+      displayText = '$score';
+    } else {
+      // Score is 0 or null
+      displayText = '0';
+    }
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 2),
       height: 28,
@@ -1861,7 +1971,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       ),
       child: Center(
         child: Text(
-          score != null ? '$score' : '0',
+          displayText,
           style: TextStyle(
             color:
                 isWinner
@@ -1875,14 +1985,62 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     );
   }
 
+  // Check if Game 3 was not needed (match decided in 2 games)
+  bool _isGame3NotNeeded(String matchId, String teamId) {
+    if (teamId.isEmpty) return false;
+
+    // Get the opponent ID
+    final match = _getSemiFinals().firstWhere(
+      (m) => m.id == matchId,
+      orElse:
+          () => _getFinals().firstWhere(
+            (m) => m.id == matchId,
+            orElse:
+                () => Match(
+                  id: matchId,
+                  day: '',
+                  court: '',
+                  time: '',
+                  team1: '',
+                  team2: '',
+                  team1Status: '',
+                  team2Status: '',
+                  team1Score: 0,
+                  team2Score: 0,
+                  team1Id: null,
+                  team2Id: null,
+                  team1Name: null,
+                  team2Name: null,
+                ),
+          ),
+    );
+
+    // Get opponent ID
+    String? opponentId;
+    if (match.team1Id == teamId) {
+      opponentId = match.team2Id;
+    } else {
+      opponentId = match.team1Id;
+    }
+
+    if (opponentId == null || opponentId.isEmpty) return false;
+
+    // Check if either team won 2 games (match decided)
+    final teamGamesWon = _getGamesWon(matchId, teamId);
+    final opponentGamesWon = _getGamesWon(matchId, opponentId);
+
+    // Game 3 is not needed if someone won 2 games
+    return teamGamesWon >= 2 || opponentGamesWon >= 2;
+  }
+
   // Check if a team won a specific game
   bool _didTeamWinGame(String matchId, String teamId, int gameNumber) {
     // Return false if teamId is empty (TBA placeholders)
     if (teamId.isEmpty) return false;
 
     // Get the match to find the opponent
-    // Try SF first, then Finals
-    Match match = _getSemiFinals().firstWhere(
+    // Try QF, SF, then Finals
+    Match match = _getQuarterFinals().firstWhere(
       (m) => m.id == matchId,
       orElse:
           () => Match(
@@ -1904,6 +2062,32 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             scheduledDate: null,
           ),
     );
+
+    // If not found in QF, try SF
+    if (match.id == '') {
+      match = _getSemiFinals().firstWhere(
+        (m) => m.id == matchId,
+        orElse:
+            () => Match(
+              id: '',
+              day: '',
+              court: '',
+              time: '',
+              team1: '',
+              team2: '',
+              team1Status: '',
+              team2Status: '',
+              team1Score: 0,
+              team2Score: 0,
+              team1Id: null,
+              team2Id: null,
+              team1Name: null,
+              team2Name: null,
+              isCompleted: false,
+              scheduledDate: null,
+            ),
+      );
+    }
 
     // If not found in SF, try Finals
     if (match.id == '') {
@@ -1937,7 +2121,16 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     final teamScore = _getGameScore(matchId, teamId, gameNumber) ?? 0;
     final opponentScore = _getGameScore(matchId, opponentId, gameNumber) ?? 0;
 
-    return teamScore > opponentScore;
+    // Check if this is a completed game (has a valid winner)
+    // For QF with best of 1, check if score reaches 11+ and wins by 2
+    // For QF/SF/Finals with best of 3, check if score reaches 15+ and wins by 2
+    final minScore =
+        (match.day == 'Quarter Finals' && _matchFormats['QF'] == '1game')
+            ? 11
+            : 15;
+
+    // Team wins if they reach minScore and win by 2
+    return teamScore >= minScore && teamScore >= opponentScore + 2;
   }
 
   // Get individual game score
@@ -2028,31 +2221,268 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   int _getTeamSeeding(String? teamId) {
     if (teamId == null) return 0;
 
-    final standings = _standings;
-    for (int i = 0; i < standings.length; i++) {
-      final team = _teams.firstWhere(
-        (t) => t.id == teamId,
-        orElse:
-            () => Team(
-              id: '',
-              name: '',
-              division: '',
-              createdByUserId: '',
-              isPrivate: false,
-              coachName: '',
-              coachPhone: '',
-              coachEmail: '',
-              coachAge: 25,
-              players: [],
-              registrationDate: DateTime.now(),
-            ),
-      );
-      if (standings[i].teamName == team.name) {
-        return i +
-            1; // Return 1-based seeding (1st place = #1, 2nd place = #2, etc.)
+    try {
+      // Find the team in the teams list
+      final team = _teams.firstWhere((t) => t.id == teamId);
+
+      // Find the team in the standings by name
+      final standings = _standings;
+      for (int i = 0; i < standings.length; i++) {
+        if (standings[i].teamName == team.name) {
+          return i + 1; // Return 1-based seeding
+        }
       }
+    } catch (e) {
+      // Team not found, return 0
     }
     return 0; // Default if team not found
+  }
+
+  // Build Quarter Finals specific card with conditional Game 2 and 3 display
+  Widget _buildQuarterFinalsScoreboard(Match match, int matchNumber) {
+    final isSelected = _selectedMatch?.id == match.id;
+    final team1Seeding = _getTeamSeeding(match.team1Id);
+    final team2Seeding = _getTeamSeeding(match.team2Id);
+
+    // Check if scores exist to determine format, otherwise default to '1game'
+    final hasGame3Scores =
+        _getGameScore(match.id, match.team1Id ?? '', 3) != null ||
+        _getGameScore(match.id, match.team2Id ?? '', 3) != null;
+    final showBestOf3 = _matchFormats['QF'] == 'bestof3' || hasGame3Scores;
+
+    return GestureDetector(
+      onTap: _authService.canScore ? () => _selectMatch(match) : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 20),
+        decoration: BoxDecoration(
+          color: Colors.grey[800],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Colors.amber[600]! : Colors.grey[600]!,
+            width: isSelected ? 4 : 1,
+          ),
+        ),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  // Header row
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          'SEEDING',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.left,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          'TEAM',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'GAME 1',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      if (showBestOf3) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'GAME 2',
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'GAME 3',
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                      Expanded(
+                        child: Text(
+                          'WINNER',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Team 1 row
+                  _buildQuarterFinalsTeamScoreRow(
+                    match.team1,
+                    match.team1Id,
+                    match,
+                    team1Seeding,
+                    showBestOf3,
+                  ),
+                  const SizedBox(height: 8),
+                  // Team 2 row
+                  _buildQuarterFinalsTeamScoreRow(
+                    match.team2,
+                    match.team2Id,
+                    match,
+                    team2Seeding,
+                    showBestOf3,
+                  ),
+                ],
+              ),
+            ),
+            // Selection checkmark
+            if (isSelected)
+              Positioned(
+                top: 4,
+                right: 4,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber[600],
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.amber[600]!.withOpacity(0.5),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.check, color: Colors.white, size: 18),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Build team score row for Quarter Finals with conditional Game 2/3
+  Widget _buildQuarterFinalsTeamScoreRow(
+    String teamName,
+    String? teamId,
+    Match match,
+    int teamNumber,
+    bool showBestOf3,
+  ) {
+    final isTBA = teamName == 'TBA';
+    final game1Score =
+        teamId != null ? _getGameScore(match.id, teamId, 1) : null;
+    final game2Score =
+        teamId != null ? _getGameScore(match.id, teamId, 2) : null;
+    final game3Score =
+        teamId != null ? _getGameScore(match.id, teamId, 3) : null;
+
+    // Determine winner for single game format
+    String? winnerId;
+    if (teamId != null && game1Score != null && !showBestOf3) {
+      final opponentId =
+          match.team1Id == teamId ? match.team2Id : match.team1Id;
+      if (opponentId != null) {
+        final opponentScore = _getGameScore(match.id, opponentId, 1);
+        if (game1Score > (opponentScore ?? 0)) {
+          winnerId = teamId;
+        }
+      }
+    }
+
+    // Determine winner for best of 3
+    final isWinner =
+        showBestOf3
+            ? _getGamesWon(match.id, teamId) >= 2
+            : (winnerId == teamId);
+
+    return Row(
+      children: [
+        // Seeding number
+        Expanded(
+          flex: 2,
+          child: Text(
+            isTBA ? '-' : '#$teamNumber',
+            style: TextStyle(
+              color: Colors.grey[400],
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        // Team name
+        Expanded(
+          flex: 2,
+          child: Text(
+            teamName,
+            style: TextStyle(
+              color: isTBA ? Colors.grey[400] : Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        // Game 1
+        Expanded(
+          child: _buildGameScoreCell(match.id, teamId ?? '', 1, game1Score),
+        ),
+        if (showBestOf3) ...[
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildGameScoreCell(match.id, teamId ?? '', 2, game2Score),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildGameScoreCell(match.id, teamId ?? '', 3, game3Score),
+          ),
+        ],
+        // Winner trophy
+        Expanded(
+          child: Center(
+            child:
+                isWinner
+                    ? Icon(
+                      Icons.emoji_events,
+                      color: Colors.yellow[600],
+                      size: 24,
+                    )
+                    : const SizedBox(width: 24, height: 24),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildMatchCard(Match match) {
@@ -2175,32 +2605,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     decoration: BoxDecoration(
                       color: Colors.grey.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              if (isQuarterFinalsLocked)
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.lock, color: Colors.red[600], size: 24),
-                          const SizedBox(height: 4),
-                          Text(
-                            'LOCKED',
-                            style: TextStyle(
-                              color: Colors.red[600],
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ),
@@ -2458,35 +2862,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   Widget _buildStandingsTab() {
     return Column(
       children: [
-        // Quarter Finals Locked Error Banner (when QF scores exist)
-        if (_hasQuarterFinalsScores && _authService.canScore)
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.red[50],
-              border: Border.all(color: Colors.red[200]!),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.lock, color: Colors.red[600], size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Seeding Locked, Quarter Finals Started',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.red[700],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
         // Standings Table
         Expanded(
           child: Padding(
@@ -2619,10 +2994,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             ),
           ),
 
-        // Restart Playoffs Button (only show when playoffs have started)
-        if (_playoffsStarted && _authService.canScore)
+        // Start/Restart Playoffs Buttons
+        if (_authService.canScore)
           Container(
-            width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white,
@@ -2634,23 +3008,68 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 ),
               ],
             ),
-            child: ElevatedButton.icon(
-              onPressed: _hasQuarterFinalsScores ? null : _restartPlayoffs,
-              icon: Icon(_hasQuarterFinalsScores ? Icons.lock : Icons.refresh),
-              label: Text(
-                _hasQuarterFinalsScores
-                    ? 'Seeding Locked, Quarter Finals Started'
-                    : 'Restart Playoffs',
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    _hasQuarterFinalsScores
-                        ? Colors.grey[400]
-                        : const Color.fromARGB(225, 243, 51, 33),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
+            child:
+                _playoffsStarted
+                    // Show both buttons when playoffs have started
+                    ? Row(
+                      children: [
+                        // Restart Playoffs button (left side)
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed:
+                                _hasQuarterFinalsScores
+                                    ? null
+                                    : _restartPlayoffs,
+                            icon: Icon(
+                              _hasQuarterFinalsScores
+                                  ? Icons.lock
+                                  : Icons.refresh,
+                            ),
+                            label: const Text('Restart Playoffs'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  _hasQuarterFinalsScores
+                                      ? Colors.grey[400]
+                                      : const Color.fromARGB(225, 243, 51, 33),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Start Playoffs button (right side)
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              // Navigate to Playoffs tab
+                              setState(() {
+                                _bottomNavIndex = 1;
+                              });
+                            },
+                            icon: const Icon(Icons.sports_esports),
+                            label: const Text('Start Playoffs'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                    // Show only Start Playoffs button when playoffs haven't started
+                    : _allPreliminaryGamesCompleted && _standings.length >= 2
+                    ? ElevatedButton.icon(
+                      onPressed: _startPlayoffs,
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Start Playoffs'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    )
+                    : const SizedBox.shrink(),
           ),
       ],
     );
@@ -2837,6 +3256,28 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   bool _hasScoresForSelectedMatch() {
     if (_selectedMatch == null) return false;
 
+    // Check for SF/Finals (best-of-3)
+    if (_selectedMatch!.day == 'Semi Finals' ||
+        _selectedMatch!.day == 'Finals') {
+      final playoffScores = _playoffScores[_selectedMatch!.id];
+      if (playoffScores != null && playoffScores.isNotEmpty) {
+        // Check if any game scores exist (game1, game2, or game3)
+        final team1Id = _selectedMatch!.team1Id ?? '';
+        final team2Id = _selectedMatch!.team2Id ?? '';
+
+        for (int game = 1; game <= 3; game++) {
+          final team1GameScore = playoffScores['${team1Id}_game$game'];
+          final team2GameScore = playoffScores['${team2Id}_game$game'];
+          if ((team1GameScore != null && team1GameScore > 0) ||
+              (team2GameScore != null && team2GameScore > 0)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    // Check for regular matches (single game)
     final scores = _matchScores[_selectedMatch!.id];
     if (scores != null && scores.length >= 2) {
       final team1Score = scores[_selectedMatch!.team1Id] ?? 0;
@@ -3362,34 +3803,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
     return Column(
       children: [
-        // Locked message when playoffs have started
-        if (_playoffsStarted)
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.red[50],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.red[200]!, width: 1),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.lock, color: Colors.red[600], size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Preliminary Rounds Locked - Playoffs Started',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.red[700],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
         // Matches List
         Expanded(
           child: ListView.builder(
@@ -3455,7 +3868,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                                         : null,
                                 icon: const Icon(Icons.sports_score, size: 18),
                                 label: Text(
-                                  _selectedMatch != null &&
+                                  _playoffsStarted
+                                      ? 'Playoffs Started'
+                                      : _selectedMatch != null &&
                                           _isSelectedMatchInCurrentTab()
                                       ? (_hasScoresForSelectedMatch()
                                           ? 'Edit Scoring'
@@ -3593,35 +4008,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
     return Column(
       children: [
-        // Quarter Finals Locked Error Banner (when SF scores exist)
-        if (_hasSemiFinalsScores && _authService.canScore)
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.red[50],
-              border: Border.all(color: Colors.red[200]!),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.lock, color: Colors.red[600], size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Quarter Finals Locked, Semi Finals Started',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.red[700],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
         // Quarter Finals matches
         Expanded(
           child:
@@ -3631,7 +4017,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     padding: const EdgeInsets.all(16),
                     itemCount: quarterFinals.length,
                     itemBuilder: (context, index) {
-                      return _buildMatchCard(quarterFinals[index]);
+                      // Always use QF specific scoreboard that adapts to format
+                      return _buildQuarterFinalsScoreboard(
+                        quarterFinals[index],
+                        index + 1,
+                      );
                     },
                   ),
         ),
@@ -3667,6 +4057,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         label: Text(
                           !_authService.canScore
                               ? 'Access Restricted'
+                              : _hasSemiFinalsScores
+                              ? 'Semi Finals Started'
                               : _selectedMatch != null &&
                                   _isSelectedMatchInCurrentTab()
                               ? (_hasScoresForSelectedMatch()
@@ -3745,35 +4137,6 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
     return Column(
       children: [
-        // Finals Locked Error Banner (when Finals scores exist)
-        if (_hasFinalsScores && _authService.canScore)
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.red[50],
-              border: Border.all(color: Colors.red[200]!),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.lock, color: Colors.red[600], size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Semi Finals Locked, Finals Started',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.red[700],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
         // Semi Finals matches
         Expanded(
           child:
@@ -3930,53 +4293,110 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           Container(
             width: double.infinity,
             margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.yellow[400]!, Colors.orange[400]!],
+                colors: [
+                  const Color(0xFF1A1A2E), // Deep purple
+                  const Color(0xFF16213E), // Dark blue-purple
+                  const Color(0xFF0F3460), // Ocean blue
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.orange.withOpacity(0.3),
-                  blurRadius: 10,
+                  color: Colors.purple.withOpacity(0.4),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 8),
+                ),
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.3),
+                  blurRadius: 15,
+                  spreadRadius: 1,
                   offset: const Offset(0, 5),
                 ),
               ],
             ),
             child: Column(
               children: [
-                Icon(Icons.emoji_events, size: 48, color: Colors.white),
-                const SizedBox(height: 12),
-                Text(
-                  'CHAMPION',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: 2,
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.amberAccent.withOpacity(0.5),
+                      width: 3,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.emoji_events,
+                    size: 56,
+                    color: Colors.amberAccent,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 20),
                 Text(
-                  _getFinalsWinner()!,
+                  '🏆 CHAMPION 🏆',
                   style: TextStyle(
-                    fontSize: 28,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: 1,
+                    color: Colors.amberAccent,
+                    letterSpacing: 3,
+                    shadows: [
+                      Shadow(
+                        color: Colors.amberAccent.withOpacity(0.5),
+                        blurRadius: 10,
+                      ),
+                    ],
                   ),
-                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Winter Pickleball Tournament 2025',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white.withOpacity(0.9),
-                    fontWeight: FontWeight.w500,
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.2),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    _getFinalsWinner()!,
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 1,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    widget.tournamentTitle,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.9),
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 1,
+                    ),
                   ),
                 ),
               ],
@@ -4020,6 +4440,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                               ? (_hasScoresForSelectedMatch()
                                   ? 'Edit Scoring'
                                   : 'Start Scoring')
+                              : _getFinalsWinner() != null
+                              ? 'Finals Complete'
                               : 'Select a Match',
                         ),
                         style: ElevatedButton.styleFrom(
@@ -4642,12 +5064,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 class SemiFinalsScoringScreen extends StatefulWidget {
   final Match match;
   final Map<String, dynamic>? initialScores;
+  final String matchFormat; // '1game' or 'bestof3'
   final Function(Map<String, dynamic>) onScoresUpdated;
 
   const SemiFinalsScoringScreen({
     Key? key,
     required this.match,
     this.initialScores,
+    required this.matchFormat,
     required this.onScoresUpdated,
   }) : super(key: key);
 
@@ -4670,7 +5094,9 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.match.day} - Best of 3'),
+        title: Text(
+          '${widget.match.day} - ${widget.matchFormat == '1game' ? '1 Game' : 'Best of 3'}',
+        ),
         backgroundColor: Colors.grey[900],
         foregroundColor: Colors.white,
         leading: IconButton(
@@ -4705,57 +5131,27 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
                   ? Center(child: CircularProgressIndicator())
                   : Column(
                     children: [
-                      // Match Info Header
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[900],
-                          borderRadius: const BorderRadius.only(
-                            bottomLeft: Radius.circular(20),
-                            bottomRight: Radius.circular(20),
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              '${widget.match.team1} vs ${widget.match.team2}',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Best of 3 Games',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.blue[300],
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
                       // Games Section
                       Expanded(
                         child: Padding(
                           padding: const EdgeInsets.all(20),
                           child: Column(
                             children: [
-                              // Game 1
+                              // Game 1 (always shown)
                               _buildGameCard(1),
                               const SizedBox(height: 16),
 
-                              // Game 2
-                              _buildGameCard(2),
-                              const SizedBox(height: 16),
+                              // Game 2 (only show for best of 3)
+                              if (widget.matchFormat == 'bestof3') ...[
+                                _buildGameCard(2),
+                                const SizedBox(height: 16),
+                              ],
 
-                              // Game 3
-                              _buildGameCard(3),
-                              const SizedBox(height: 24),
+                              // Game 3 (only show for best of 3)
+                              if (widget.matchFormat == 'bestof3') ...[
+                                _buildGameCard(3),
+                                const SizedBox(height: 24),
+                              ],
 
                               // Winner Display
                               _buildWinnerDisplay(),
@@ -4777,25 +5173,87 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
     final team1Score = _scores[team1Key] ?? 0;
     final team2Score = _scores[team2Key] ?? 0;
 
-    // Check if Game 3 should be disabled (only enable if games 1 and 2 are tied 1-1)
-    bool isGame3Disabled = false;
-    if (gameNumber == 3) {
-      // Return early if team IDs are null (TBA placeholders)
-      if (widget.match.team1Id == null || widget.match.team2Id == null) {
-        isGame3Disabled = true;
-      } else {
-        final team1GamesWon = _getGamesWon(widget.match.team1Id!);
-        final team2GamesWon = _getGamesWon(widget.match.team2Id!);
-        isGame3Disabled = !(team1GamesWon == 1 && team2GamesWon == 1);
-      }
-    }
+    // For Game 1 and 2, always return the StatefulBuilder
+    // For Game 3, calculate disabled state inside StatefulBuilder
 
     return StatefulBuilder(
-      builder: (context, setState) {
+      builder: (context, setBuilderState) {
+        // Check if there were scores before - to detect when Game 3 goes from enabled to disabled
+        bool hadGame3Scores = false;
+        if (gameNumber == 3 &&
+            widget.match.team1Id != null &&
+            widget.match.team2Id != null) {
+          final team1Key = '${widget.match.team1Id}_game3';
+          final team2Key = '${widget.match.team2Id}_game3';
+          hadGame3Scores =
+              (_scores[team1Key] ?? 0) > 0 || (_scores[team2Key] ?? 0) > 0;
+        }
+
+        // Recalculate Game 3 disabled state inside StatefulBuilder
+        bool currentIsGame3Disabled = false;
+        if (gameNumber == 3) {
+          if (widget.match.team1Id == null || widget.match.team2Id == null) {
+            currentIsGame3Disabled = true;
+          } else {
+            final team1Key = '${widget.match.team1Id}_game';
+            final team2Key = '${widget.match.team2Id}_game';
+
+            final game1Team1 = _scores['${team1Key}1'] ?? 0;
+            final game1Team2 = _scores['${team2Key}1'] ?? 0;
+            final game2Team1 = _scores['${team1Key}2'] ?? 0;
+            final game2Team2 = _scores['${team2Key}2'] ?? 0;
+
+            // Get the minimum score required based on match format
+            final minScore = widget.matchFormat == '1game' ? 11 : 15;
+
+            bool game1Complete =
+                (game1Team1 >= minScore && game1Team1 >= game1Team2 + 2) ||
+                (game1Team2 >= minScore && game1Team2 >= game1Team1 + 2);
+            bool game2Complete =
+                (game2Team1 >= minScore && game2Team1 >= game2Team2 + 2) ||
+                (game2Team2 >= minScore && game2Team2 >= game2Team1 + 2);
+
+            if (game1Complete && game2Complete) {
+              int team1GamesWon = 0;
+              int team2GamesWon = 0;
+
+              if (game1Team1 >= minScore && game1Team1 >= game1Team2 + 2)
+                team1GamesWon++;
+              else if (game1Team2 >= minScore && game1Team2 >= game1Team1 + 2)
+                team2GamesWon++;
+
+              if (game2Team1 >= minScore && game2Team1 >= game2Team2 + 2)
+                team1GamesWon++;
+              else if (game2Team2 >= minScore && game2Team2 >= game2Team1 + 2)
+                team2GamesWon++;
+
+              currentIsGame3Disabled = team1GamesWon == 2 || team2GamesWon == 2;
+            } else {
+              currentIsGame3Disabled = true;
+            }
+
+            // Only clear Game 3 scores if it has scores and just became disabled
+            if (currentIsGame3Disabled &&
+                hadGame3Scores &&
+                widget.match.team1Id != null &&
+                widget.match.team2Id != null) {
+              _scores[team1Key + '3'] = 0;
+              _scores[team2Key + '3'] = 0;
+              // Trigger rebuild to show cleared scores
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                setBuilderState(() {});
+              });
+            }
+          }
+        }
+
+        // Use current state for display
+        final displayIsDisabled = currentIsGame3Disabled;
+
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isGame3Disabled ? Colors.grey[100] : Colors.white,
+            color: displayIsDisabled ? Colors.grey[100] : Colors.white,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
@@ -4808,11 +5266,12 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
           child: Column(
             children: [
               Text(
-                'Game $gameNumber${isGame3Disabled ? ' (TBD)' : ''}',
+                'Game $gameNumber${displayIsDisabled ? ' (TBD)' : ''}',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: isGame3Disabled ? Colors.grey[600] : Colors.grey[800],
+                  color:
+                      displayIsDisabled ? Colors.grey[600] : Colors.grey[800],
                 ),
               ),
               const SizedBox(height: 16),
@@ -4837,7 +5296,7 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
                           children: [
                             IconButton(
                               onPressed:
-                                  isGame3Disabled || team1Score <= 0
+                                  displayIsDisabled || team1Score <= 0
                                       ? null
                                       : () => _updateScore(
                                         team1Key,
@@ -4845,7 +5304,7 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
                                       ),
                               icon: Icon(Icons.remove_circle_outline),
                               color:
-                                  isGame3Disabled || team1Score <= 0
+                                  displayIsDisabled || team1Score <= 0
                                       ? Colors.grey[400]
                                       : Colors.red[400],
                             ),
@@ -4870,7 +5329,7 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
                             ),
                             IconButton(
                               onPressed:
-                                  isGame3Disabled || team1Score >= 15
+                                  displayIsDisabled || team1Score >= 20
                                       ? null
                                       : () => _updateScore(
                                         team1Key,
@@ -4878,7 +5337,7 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
                                       ),
                               icon: Icon(Icons.add_circle_outline),
                               color:
-                                  isGame3Disabled || team1Score >= 15
+                                  displayIsDisabled || team1Score >= 20
                                       ? Colors.grey[400]
                                       : Colors.green[400],
                             ),
@@ -4919,7 +5378,7 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
                           children: [
                             IconButton(
                               onPressed:
-                                  isGame3Disabled || team2Score <= 0
+                                  displayIsDisabled || team2Score <= 0
                                       ? null
                                       : () => _updateScore(
                                         team2Key,
@@ -4927,7 +5386,7 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
                                       ),
                               icon: Icon(Icons.remove_circle_outline),
                               color:
-                                  isGame3Disabled || team2Score <= 0
+                                  displayIsDisabled || team2Score <= 0
                                       ? Colors.grey[400]
                                       : Colors.red[400],
                             ),
@@ -4952,7 +5411,7 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
                             ),
                             IconButton(
                               onPressed:
-                                  isGame3Disabled || team2Score >= 15
+                                  displayIsDisabled || team2Score >= 20
                                       ? null
                                       : () => _updateScore(
                                         team2Key,
@@ -4960,7 +5419,7 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
                                       ),
                               icon: Icon(Icons.add_circle_outline),
                               color:
-                                  isGame3Disabled || team2Score >= 15
+                                  displayIsDisabled || team2Score >= 20
                                       ? Colors.grey[400]
                                       : Colors.green[400],
                             ),
@@ -5023,6 +5482,8 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
 
   int _getGamesWon(String teamId) {
     int gamesWon = 0;
+    final minScore = widget.matchFormat == '1game' ? 11 : 15;
+
     for (int i = 1; i <= 3; i++) {
       final teamKey = '${teamId}_game$i';
       final opponentKey =
@@ -5033,8 +5494,9 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
       final teamScore = _scores[teamKey] ?? 0;
       final opponentScore = _scores[opponentKey] ?? 0;
 
-      // Win by 2 rule: must reach exactly 15 and win by at least 2 points
-      if (teamScore == 15 && teamScore >= opponentScore + 2) {
+      // Win by 2 rule: must reach at least minScore and win by at least 2 points
+      // Also handle extended play (11-11, 15-15, 16-16, etc.)
+      if (teamScore >= minScore && teamScore >= opponentScore + 2) {
         gamesWon++;
       }
     }
@@ -5045,6 +5507,9 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
     // Check if any game has incomplete scores (started but not finished)
     bool hasIncompleteScore = false;
 
+    // Get the minimum score required based on match format
+    final minScore = widget.matchFormat == '1game' ? 11 : 15;
+
     for (int i = 1; i <= 3; i++) {
       final team1Key = '${widget.match.team1Id}_game$i';
       final team2Key = '${widget.match.team2Id}_game$i';
@@ -5053,12 +5518,12 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
       final team2Score = _scores[team2Key] ?? 0;
 
       if (team1Score > 0 || team2Score > 0) {
-        // Check if this game has a winner using exact winning score rule
+        // Check if this game has a winner
         bool hasWinner = false;
 
-        if (team1Score == 15 && team1Score >= team2Score + 2) {
+        if (team1Score >= minScore && team1Score >= team2Score + 2) {
           hasWinner = true;
-        } else if (team2Score == 15 && team2Score >= team1Score + 2) {
+        } else if (team2Score >= minScore && team2Score >= team1Score + 2) {
           hasWinner = true;
         }
 
@@ -5106,11 +5571,16 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
   }
 
   void _updateScore(String key, int newScore) {
-    // Enforce max score of 15 for SF and Finals (already clamped)
-    _scores[key] = newScore.clamp(0, 15);
+    // Get the base winning score based on match format
+    final baseWinScore = widget.matchFormat == '1game' ? 11 : 15;
+    // If both teams reach the winning score, they need to win by 2
+    // So one team can go above to win (e.g., 12-11, 16-15, 17-15, etc.)
+    // Set max at base+9 to allow extended play (20 for SF/Finals, 20 for QF best of 3)
+    final maxScore = baseWinScore + 9; // Allows for extended play
+    _scores[key] = newScore.clamp(0, maxScore);
 
     // Prevent adding more if already at max
-    if (newScore > 15) {
+    if (newScore > maxScore) {
       return;
     }
 
@@ -5119,6 +5589,98 @@ class _SemiFinalsScoringScreenState extends State<SemiFinalsScoringScreen> {
   }
 
   Future<void> _saveScores() async {
+    // Check if all scores are 0-0 (allowing reset)
+    bool allScoresAreZero = true;
+    for (int i = 1; i <= 3; i++) {
+      final team1Key = '${widget.match.team1Id}_game$i';
+      final team2Key = '${widget.match.team2Id}_game$i';
+      final team1Score = _scores[team1Key] ?? 0;
+      final team2Score = _scores[team2Key] ?? 0;
+      if (team1Score > 0 || team2Score > 0) {
+        allScoresAreZero = false;
+        break;
+      }
+    }
+
+    // If all scores are 0, allow saving (reset scenario)
+    if (allScoresAreZero) {
+      setState(() {
+        _isLoading = true;
+      });
+      try {
+        await widget.onScoresUpdated(_scores);
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error saving scores: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+      return;
+    }
+
+    // Get minimum score based on match format
+    final minScore = widget.matchFormat == '1game' ? 11 : 15;
+
+    // Validate that each game with scores has a winner
+    bool allGamesValid = true;
+    for (int i = 1; i <= 3; i++) {
+      final team1Key = '${widget.match.team1Id}_game$i';
+      final team2Key = '${widget.match.team2Id}_game$i';
+
+      final team1Score = _scores[team1Key] ?? 0;
+      final team2Score = _scores[team2Key] ?? 0;
+
+      // If any scores are entered, there must be a winner
+      if (team1Score > 0 || team2Score > 0) {
+        bool hasWinner = false;
+
+        // Check if team 1 won (at least minScore and win by 2)
+        if (team1Score >= minScore && team1Score >= team2Score + 2) {
+          hasWinner = true;
+        }
+        // Check if team 2 won (at least minScore and win by 2)
+        else if (team2Score >= minScore && team2Score >= team1Score + 2) {
+          hasWinner = true;
+        }
+
+        if (!hasWinner) {
+          allGamesValid = false;
+          break;
+        }
+      }
+    }
+
+    // If not all games are valid, show error
+    if (!allGamesValid) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Cannot save: Each game must have a winner ($minScore points, win by 2)',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() {
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
