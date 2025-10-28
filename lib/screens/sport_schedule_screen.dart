@@ -499,20 +499,21 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
         // Check if ANY QF match has non-zero scores - if yes, settings were already set globally
         bool hasAnyQFScores = false;
-        for (var entry in _playoffScores.entries) {
-          final scores = entry.value;
-          if (scores.values.any((value) => value > 0)) {
+        final quarterFinals = _getQuarterFinals();
+        for (var qfMatch in quarterFinals) {
+          final qfMatchScores = _playoffScores[_getPlayoffMatchKey(qfMatch.id)];
+          if (qfMatchScores != null &&
+              qfMatchScores.values.any((value) => value > 0)) {
             hasAnyQFScores = true;
             break;
           }
         }
 
-        // If settings are already saved for QF (any QF match has scores) AND this specific match has scores,
+        // If settings are already saved for QF (any QF match has scores) OR this specific match has scores,
         // skip the Game Settings screen
         if (existingFormat != null &&
             existingScore != null &&
-            hasAnyQFScores &&
-            hasThisMatchScores) {
+            (hasAnyQFScores || hasThisMatchScores)) {
           // Navigate directly to scoring screen with saved settings
           Navigator.push(
             context,
@@ -739,7 +740,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         }
 
         // Show Game Settings dialog if settings not already saved
-        _showGameSettingsDialog();
+        _showGameSettingsDialog(isFinals: false);
         return;
       }
 
@@ -1011,7 +1012,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         }
 
         // Show Game Settings dialog if settings not already saved
-        _showGameSettingsDialog();
+        _showGameSettingsDialog(isFinals: _selectedMatch!.day == 'Finals');
         return;
       }
 
@@ -1187,6 +1188,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         scores,
                       );
                     }
+                    // Clear standings cache to force recalculation
+                    _cachedStandings = null;
+                    _lastStandingsCacheKey = null;
                   });
 
                   print('DEBUG: After save, checking _matchScores');
@@ -1764,7 +1768,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   }
 
   // Show Game Settings Dialog
-  void _showGameSettingsDialog() {
+  void _showGameSettingsDialog({bool isFinals = false}) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -1904,34 +1908,36 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     ],
                   ),
                   const SizedBox(height: 16),
-                  // Info tooltip
-                  Container(
-                    padding: EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue[200]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: Colors.blue[700],
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'These settings apply to all games in this round.',
-                            style: TextStyle(
-                              color: Colors.blue[900],
-                              fontSize: 13,
+                  // Info tooltip - hide for Finals
+                  if (!isFinals) ...[
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue[200]!),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.blue[700],
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'These settings apply to all games in this round.',
+                              style: TextStyle(
+                                color: Colors.blue[900],
+                                fontSize: 13,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
               actions: [
@@ -2781,7 +2787,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
     // Create cache key based on teams, match scores, and current division
     final teamsKey = filteredTeams.map((t) => t.id).join('_');
-    final scoresKey = _matchScores.keys.join('_');
+    // Only include scores for the current division in the cache key
+    final divisionScores = _getCurrentDivisionScores();
+    final scoresKey = divisionScores.keys.join('_');
     final cacheKey = '${teamsKey}_${currentDivision}_$scoresKey';
 
     // Return cached standings if available and still valid
@@ -3139,6 +3147,13 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Reset bottom navigation to Games tab when screen is rebuilt
+    // This ensures playoffs nav is hidden until user explicitly presses "Go to Playoffs"
+    if (_bottomNavIndex == 1) {
+      setState(() {
+        _bottomNavIndex = 0;
+      });
+    }
     // Don't reload teams and scores here as it can cause data loss
     // The initState method already handles initial loading
     // This prevents clearing scores when navigating back and forth
@@ -3438,6 +3453,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       _saveScores().catchError((e) {
         print('Error saving scores on app lifecycle change: $e');
       });
+    } else if (state == AppLifecycleState.resumed) {
+      // Reset bottom navigation to Games tab when app resumes
+      // This ensures playoffs nav is hidden until user explicitly presses "Go to Playoffs"
+      if (_bottomNavIndex == 1) {
+        setState(() {
+          _bottomNavIndex = 0;
+        });
+      }
     }
   }
 
@@ -3530,7 +3553,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           );
         },
       ),
-      bottomNavigationBar: _buildPlayoffsBottomNav(),
+      bottomNavigationBar:
+          _bottomNavIndex == 1 ? _buildPlayoffsBottomNav() : null,
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -5468,7 +5492,16 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   // Check if there are no scores entered for the current division
   bool _hasNoScoresForCurrentDivision() {
-    for (var match in _preliminaryMatches) {
+    final currentDivision = _selectedDivision ?? 'all';
+    final preliminaryMatches = _getPreliminaryMatchesDirect();
+
+    for (var match in preliminaryMatches) {
+      // Only check matches for the current division
+      if (!match.id.startsWith('${currentDivision}_') &&
+          !(currentDivision == 'all' && !match.id.contains('_'))) {
+        continue;
+      }
+
       if (match.team2 == 'TBA') continue;
       final scores = _matchScores[match.id];
       if (scores != null && scores.isNotEmpty) {
@@ -6004,6 +6037,19 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           // Load playoff state for the new division first
                           await _loadScores();
 
+                          // If user is on Playoffs tab and new division hasn't started playoffs,
+                          // redirect them back to Games tab
+                          if (_bottomNavIndex == 1) {
+                            final newDivisionPlayoffsStarted =
+                                _playoffsStartedByDivision[newValue ?? ''] ??
+                                false;
+                            if (!newDivisionPlayoffsStarted) {
+                              setState(() {
+                                _bottomNavIndex = 0; // Switch back to Games tab
+                              });
+                            }
+                          }
+
                           // Check if we should show the preliminary settings dialog
                           // Only show if division actually changed, we have teams, and dialog hasn't been shown for this division
                           if (_previousDivision != newValue &&
@@ -6372,6 +6418,19 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
                         // Load playoff state for the new division first
                         await _loadScores();
+
+                        // If user is on Playoffs tab and new division hasn't started playoffs,
+                        // redirect them back to Games tab
+                        if (_bottomNavIndex == 1) {
+                          final newDivisionPlayoffsStarted =
+                              _playoffsStartedByDivision[newValue ?? ''] ??
+                              false;
+                          if (!newDivisionPlayoffsStarted) {
+                            setState(() {
+                              _bottomNavIndex = 0; // Switch back to Games tab
+                            });
+                          }
+                        }
                       },
                     ),
                   ),
