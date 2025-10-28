@@ -13,6 +13,127 @@ class ScoreService {
   static const String _finalsScoresKey = 'finals_scores';
   static const String _playoffsStartedKey = 'playoffs_started';
 
+  // Save preliminary settings for a specific division
+  Future<void> savePreliminarySettingsForDivision(
+    String division,
+    int gamesPerTeam,
+    int winningScore,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'preliminary_settings_$division';
+      final settings = {
+        'gamesPerTeam': gamesPerTeam,
+        'winningScore': winningScore,
+      };
+      final settingsJson = json.encode(settings);
+      await prefs.setString(key, settingsJson);
+      print(
+        'Saved preliminary settings for division $division: gamesPerTeam=$gamesPerTeam, winningScore=$winningScore',
+      );
+    } catch (e) {
+      print('Error saving preliminary settings for division $division: $e');
+    }
+  }
+
+  // Load preliminary settings for a specific division
+  Future<Map<String, int>> loadPreliminarySettingsForDivision(
+    String division,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'preliminary_settings_$division';
+      final settingsJson = prefs.getString(key);
+
+      if (settingsJson != null) {
+        final Map<String, dynamic> decoded = json.decode(settingsJson);
+        final settings = {
+          'gamesPerTeam': (decoded['gamesPerTeam'] ?? 1) as int,
+          'winningScore': (decoded['winningScore'] ?? 11) as int,
+        };
+        print('Loaded preliminary settings for division $division: $settings');
+        return settings;
+      }
+    } catch (e) {
+      print('Error loading preliminary settings for division $division: $e');
+    }
+    return {'gamesPerTeam': 1, 'winningScore': 11}; // Default values
+  }
+
+  // Save selected division for a sport
+  Future<void> saveSelectedDivision(String sportName, String division) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'selected_division_$sportName';
+      await prefs.setString(key, division);
+      print('Saved selected division for $sportName: $division');
+    } catch (e) {
+      print('Error saving selected division for $sportName: $e');
+    }
+  }
+
+  // Load selected division for a sport
+  Future<String?> loadSelectedDivision(String sportName) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'selected_division_$sportName';
+      final division = prefs.getString(key);
+      print('Loaded selected division for $sportName: $division');
+      return division;
+    } catch (e) {
+      print('Error loading selected division for $sportName: $e');
+      return null;
+    }
+  }
+
+  // Save preliminary scores for a specific division
+  Future<void> savePreliminaryScoresForDivision(
+    String division,
+    Map<String, Map<String, int>> scores,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final divisionKey = 'preliminary_scores_$division';
+      final scoresJson = json.encode(scores);
+      await prefs.setString(divisionKey, scoresJson);
+      print('Saved preliminary scores for division $division: $scores');
+    } catch (e) {
+      print('Error saving preliminary scores for division $division: $e');
+    }
+  }
+
+  // Load preliminary scores for a specific division
+  Future<Map<String, Map<String, int>>> loadPreliminaryScoresForDivision(
+    String division,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final divisionKey = 'preliminary_scores_$division';
+      final scoresJson = prefs.getString(divisionKey);
+
+      if (scoresJson != null) {
+        final Map<String, dynamic> decoded = json.decode(scoresJson);
+        final Map<String, Map<String, int>> scores = {};
+
+        decoded.forEach((matchId, teamScores) {
+          if (teamScores is Map<String, dynamic>) {
+            final Map<String, int> convertedScores = {};
+            teamScores.forEach((teamId, score) {
+              convertedScores[teamId] = score is int ? score : 0;
+            });
+            scores[matchId] = convertedScores;
+          }
+        });
+
+        print('Loaded preliminary scores for division $division: $scores');
+        return scores;
+      }
+    } catch (e) {
+      print('Error loading preliminary scores for division $division: $e');
+    }
+    return {};
+  }
+
   // Save preliminary scores to SharedPreferences
   Future<void> savePreliminaryScores(
     Map<String, Map<String, int>> scores,
@@ -154,6 +275,55 @@ class ScoreService {
     }
   }
 
+  // Save Quarter Finals scores for a specific division
+  Future<void> saveQuarterFinalsScoresForDivision(
+    String division,
+    Map<String, Map<String, int>> scores,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final scoresJson = json.encode(scores);
+      final key = 'quarter_finals_scores_$division';
+      await prefs.setString(key, scoresJson);
+      print('Saved quarter finals scores for division $division: $scores');
+    } catch (e) {
+      print('Error saving quarter finals scores for division $division: $e');
+    }
+  }
+
+  // Load Quarter Finals scores for a specific division
+  Future<Map<String, Map<String, int>>> loadQuarterFinalsScoresForDivision(
+    String division,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'quarter_finals_scores_$division';
+      final scoresJson = prefs.getString(key);
+
+      if (scoresJson != null) {
+        final Map<String, dynamic> decoded = json.decode(scoresJson);
+        final Map<String, Map<String, int>> scores = {};
+
+        decoded.forEach((matchId, teamScores) {
+          if (teamScores is Map<String, dynamic>) {
+            final Map<String, int> convertedScores = {};
+            teamScores.forEach((teamId, score) {
+              convertedScores[teamId] = score is int ? score : 0;
+            });
+            scores[matchId] = convertedScores;
+          }
+        });
+
+        print('Loaded quarter finals scores for division $division: $scores');
+        return scores;
+      }
+    } catch (e) {
+      print('Error loading quarter finals scores for division $division: $e');
+    }
+
+    return {};
+  }
+
   // Load Semi Finals scores
   Future<Map<String, Map<String, int>>> loadSemiFinalsScores() async {
     try {
@@ -219,6 +389,104 @@ class ScoreService {
       }
     } catch (e) {
       print('Error loading finals scores: $e');
+    }
+
+    return {};
+  }
+
+  // Save Semi Finals scores for a specific division
+  Future<void> saveSemiFinalsScoresForDivision(
+    String division,
+    Map<String, Map<String, int>> scores,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final scoresJson = json.encode(scores);
+      final key = 'semi_finals_scores_$division';
+      await prefs.setString(key, scoresJson);
+      print('Saved semi finals scores for division $division: $scores');
+    } catch (e) {
+      print('Error saving semi finals scores for division $division: $e');
+    }
+  }
+
+  // Load Semi Finals scores for a specific division
+  Future<Map<String, Map<String, int>>> loadSemiFinalsScoresForDivision(
+    String division,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'semi_finals_scores_$division';
+      final scoresJson = prefs.getString(key);
+
+      if (scoresJson != null) {
+        final Map<String, dynamic> decoded = json.decode(scoresJson);
+        final Map<String, Map<String, int>> scores = {};
+
+        decoded.forEach((matchId, teamScores) {
+          if (teamScores is Map<String, dynamic>) {
+            final Map<String, int> convertedScores = {};
+            teamScores.forEach((teamId, score) {
+              convertedScores[teamId] = score is int ? score : 0;
+            });
+            scores[matchId] = convertedScores;
+          }
+        });
+
+        print('Loaded semi finals scores for division $division: $scores');
+        return scores;
+      }
+    } catch (e) {
+      print('Error loading semi finals scores for division $division: $e');
+    }
+
+    return {};
+  }
+
+  // Save Finals scores for a specific division
+  Future<void> saveFinalsScoresForDivision(
+    String division,
+    Map<String, Map<String, int>> scores,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final scoresJson = json.encode(scores);
+      final key = 'finals_scores_$division';
+      await prefs.setString(key, scoresJson);
+      print('Saved finals scores for division $division: $scores');
+    } catch (e) {
+      print('Error saving finals scores for division $division: $e');
+    }
+  }
+
+  // Load Finals scores for a specific division
+  Future<Map<String, Map<String, int>>> loadFinalsScoresForDivision(
+    String division,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'finals_scores_$division';
+      final scoresJson = prefs.getString(key);
+
+      if (scoresJson != null) {
+        final Map<String, dynamic> decoded = json.decode(scoresJson);
+        final Map<String, Map<String, int>> scores = {};
+
+        decoded.forEach((matchId, teamScores) {
+          if (teamScores is Map<String, dynamic>) {
+            final Map<String, int> convertedScores = {};
+            teamScores.forEach((teamId, score) {
+              convertedScores[teamId] = score is int ? score : 0;
+            });
+            scores[matchId] = convertedScores;
+          }
+        });
+
+        print('Loaded finals scores for division $division: $scores');
+        return scores;
+      }
+    } catch (e) {
+      print('Error loading finals scores for division $division: $e');
     }
 
     return {};

@@ -26,14 +26,32 @@ class MyTeamScreen extends StatefulWidget {
   State<MyTeamScreen> createState() => _MyTeamScreenState();
 }
 
-class _MyTeamScreenState extends State<MyTeamScreen> {
+class _MyTeamScreenState extends State<MyTeamScreen>
+    with SingleTickerProviderStateMixin {
   final _authService = AuthService();
+  late TabController _tabController;
+
+  // Filter states
+  String? _selectedBasketballDivision;
+  String? _selectedPickleballDivision;
+  String? _selectedDuprRating;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    // Add listener to update counts when tab changes
+    _tabController.addListener(() {
+      setState(() {});
+    });
     // Load teams when screen initializes
     _loadTeams();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadTeams() async {
@@ -62,16 +80,100 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
     return teams;
   }
 
+  // Get filtered basketball teams based on selected division
+  List<Team> get _filteredBasketballTeams {
+    final teams = widget.teamService.teams;
+    if (_selectedBasketballDivision == null) return teams;
+    return teams
+        .where((team) => team.division == _selectedBasketballDivision)
+        .toList();
+  }
+
+  // Get filtered pickleball teams based on selected division and DURP rating
+  List<PickleballTeam> get _filteredPickleballTeams {
+    final teams = widget.pickleballTeamService.teams;
+    var filteredTeams = teams;
+
+    // Filter by division
+    if (_selectedPickleballDivision != null) {
+      filteredTeams =
+          filteredTeams
+              .where((team) => team.division == _selectedPickleballDivision)
+              .toList();
+    }
+
+    // Filter by DURP rating
+    if (_selectedDuprRating != null) {
+      filteredTeams =
+          filteredTeams.where((team) {
+            return team.players.any(
+              (player) => player.duprRating == _selectedDuprRating,
+            );
+          }).toList();
+    }
+
+    return filteredTeams;
+  }
+
+  // Get available basketball divisions
+  List<String> get _availableBasketballDivisions {
+    final divisions =
+        widget.teamService.teams.map((team) => team.division).toSet().toList();
+    divisions.sort();
+    return divisions;
+  }
+
+  // Get available pickleball divisions
+  List<String> get _availablePickleballDivisions {
+    final divisions =
+        widget.pickleballTeamService.teams
+            .map((team) => team.division)
+            .toSet()
+            .toList();
+    divisions.sort();
+    return divisions;
+  }
+
+  // Get available DURP ratings
+  List<String> get _availableDuprRatings {
+    final ratings = <String>{};
+    for (final team in widget.pickleballTeamService.teams) {
+      for (final player in team.players) {
+        ratings.add(player.duprRating);
+      }
+    }
+    final ratingsList = ratings.toList();
+    ratingsList.sort();
+    return ratingsList;
+  }
+
   int get _totalTeams => _basketballTeams.length + _pickleballTeams.length;
-  int get _totalPlayers =>
-      _basketballTeams.fold(
+
+  // Get filtered teams count based on current tab
+  int get _filteredTeamsCount {
+    final tabIndex = _tabController.index;
+    if (tabIndex == 0) {
+      return _filteredBasketballTeams.length;
+    } else {
+      return _filteredPickleballTeams.length;
+    }
+  }
+
+  // Get filtered players count based on current tab
+  int get _filteredPlayersCount {
+    final tabIndex = _tabController.index;
+    if (tabIndex == 0) {
+      return _filteredBasketballTeams.fold(
         0,
         (sum, team) => sum + team.players.length + 1,
-      ) + // +1 for captain
-      _pickleballTeams.fold(
+      );
+    } else {
+      return _filteredPickleballTeams.fold(
         0,
         (sum, team) => sum + team.players.length + 1,
-      ); // +1 for captain
+      );
+    }
+  }
 
   void _navigateToTeamDetail(Team team) {
     Navigator.push(
@@ -234,12 +336,12 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
               // Header
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: const Color(0xFF2196F3),
                   borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(30),
-                    bottomRight: Radius.circular(30),
+                    bottomLeft: Radius.circular(15),
+                    bottomRight: Radius.circular(20),
                   ),
                 ),
                 child: Column(
@@ -249,33 +351,34 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
                       children: [
                         CircleAvatar(
                           backgroundColor: Colors.white,
-                          radius: 25,
+                          radius: 15,
                           child: Text(
                             user?.name.substring(0, 1).toUpperCase() ?? 'U',
                             style: TextStyle(
                               color: const Color(0xFF2196F3),
                               fontWeight: FontWeight.bold,
-                              fontSize: 20,
+                              fontSize: 16,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 'Welcome back,',
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(color: Colors.white70),
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 15,
+                                ),
                               ),
                               Text(
                                 user?.name ?? 'User',
-                                style: Theme.of(
-                                  context,
-                                ).textTheme.headlineSmall?.copyWith(
+                                style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
+                                  fontSize: 25,
                                 ),
                               ),
                             ],
@@ -301,13 +404,13 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
                           child: _buildStatCard(
                             'Teams',
-                            '$_totalTeams',
+                            '$_filteredTeamsCount',
                             Icons.sports,
                             const Color(0xFF2196F3),
                           ),
@@ -316,7 +419,7 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
                         Expanded(
                           child: _buildStatCard(
                             'Players',
-                            '$_totalPlayers',
+                            '$_filteredPlayersCount',
                             Icons.people,
                             const Color(0xFF42A5F5),
                           ),
@@ -332,45 +435,40 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
                 child:
                     _totalTeams == 0
                         ? _buildEmptyState()
-                        : SingleChildScrollView(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Basketball Teams Section
-                              if (_basketballTeams.isNotEmpty) ...[
-                                _buildSportSectionHeader(
-                                  'Basketball Teams',
-                                  Icons.sports_basketball,
-                                  const Color(0xFF2196F3),
-                                ),
-                                const SizedBox(height: 12),
-                                ..._basketballTeams.map(
-                                  (team) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    child: _buildBasketballTeamCard(team),
+                        : Column(
+                          children: [
+                            // Tab Bar
+                            Container(
+                              color: Colors.white,
+                              child: TabBar(
+                                controller: _tabController,
+                                labelColor: const Color(0xFF2196F3),
+                                unselectedLabelColor: Colors.grey[600],
+                                indicatorColor: const Color(0xFF2196F3),
+                                indicatorWeight: 3,
+                                tabs: const [
+                                  Tab(
+                                    icon: Icon(Icons.sports_basketball),
+                                    text: 'Basketball',
                                   ),
-                                ),
-                                const SizedBox(height: 24),
-                              ],
-
-                              // Pickleball Teams Section
-                              if (_pickleballTeams.isNotEmpty) ...[
-                                _buildSportSectionHeader(
-                                  'Pickleball Teams',
-                                  Icons.sports_tennis,
-                                  const Color(0xFF4CAF50),
-                                ),
-                                const SizedBox(height: 12),
-                                ..._pickleballTeams.map(
-                                  (team) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    child: _buildPickleballTeamCard(team),
+                                  Tab(
+                                    icon: Icon(Icons.sports_tennis),
+                                    text: 'Pickleball',
                                   ),
-                                ),
-                              ],
-                            ],
-                          ),
+                                ],
+                              ),
+                            ),
+                            // Tab Content
+                            Expanded(
+                              child: TabBarView(
+                                controller: _tabController,
+                                children: [
+                                  _buildBasketballTab(),
+                                  _buildPickleballTab(),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
               ),
             ],
@@ -387,7 +485,7 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
     Color color,
   ) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(12),
@@ -413,6 +511,217 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
     );
   }
 
+  // Build Basketball Tab
+  Widget _buildBasketballTab() {
+    return Column(
+      children: [
+        // Division Filter Dropdown
+        if (_availableBasketballDivisions.isNotEmpty) ...[
+          Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedBasketballDivision,
+                hint: const Text('Filter by Division'),
+                isExpanded: true,
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('All Divisions'),
+                  ),
+                  ..._availableBasketballDivisions.map(
+                    (division) => DropdownMenuItem<String>(
+                      value: division,
+                      child: Text(division),
+                    ),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedBasketballDivision = value;
+                  });
+                },
+              ),
+            ),
+          ),
+        ],
+        // Teams List
+        Expanded(
+          child:
+              _filteredBasketballTeams.isEmpty
+                  ? _buildEmptyStateForSport('Basketball')
+                  : SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children:
+                          _filteredBasketballTeams
+                              .map(
+                                (team) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _buildBasketballTeamCard(team),
+                                ),
+                              )
+                              .toList(),
+                    ),
+                  ),
+        ),
+      ],
+    );
+  }
+
+  // Build Pickleball Tab
+  Widget _buildPickleballTab() {
+    return Column(
+      children: [
+        // Filters Row
+        if (_availablePickleballDivisions.isNotEmpty ||
+            _availableDuprRatings.isNotEmpty) ...[
+          Container(
+            margin: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // Division Filter
+                if (_availablePickleballDivisions.isNotEmpty) ...[
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedPickleballDivision,
+                          hint: const Text('Division'),
+                          isExpanded: true,
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: null,
+                              child: Text('All Divisions'),
+                            ),
+                            ..._availablePickleballDivisions.map(
+                              (division) => DropdownMenuItem<String>(
+                                value: division,
+                                child: Text(division),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedPickleballDivision = value;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                // DURP Rating Filter
+                if (_availableDuprRatings.isNotEmpty) ...[
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedDuprRating,
+                          hint: const Text('DURP Rating'),
+                          isExpanded: true,
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: null,
+                              child: Text('All Ratings'),
+                            ),
+                            ..._availableDuprRatings.map(
+                              (rating) => DropdownMenuItem<String>(
+                                value: rating,
+                                child: Text(rating),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedDuprRating = value;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+        // Teams List
+        Expanded(
+          child:
+              _filteredPickleballTeams.isEmpty
+                  ? _buildEmptyStateForSport('Pickleball')
+                  : SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children:
+                          _filteredPickleballTeams
+                              .map(
+                                (team) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _buildPickleballTeamCard(team),
+                                ),
+                              )
+                              .toList(),
+                    ),
+                  ),
+        ),
+      ],
+    );
+  }
+
+  // Build empty state for specific sport
+  Widget _buildEmptyStateForSport(String sport) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            sport == 'Basketball'
+                ? Icons.sports_basketball
+                : Icons.sports_tennis,
+            size: 64,
+            color: Colors.grey[400],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No $sport teams found',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Try adjusting your filters or register a new team',
+            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -432,40 +741,6 @@ class _MyTeamScreenState extends State<MyTeamScreen> {
           Text(
             'Register your first team to get started',
             style: TextStyle(fontSize: 16, color: Colors.grey[500]),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSportSectionHeader(String title, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            '${title.contains('Basketball') ? _basketballTeams.length : _pickleballTeams.length} team(s)',
-            style: TextStyle(
-              fontSize: 12,
-              color: color.withOpacity(0.7),
-              fontWeight: FontWeight.w500,
-            ),
           ),
         ],
       ),

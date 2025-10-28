@@ -15,6 +15,8 @@ class PlayoffScoringScreen extends StatefulWidget {
   final bool canAdjustSettings;
   final VoidCallback? onBackPressed;
   final bool? isFirstCard;
+  final int?
+  selectedGameNumber; // For preliminary rounds - which game is being scored
 
   const PlayoffScoringScreen({
     Key? key,
@@ -27,6 +29,7 @@ class PlayoffScoringScreen extends StatefulWidget {
     this.canAdjustSettings = true,
     this.onBackPressed,
     this.isFirstCard,
+    this.selectedGameNumber,
   }) : super(key: key);
 
   @override
@@ -47,7 +50,11 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Game Score'),
+        title: Text(
+          widget.selectedGameNumber != null
+              ? 'Game ${widget.selectedGameNumber} Score'
+              : 'Game Score',
+        ),
         backgroundColor: Colors.grey[900],
         foregroundColor: Colors.white,
         leading: IconButton(
@@ -126,16 +133,6 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
 
     return StatefulBuilder(
       builder: (context, setBuilderState) {
-        bool hadGame3Scores = false;
-        if (gameNumber == 3 &&
-            widget.match.team1Id != null &&
-            widget.match.team2Id != null) {
-          final team1Key = '${widget.match.team1Id}_game3';
-          final team2Key = '${widget.match.team2Id}_game3';
-          hadGame3Scores =
-              (_scores[team1Key] ?? 0) > 0 || (_scores[team2Key] ?? 0) > 0;
-        }
-
         bool currentIsGameDisabled = false;
 
         if (gameNumber == 1) {
@@ -191,17 +188,6 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
               currentIsGameDisabled = team1GamesWon == 2 || team2GamesWon == 2;
             } else {
               currentIsGameDisabled = true;
-            }
-
-            if (currentIsGameDisabled &&
-                hadGame3Scores &&
-                widget.match.team1Id != null &&
-                widget.match.team2Id != null) {
-              _scores['${team1Key}3'] = 0;
-              _scores['${team2Key}3'] = 0;
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                setBuilderState(() {});
-              });
             }
           }
         }
@@ -547,8 +533,113 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
   }
 
   void _updateScore(String key, int newScore, int opponentScore) {
+    // Get the game number from the key (e.g., "team1_game2" -> 2)
+    final gameMatch = RegExp(r'_game(\d+)').firstMatch(key);
+    if (gameMatch != null) {
+      final gameNum = gameMatch.group(1)!;
+
+      // Determine the other team's key
+      final otherTeamKey =
+          key.contains(widget.match.team1Id ?? '')
+              ? '${widget.match.team2Id}_game$gameNum'
+              : '${widget.match.team1Id}_game$gameNum';
+      final otherTeamCurrentScore = _scores[otherTeamKey] ?? 0;
+
+      // Get current and new scores
+      final currentScore = _scores[key] ?? 0;
+      final minScore = widget.gameWinningScore;
+
+      // If score is being decreased and opponent already has a winning score (>= minScore),
+      // adjust the opponent's score to maintain exactly 2-point difference
+      if (newScore < currentScore) {
+        // Check if opponent has reached the winning threshold
+        if (otherTeamCurrentScore >= minScore) {
+          // Always maintain exactly 2-point difference, but never below minimum winning score
+          // Opponent's new score = newScore + 2, but not less than minScore
+          final newOpponentScore =
+              (newScore + 2).clamp(minScore, double.infinity).toInt();
+          _scores[otherTeamKey] = newOpponentScore;
+        }
+      }
+    }
+
     _scores[key] = newScore;
+
+    // Check if Game 2 or Game 3 should be reset after this score change
+    _checkAndResetDisabledGames();
+
     setState(() {});
+  }
+
+  void _checkAndResetDisabledGames() {
+    if (widget.match.team1Id == null || widget.match.team2Id == null) return;
+
+    final team1Key = '${widget.match.team1Id}_game';
+    final team2Key = '${widget.match.team2Id}_game';
+    final minScore = widget.gameWinningScore;
+
+    // Check Game 1 completion
+    final game1Team1 = _scores['${team1Key}1'] ?? 0;
+    final game1Team2 = _scores['${team2Key}1'] ?? 0;
+    bool game1Complete =
+        (game1Team1 >= minScore && game1Team1 >= game1Team2 + 2) ||
+        (game1Team2 >= minScore && game1Team2 >= game1Team1 + 2);
+
+    // Reset Game 2 if it becomes disabled
+    if (!game1Complete && widget.matchFormat == 'bestof3') {
+      bool hadGame2Scores =
+          (_scores['${team1Key}2'] ?? 0) > 0 ||
+          (_scores['${team2Key}2'] ?? 0) > 0;
+      if (hadGame2Scores) {
+        _scores['${team1Key}2'] = 0;
+        _scores['${team2Key}2'] = 0;
+      }
+    }
+
+    // Reset Game 3 if it becomes disabled
+    if (widget.matchFormat == 'bestof3') {
+      final game2Team1 = _scores['${team1Key}2'] ?? 0;
+      final game2Team2 = _scores['${team2Key}2'] ?? 0;
+      bool game2Complete =
+          (game2Team1 >= minScore && game2Team1 >= game2Team2 + 2) ||
+          (game2Team2 >= minScore && game2Team2 >= game2Team1 + 2);
+
+      // Game 3 is disabled if Game 1 or Game 2 is not complete
+      bool game3ShouldBeDisabled = !game1Complete || !game2Complete;
+
+      // Also check if match is already decided (2-0 or 0-2)
+      if (game1Complete) {
+        int team1GamesWon = 0;
+        int team2GamesWon = 0;
+
+        if (game1Team1 >= minScore && game1Team1 >= game1Team2 + 2) {
+          team1GamesWon++;
+        } else if (game1Team2 >= minScore && game1Team2 >= game1Team1 + 2) {
+          team2GamesWon++;
+        }
+
+        if (game2Team1 >= minScore && game2Team1 >= game2Team2 + 2) {
+          team1GamesWon++;
+        } else if (game2Team2 >= minScore && game2Team2 >= game2Team1 + 2) {
+          team2GamesWon++;
+        }
+
+        // If match is decided (2-0 or 0-2), Game 3 should also be disabled
+        bool matchDecided = team1GamesWon == 2 || team2GamesWon == 2;
+        game3ShouldBeDisabled = game3ShouldBeDisabled || matchDecided;
+      }
+
+      // Reset Game 3 if it should be disabled and has scores
+      if (game3ShouldBeDisabled) {
+        bool hadGame3Scores =
+            (_scores['${team1Key}3'] ?? 0) > 0 ||
+            (_scores['${team2Key}3'] ?? 0) > 0;
+        if (hadGame3Scores) {
+          _scores['${team1Key}3'] = 0;
+          _scores['${team2Key}3'] = 0;
+        }
+      }
+    }
   }
 
   Future<void> _saveScores() async {
@@ -669,15 +760,49 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
   ) {
     final convertedScores = <String, dynamic>{};
 
-    // Always include both teams, even if one has 0 score
+    // Always include both teams
     if (widget.match.team1Id != null && widget.match.team2Id != null) {
       final team1Id = widget.match.team1Id!;
       final team2Id = widget.match.team2Id!;
-      final team1Key = '${team1Id}_game1';
-      final team2Key = '${team2Id}_game1';
 
-      convertedScores[team1Id] = scores[team1Key] ?? 0;
-      convertedScores[team2Id] = scores[team2Key] ?? 0;
+      // For playoff matches (best-of-3), preserve individual game scores for display
+      // For preliminary matches (1 game), we just use game1 scores
+      if (widget.matchFormat == 'bestof3') {
+        // For Semi Finals and Finals, preserve individual game scores for display
+        // Also add team-level wins for winner determination
+        int team1Wins = 0;
+        int team2Wins = 0;
+
+        for (int i = 1; i <= 3; i++) {
+          final team1Key = '${team1Id}_game$i';
+          final team2Key = '${team2Id}_game$i';
+          final team1Score = scores[team1Key] ?? 0;
+          final team2Score = scores[team2Key] ?? 0;
+
+          // Preserve individual game scores for display
+          convertedScores[team1Key] = team1Score;
+          convertedScores[team2Key] = team2Score;
+
+          // Count wins for winner determination
+          if (team1Score > team2Score) team1Wins++;
+          if (team2Score > team1Score) team2Wins++;
+        }
+
+        // Add team-level wins for winner determination
+        convertedScores[team1Id] = team1Wins;
+        convertedScores[team2Id] = team2Wins;
+      } else {
+        // For 1-game format, use the specific game number if provided
+        final gameNumber = widget.selectedGameNumber ?? 1;
+        final team1Key = '${team1Id}_game$gameNumber';
+        final team2Key = '${team2Id}_game$gameNumber';
+
+        // Store both the game-specific scores and team-level scores
+        convertedScores[team1Key] = scores[team1Key] ?? 0;
+        convertedScores[team2Key] = scores[team2Key] ?? 0;
+        convertedScores[team1Id] = scores[team1Key] ?? 0;
+        convertedScores[team2Id] = scores[team2Key] ?? 0;
+      }
     }
 
     return convertedScores;
