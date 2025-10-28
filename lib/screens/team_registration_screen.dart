@@ -1004,15 +1004,6 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         isPrivate: !isAdmin,
       );
 
-      // Create default event for basketball tournament
-      const event = Event(
-        id: 'basketball_tournament_2025',
-        title: 'Basketball Tournament 2025',
-        date: 'Sat. Nov. 8. 2025',
-        location: 'Masjid Istiqlal',
-        address: '123 Main Street,\nSugar Land, TX\n77498',
-      );
-
       // If editing an existing team, call onSave callback
       if (widget.team != null && widget.onSave != null) {
         widget.onSave!(team);
@@ -1027,27 +1018,37 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
           ),
         );
       } else {
-        // Navigate to process registration screen for new teams
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder:
-                (context) =>
-                    ProcessRegistrationScreen(team: team, event: event),
+        // Save the team directly for management users
+        if (widget.onSave != null) {
+          widget.onSave!(team);
+        }
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.team == null
+                  ? 'Team "${team.name}" created successfully!'
+                  : 'Team "${team.name}" updated successfully!',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
           ),
         );
+
+        // Reset form only if creating new team
+        if (widget.team == null) {
+          _teamNameController.clear();
+          setState(() {
+            _selectedDivision = 'Adult 18+'; // Reset to default
+          });
+        }
 
         // Reset unsaved changes flag
         setState(() {
           _hasUnsavedChanges = false;
           _isSaving = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Team created successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
       }
     }
   }

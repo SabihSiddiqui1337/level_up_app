@@ -457,9 +457,17 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     if (_tabController.index == 1) {
       // Playoffs tab
       final playoffSubTabIndex = _playoffTabController.index;
-      if (playoffSubTabIndex == 0) return 'QF'; // Quarter Finals
-      if (playoffSubTabIndex == 1) return 'SF'; // Semi Finals
-      if (playoffSubTabIndex == 2) return 'Finals';
+
+      // Handle 8-team case where QF doesn't exist
+      if (_teams.length == 8) {
+        if (playoffSubTabIndex == 0) return 'SF'; // Semi Finals
+        if (playoffSubTabIndex == 1) return 'Finals';
+      } else {
+        // Normal case with QF
+        if (playoffSubTabIndex == 0) return 'QF'; // Quarter Finals
+        if (playoffSubTabIndex == 1) return 'SF'; // Semi Finals
+        if (playoffSubTabIndex == 2) return 'Finals';
+      }
     }
     return 'QF'; // Default
   }
@@ -853,7 +861,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                                                               .saveQuarterFinalsScoresForDivision(
                                                       _selectedDivision ?? 'all',
                                                       _getCurrentDivisionPlayoffScores(),
-                                                    );
+                                                              );
                                                         } catch (e) {
                                                           print(
                                                             'Error saving scores to storage: $e',
@@ -1703,6 +1711,50 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   // Start playoffs
   void _startPlayoffs() {
+    // Check if there are fewer than 8 teams
+    if (_teams.length < 8) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Insufficient Teams'),
+            content: Text(
+              'Not enough teams registered. Need 8 teams to start games. Currently have ${_teams.length} teams.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+
+    // Check if there are exactly 8 teams
+    if (_teams.length == 8) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('8 Teams Required'),
+            content: const Text(
+              '8 teams are required to start the games. Please ensure you have exactly 8 teams registered for this sport.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -3163,6 +3215,39 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     await _teamService.loadTeams();
     await _pickleballTeamService.loadTeams();
     if (mounted) {
+      // Check if there are fewer than 8 teams and show dialog
+      if (_teams.length < 8) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          showDialog(
+            context: context,
+            barrierDismissible: true, // Allow dismissing by tapping outside
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: const Text('Insufficient Teams'),
+                content: Text(
+                  'Not enough teams registered. Need 8 teams to start games. Currently have ${_teams.length} teams.\n\nPlease go back and register more teams.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop(); // Close dialog
+                      // Use pushReplacement to go back to previous screen
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(
+                          builder: (context) => MainNavigationScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text('Go Back'),
+                  ),
+                ],
+              );
+            },
+          );
+        });
+        return; // Exit early to prevent further processing
+      }
+
       setState(() {
         // Only clear the matches cache if teams have actually changed
         // This prevents unnecessary regeneration when navigating back and forth
@@ -3807,15 +3892,20 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           child: _buildGameScoreCell(match.id, teamId ?? '', 3, game3Score),
         ),
 
-        // Winner trophy - only show if team won 2+ games
+        // Winner icon - only show if team won 2+ games
         Expanded(
           child: Center(
             child:
                 isWinner && gamesWon >= 2
                     ? Icon(
-                      Icons.emoji_events,
-                      color: Colors.yellow[600],
-                      size: 24,
+                      match.day == 'Semi Finals'
+                          ? Icons.check_circle
+                          : Icons.emoji_events,
+                      size: match.day == 'Semi Finals' ? 20 : 24,
+                      color:
+                          match.day == 'Semi Finals'
+                              ? const Color.fromARGB(176, 255, 255, 255)
+                              : Colors.yellow[600],
                     )
                     : const SizedBox(width: 24, height: 24),
           ),
@@ -4498,9 +4588,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             child:
                 (isWinner && hasScores)
                     ? Icon(
-                      Icons.emoji_events,
-                      color: Colors.yellow[600],
-                      size: 24,
+                      Icons.check_circle,
+                      color: const Color.fromARGB(176, 255, 255, 255),
+                      size: 20,
                     )
                     : const SizedBox(width: 24, height: 24),
           ),
@@ -5294,6 +5384,21 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       // Navigate to Playoffs tab
                       setState(() {
                         _bottomNavIndex = 1;
+
+                        // If Finals are completed, navigate directly to Finals tab
+                        if (_hasFinalsScores) {
+                          // For 8-team case, Finals is at index 1
+                          // For normal case, Finals is at index 2
+                          if (_teams.length == 8) {
+                            _playoffTabController.animateTo(
+                              1,
+                            ); // Finals tab in 8-team case
+                          } else {
+                            _playoffTabController.animateTo(
+                              2,
+                            ); // Finals tab in normal case
+                          }
+                        }
                       });
                     },
                     icon: const Icon(Icons.sports_esports),
@@ -5449,7 +5554,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             child: Text(
               '${standing.pointDifference >= 0 ? '+' : ''}${standing.pointDifference}',
               style: const TextStyle(
-                color: Color.fromARGB(255, 27, 27, 27),
+                color: Color.fromARGB(212, 30, 255, 0),
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
@@ -5610,33 +5715,53 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       // Playoffs tab - need to check which specific playoff sub-tab we're in
       final playoffSubTabIndex = _playoffTabController.index;
 
-      if (playoffSubTabIndex == 0) {
-        // Quarter Finals tab
-        final quarterFinals = _getQuarterFinals();
-        final isInQuarterFinals = quarterFinals.any(
-          (match) => match.id == _selectedMatch!.id,
-        );
-        print(
-          'DEBUG: _isSelectedMatchInCurrentTab - Quarter Finals tab, isInQuarterFinals: $isInQuarterFinals',
-        );
-        print(
-          'DEBUG: _isSelectedMatchInCurrentTab - Quarter Finals matches: ${quarterFinals.map((m) => '${m.id} (${m.team1} vs ${m.team2})').join(', ')}',
-        );
-        return isInQuarterFinals;
-      } else if (playoffSubTabIndex == 1) {
-        // Semi Finals tab
-        final semiFinals = _getSemiFinalsDirect();
-        final isInSemiFinals = semiFinals.any(
-          (match) => match.id == _selectedMatch!.id,
-        );
-        return isInSemiFinals;
-      } else if (playoffSubTabIndex == 2) {
-        // Finals tab
-        final finals = _getFinalsDirect();
-        final isInFinals = finals.any(
-          (match) => match.id == _selectedMatch!.id,
-        );
-        return isInFinals;
+      // Handle 8-team case where QF doesn't exist
+      if (_teams.length == 8) {
+        if (playoffSubTabIndex == 0) {
+          // Semi Finals tab (first tab in 8-team case)
+          final semiFinals = _getSemiFinalsDirect();
+          final isInSemiFinals = semiFinals.any(
+            (match) => match.id == _selectedMatch!.id,
+          );
+          return isInSemiFinals;
+        } else if (playoffSubTabIndex == 1) {
+          // Finals tab (second tab in 8-team case)
+          final finals = _getFinalsDirect();
+          final isInFinals = finals.any(
+            (match) => match.id == _selectedMatch!.id,
+          );
+          return isInFinals;
+        }
+      } else {
+        // Normal case with QF
+        if (playoffSubTabIndex == 0) {
+          // Quarter Finals tab
+          final quarterFinals = _getQuarterFinals();
+          final isInQuarterFinals = quarterFinals.any(
+            (match) => match.id == _selectedMatch!.id,
+          );
+          print(
+            'DEBUG: _isSelectedMatchInCurrentTab - Quarter Finals tab, isInQuarterFinals: $isInQuarterFinals',
+          );
+          print(
+            'DEBUG: _isSelectedMatchInCurrentTab - Quarter Finals matches: ${quarterFinals.map((m) => '${m.id} (${m.team1} vs ${m.team2})').join(', ')}',
+          );
+          return isInQuarterFinals;
+        } else if (playoffSubTabIndex == 1) {
+          // Semi Finals tab
+          final semiFinals = _getSemiFinalsDirect();
+          final isInSemiFinals = semiFinals.any(
+            (match) => match.id == _selectedMatch!.id,
+          );
+          return isInSemiFinals;
+        } else if (playoffSubTabIndex == 2) {
+          // Finals tab
+          final finals = _getFinalsDirect();
+          final isInFinals = finals.any(
+            (match) => match.id == _selectedMatch!.id,
+          );
+          return isInFinals;
+        }
       }
     }
 
@@ -6467,41 +6592,67 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               fontSize: 12,
             ),
             isScrollable: false,
-            tabs: const [
-              Tab(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    'Quarter Finals',
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              Tab(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    'Semi Finals',
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              Tab(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    'Finals',
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-            ],
+            tabs:
+                _teams.length == 8
+                    ? const [
+                      Tab(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            'Semi Finals',
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      Tab(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            'Finals',
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    ]
+                    : const [
+                      Tab(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            'Quarter Finals',
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      Tab(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            'Semi Finals',
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      Tab(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            'Finals',
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    ],
           ),
         ),
 
@@ -6509,11 +6660,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         Expanded(
           child: TabBarView(
             controller: _playoffTabController,
-            children: [
-              _buildQuarterFinalsTab(),
-              _buildSemiFinalsTab(),
-              _buildFinalsTab(),
-            ],
+            children:
+                _teams.length == 8
+                    ? [_buildSemiFinalsTab(), _buildFinalsTab()]
+                    : [
+                      _buildQuarterFinalsTab(),
+                      _buildSemiFinalsTab(),
+                      _buildFinalsTab(),
+                    ],
           ),
         ),
       ],
@@ -7148,7 +7302,19 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   // Get Semi Finals matches directly without calling _playoffs getter
   List<Match> _getSemiFinalsDirect() {
-    final quarterFinalsWinners = _getQuarterFinalsWinners();
+    List<dynamic> semiFinalsTeams;
+
+    // For 8-team case, get top 4 teams directly from standings
+    if (_teams.length == 8) {
+      final standings = _standings;
+      semiFinalsTeams =
+          standings.take(4).map((standing) {
+            return _teams.firstWhere((team) => team.name == standing.teamName);
+          }).toList();
+    } else {
+      // Normal case: get QF winners
+      semiFinalsTeams = _getQuarterFinalsWinners();
+    }
 
     List<Match> semiFinals = [];
     // Use consistent ID generation to prevent card selection jumping
@@ -7158,23 +7324,19 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
     // Always create exactly 2 semi-final matches
     for (int i = 0; i < 2; i++) {
-      if (quarterFinalsWinners.length >= 4) {
-        // We have all 4 quarter-final winners, create proper seeding matchups
-        // SF1: Winner of QF1 vs Winner of QF4 (1st seed vs 4th seed)
-        // SF2: Winner of QF2 vs Winner of QF3 (2nd seed vs 3rd seed)
+      if (semiFinalsTeams.length >= 4) {
+        // We have all 4 teams, create proper seeding matchups
+        // SF1: 1st seed vs 4th seed
+        // SF2: 2nd seed vs 3rd seed
         final team1Index =
-            i == 0
-                ? 0
-                : 1; // First SF gets QF1 winner, Second SF gets QF2 winner
+            i == 0 ? 0 : 1; // First SF gets 1st seed, Second SF gets 2nd seed
         final team2Index =
-            i == 0
-                ? 3
-                : 2; // First SF gets QF4 winner, Second SF gets QF3 winner
+            i == 0 ? 3 : 2; // First SF gets 4th seed, Second SF gets 3rd seed
 
-        if (team1Index < quarterFinalsWinners.length &&
-            team2Index < quarterFinalsWinners.length) {
-          final team1 = quarterFinalsWinners[team1Index];
-          final team2 = quarterFinalsWinners[team2Index];
+        if (team1Index < semiFinalsTeams.length &&
+            team2Index < semiFinalsTeams.length) {
+          final team1 = semiFinalsTeams[team1Index];
+          final team2 = semiFinalsTeams[team2Index];
 
           semiFinals.add(
             Match(
