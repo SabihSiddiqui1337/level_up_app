@@ -287,9 +287,10 @@ class AuthService {
           _currentUser!.role == 'owner' ||
           _currentUser!.role == 'management');
 
-  // Check if user has management role
+  // Check if user has management or owner role
   bool get isManagement =>
-      _currentUser != null && _currentUser!.role == 'management';
+      _currentUser != null &&
+      (_currentUser!.role == 'management' || _currentUser!.role == 'owner');
 
   // Check if email exists
   Future<bool> checkEmailExists(String email) async {

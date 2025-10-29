@@ -146,221 +146,314 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
     String address,
     String sportName,
   ) {
+    // Determine which image to use based on sport name
+    String? imagePath;
+    if (sportName.toLowerCase().contains('basketball')) {
+      imagePath = 'assets/basketball.png';
+    } else if (sportName.toLowerCase().contains('pickleball') ||
+        sportName.toLowerCase().contains('pickelball')) {
+      imagePath =
+          'assets/pickelball.png'; // Note: using the actual filename with typo
+    }
+    // No default fallback - if sport doesn't match, use gradient background
+
     return Card(
       elevation: 6,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Colors.white, Colors.grey[50]!],
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Sport Name Badge
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
+        child: Stack(
+          children: [
+            // Background Image (only if imagePath exists)
+            if (imagePath != null)
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    imagePath,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      // Fallback to gradient if image fails to load
+                      return Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Colors.white, Colors.grey[50]!],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
+              ),
+            // Overlay - semi-transparent if image exists, or gradient if no image
+            Positioned.fill(
+              child: Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2196F3).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFF2196F3).withOpacity(0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Text(
-                  sportName,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2196F3),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Title
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                  height: 1.2,
+                  borderRadius: BorderRadius.circular(16),
+                  gradient:
+                      imagePath != null
+                          ? LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.5),
+                              Colors.black.withOpacity(0.7),
+                            ],
+                          )
+                          : LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Colors.white, Colors.grey[50]!],
+                          ),
                 ),
               ),
-              const SizedBox(height: 16),
-
-              // Date with icon
-              Row(
+            ),
+            // Content on top
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Sport Name Badge
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2196F3).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.5),
+                        width: 1,
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.calendar_today,
-                      color: Color(0xFF2196F3),
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
                     child: Text(
-                      date,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.grey[700],
-                        fontWeight: FontWeight.w500,
+                      sportName,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2196F3),
                       ),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-              // Location with icon
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE67E22).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.location_on,
-                      color: Color(0xFFE67E22),
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          location,
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: Colors.grey[700],
-                            fontWeight: FontWeight.w600,
-                          ),
+                  // Title
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      height: 1.2,
+                      shadows: [
+                        Shadow(
+                          offset: Offset(2, 2),
+                          blurRadius: 6,
+                          color: Colors.black87,
                         ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                address,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey[500],
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap:
-                                  _isCopying
-                                      ? null
-                                      : () => _copyToClipboard(address),
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: const Color(
-                                    0xFF2196F3,
-                                  ).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: const Icon(
-                                  Icons.copy,
-                                  size: 16,
-                                  color: Color(0xFF2196F3),
-                                ),
-                              ),
-                            ),
-                          ],
+                        Shadow(
+                          offset: Offset(1, 1),
+                          blurRadius: 3,
+                          color: Colors.black54,
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 20),
+                  const SizedBox(height: 12),
 
-              // Action buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder:
-                                (context) =>
-                                    const MainNavigationScreen(initialIndex: 1),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.app_registration, size: 18),
-                      label: const Text('REGISTER'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE67E22),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                  // Date with icon
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(6),
                         ),
-                        elevation: 2,
+                        child: const Icon(
+                          Icons.calendar_today,
+                          color: Colors.white,
+                          size: 16,
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        // Show details dialog or navigate to details screen
-                        _showEventDetails(
-                          title,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
                           date,
-                          location,
-                          address,
-                          sportName,
-                        );
-                      },
-                      icon: const Icon(Icons.info_outline, size: 18),
-                      label: const Text('DETAILS'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey[600],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            shadows: [
+                              Shadow(
+                                offset: Offset(1, 1),
+                                blurRadius: 4,
+                                color: Colors.black87,
+                              ),
+                            ],
+                          ),
                         ),
-                        elevation: 2,
                       ),
-                    ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Location with icon
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Icon(
+                          Icons.location_on,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              location,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                shadows: [
+                                  Shadow(
+                                    offset: Offset(1, 1),
+                                    blurRadius: 4,
+                                    color: Colors.black87,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    address,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w500,
+                                      shadows: [
+                                        Shadow(
+                                          offset: Offset(1, 1),
+                                          blurRadius: 4,
+                                          color: Colors.black87,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap:
+                                      _isCopying
+                                          ? null
+                                          : () => _copyToClipboard(address),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.3),
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                    child: const Icon(
+                                      Icons.copy,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Action buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => const MainNavigationScreen(
+                                      initialIndex: 1,
+                                    ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.app_registration, size: 16),
+                          label: const Text(
+                            'REGISTER',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE67E22),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            elevation: 2,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            // Show details dialog or navigate to details screen
+                            _showEventDetails(
+                              title,
+                              date,
+                              location,
+                              address,
+                              sportName,
+                            );
+                          },
+                          icon: const Icon(Icons.info_outline, size: 16),
+                          label: const Text(
+                            'DETAILS',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withOpacity(0.9),
+                            foregroundColor: Colors.black87,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            elevation: 2,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

@@ -290,8 +290,105 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
               onPressed:
                   displayIsDisabled || teamScore <= 0
                       ? null
-                      : () =>
-                          _updateScore(teamKey, teamScore - 1, opponentScore),
+                      : () async {
+                        // Check if decreasing this score will reset a later game
+                        final gameMatch = RegExp(
+                          r'_game(\d+)',
+                        ).firstMatch(teamKey);
+                        if (gameMatch != null) {
+                          final currentGameNum = int.parse(gameMatch.group(1)!);
+
+                          // Check if Game 2 has scores and we're decreasing Game 1
+                          if (currentGameNum == 1) {
+                            final team1Key = '${widget.match.team1Id}_game2';
+                            final team2Key = '${widget.match.team2Id}_game2';
+                            final game2HasScores =
+                                (_scores[team1Key] ?? 0) > 0 ||
+                                (_scores[team2Key] ?? 0) > 0;
+
+                            if (game2HasScores) {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder:
+                                    (context) => AlertDialog(
+                                      title: const Text('Confirm Score Change'),
+                                      content: const Text(
+                                        'Are you sure you want to change the score for GAME 1? That will reset the score for Game 2.',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed:
+                                              () =>
+                                                  Navigator.pop(context, false),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed:
+                                              () =>
+                                                  Navigator.pop(context, true),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.red[600],
+                                            foregroundColor: Colors.white,
+                                          ),
+                                          child: const Text('Yes, Reset'),
+                                        ),
+                                      ],
+                                    ),
+                              );
+
+                              if (confirmed != true) {
+                                return; // User cancelled
+                              }
+                            }
+                          }
+
+                          // Check if Game 3 has scores and we're decreasing Game 2
+                          if (currentGameNum == 2) {
+                            final team1Key = '${widget.match.team1Id}_game3';
+                            final team2Key = '${widget.match.team2Id}_game3';
+                            final game3HasScores =
+                                (_scores[team1Key] ?? 0) > 0 ||
+                                (_scores[team2Key] ?? 0) > 0;
+
+                            if (game3HasScores) {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder:
+                                    (context) => AlertDialog(
+                                      title: const Text('Confirm Score Change'),
+                                      content: const Text(
+                                        'Are you sure you want to change the score for GAME 2? That will reset the score for Game 3.',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed:
+                                              () =>
+                                                  Navigator.pop(context, false),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed:
+                                              () =>
+                                                  Navigator.pop(context, true),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.red[600],
+                                            foregroundColor: Colors.white,
+                                          ),
+                                          child: const Text('Yes, Reset'),
+                                        ),
+                                      ],
+                                    ),
+                              );
+
+                              if (confirmed != true) {
+                                return; // User cancelled
+                              }
+                            }
+                          }
+                        }
+
+                        _updateScore(teamKey, teamScore - 1, opponentScore);
+                      },
               icon: Icon(Icons.remove_circle_outline),
               color:
                   displayIsDisabled || teamScore <= 0

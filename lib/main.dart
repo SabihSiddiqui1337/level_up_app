@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_navigation_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/auth_service.dart';
 import 'services/team_service.dart';
 import 'services/pickleball_team_service.dart';
@@ -80,7 +81,7 @@ class LevelUpApp extends StatelessWidget {
           type: BottomNavigationBarType.fixed,
         ),
       ),
-      home: const AuthWrapper(),
+      home: const SplashScreen(),
       debugShowCheckedModeBanner: false,
     );
   }

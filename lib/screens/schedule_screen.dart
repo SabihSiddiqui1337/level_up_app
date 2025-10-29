@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/custom_app_bar.dart';
 import 'sport_schedule_screen.dart';
 import '../keys/schedule_screen/schedule_screen_keys.dart';
+import '../services/event_service.dart';
+import '../models/event.dart';
 
 class ScheduleScreen extends StatefulWidget {
   final VoidCallback? onHomePressed;
@@ -15,11 +17,114 @@ class ScheduleScreen extends StatefulWidget {
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
   bool _isExpanded = false;
+  final EventService _eventService = EventService();
+  List<Event> _events = [];
 
   @override
   void initState() {
     super.initState();
     _loadExpansionState();
+    _loadEvents();
+  }
+
+  Future<void> _loadEvents() async {
+    await _eventService.initialize();
+    setState(() {
+      _events = _eventService.events;
+    });
+  }
+
+  String _getEventTitleForSport(String sportName) {
+    final sportEvents =
+        _events
+            .where(
+              (event) =>
+                  event.sportName.toLowerCase() == sportName.toLowerCase(),
+            )
+            .toList();
+
+    if (sportEvents.isEmpty) {
+      return 'No sports event';
+    }
+
+    // Return the first event's title (or you could return the most recent)
+    return sportEvents.first.title;
+  }
+
+  bool _hasEventForSport(String sportName) {
+    return _events.any(
+      (event) => event.sportName.toLowerCase() == sportName.toLowerCase(),
+    );
+  }
+
+  Widget _buildSportsList() {
+    // Check if there are any events at all
+    if (_events.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Text(
+            'No sports event',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Build list of sport cards only for sports that have events
+    final List<Widget> sportCards = [];
+
+    // Check for Basketball events
+    if (_hasEventForSport(ScheduleScreenKeys.basketball)) {
+      sportCards.add(
+        _buildSportCard(
+          ScheduleScreenKeys.basketball,
+          const Color(0xFFE67E22), // Orange
+          Icons.sports_basketball,
+          ScheduleScreenKeys.basketballTournament,
+          _getEventTitleForSport(ScheduleScreenKeys.basketball),
+        ),
+      );
+    }
+
+    // Check for Pickleball events
+    if (_hasEventForSport(ScheduleScreenKeys.pickleball)) {
+      if (sportCards.isNotEmpty) {
+        sportCards.add(const SizedBox(height: 16));
+      }
+      sportCards.add(
+        _buildSportCard(
+          ScheduleScreenKeys.pickleball,
+          const Color(0xFF38A169), // Green
+          Icons.sports_tennis,
+          ScheduleScreenKeys.pickleballTournament,
+          _getEventTitleForSport(ScheduleScreenKeys.pickleball),
+        ),
+      );
+    }
+
+    // If no sport cards were added (events exist but not for these sports)
+    if (sportCards.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Text(
+            'No sports event',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(mainAxisSize: MainAxisSize.min, children: sportCards);
   }
 
   Future<void> _loadExpansionState() async {
@@ -116,24 +221,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             _isExpanded
                                 ? Padding(
                                   padding: const EdgeInsets.only(top: 16),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _buildSportCard(
-                                        ScheduleScreenKeys.basketball,
-                                        const Color(0xFFE67E22), // Orange
-                                        Icons.sports_basketball,
-                                        ScheduleScreenKeys.basketballTournament,
-                                      ),
-                                      const SizedBox(height: 16),
-                                      _buildSportCard(
-                                        ScheduleScreenKeys.pickleball,
-                                        const Color(0xFF38A169), // Green
-                                        Icons.sports_tennis,
-                                        ScheduleScreenKeys.pickleballTournament,
-                                      ),
-                                    ],
-                                  ),
+                                  child: _buildSportsList(),
                                 )
                                 : const SizedBox.shrink(),
                       ),
@@ -153,6 +241,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     Color color,
     IconData icon,
     String tournamentTitle,
+    String eventTitle,
   ) {
     return GestureDetector(
       onTap: () {
@@ -162,7 +251,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             builder:
                 (context) => SportScheduleScreen(
                   sportName: sportName,
-                  tournamentTitle: tournamentTitle,
+                  tournamentTitle:
+                      eventTitle, // Use event title instead of tournament title
                   onHomePressed: widget.onHomePressed,
                 ),
           ),
@@ -188,16 +278,20 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             children: [
               Icon(icon, color: Colors.white, size: 28),
               const SizedBox(width: 16),
-              Text(
-                sportName.toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
+              Expanded(
+                child: Text(
+                  eventTitle,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Icon(Icons.chevron_right, color: Colors.white, size: 24),
             ],
           ),

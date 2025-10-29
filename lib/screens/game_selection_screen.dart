@@ -158,38 +158,98 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
     Color color,
     VoidCallback onTap,
   ) {
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          decoration: BoxDecoration(
+    // Determine which image to use based on sport name
+    String? imagePath;
+    if (gameName.toLowerCase().contains('basketball')) {
+      imagePath = 'assets/basketball.png';
+    } else if (gameName.toLowerCase().contains('pickleball') ||
+        gameName.toLowerCase().contains('pickelball')) {
+      imagePath =
+          'assets/pickelball.png'; // Note: using the actual filename with typo
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Card with image/background and icon
+        Card(
+          elevation: 6,
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            gradient: LinearGradient(
-              colors: [color, color.withOpacity(0.8)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+          ),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              height: 140,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Stack(
+                children: [
+                  // Background Image (only if image exists)
+                  if (imagePath != null)
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.asset(
+                          imagePath,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            // Fallback to gradient if image fails to load
+                            return Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [color, color.withOpacity(0.8)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  // Gradient overlay if no image, or semi-transparent overlay if image exists
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient:
+                            imagePath != null
+                                ? LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.black.withOpacity(0.2),
+                                    Colors.black.withOpacity(0.4),
+                                  ],
+                                )
+                                : LinearGradient(
+                                  colors: [color, color.withOpacity(0.8)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 64, color: Colors.white),
-              const SizedBox(height: 16),
-              Text(
-                gameName,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ],
+        ),
+        // Text below the card
+        const SizedBox(height: 12),
+        Text(
+          gameName,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[800],
           ),
         ),
-      ),
+      ],
     );
   }
 
