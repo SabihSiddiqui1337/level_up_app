@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
+import '../services/event_service.dart';
+import '../models/event.dart';
+import '../utils/role_utils.dart';
 import '../widgets/custom_app_bar.dart';
 import 'login_screen.dart';
 import 'team_registration_screen.dart';
@@ -19,6 +22,13 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _authService = AuthService();
+  final _eventService = EventService();
+
+  @override
+  void initState() {
+    super.initState();
+    _eventService.initialize();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +53,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ]),
 
             const SizedBox(height: 16),
+
+            // Manage Event (Owner only)
+            if (RoleUtils.isOwner(_authService.currentUser?.role ?? ''))
+              _buildSettingsCard([
+                _buildSettingsItem(
+                  'Manage Event',
+                  Icons.event_note,
+                  () {
+                    _navigateToManageEvent();
+                  },
+                  trailing: Icons.keyboard_arrow_right,
+                ),
+              ]),
+
+            if (RoleUtils.isOwner(_authService.currentUser?.role ?? ''))
+              const SizedBox(height: 16),
 
             // App Feedback
             _buildSettingsCard([
@@ -197,6 +223,314 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   foregroundColor: Colors.white,
                 ),
                 child: const Text('Logout'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _navigateToManageEvent() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Manage Event'),
+            content: const Text('Choose an action:'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showDeleteEventDialog();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red[600],
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Delete Event'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showCreateEventDialog();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green[600],
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Create Event'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _showDeleteEventDialog() {
+    final events = _eventService.events;
+
+    if (events.isEmpty) {
+      showDialog(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              title: const Text('No Events'),
+              content: const Text('There are no events to delete.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Back'),
+                ),
+              ],
+            ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete Event'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 300,
+              child: ListView.builder(
+                itemCount: events.length,
+                itemBuilder: (context, index) {
+                  final event = events[index];
+                  return ListTile(
+                    title: Text(event.title),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Date: ${event.date.toString().split(' ')[0]}'),
+                        Text('Sport: ${event.sportName}'),
+                        Text('Location: ${event.locationName}'),
+                      ],
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => _confirmDeleteEvent(event),
+                    ),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Back'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _confirmDeleteEvent(Event event) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Confirm Delete'),
+            content: Text('Are you sure you want to delete "${event.title}"?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context); // Close confirmation dialog
+                  Navigator.pop(context); // Close delete event dialog
+
+                  final success = await _eventService.deleteEvent(event.id);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          success
+                              ? 'Event deleted successfully!'
+                              : 'Failed to delete event.',
+                        ),
+                        backgroundColor: success ? Colors.green : Colors.red,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red[600],
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _showCreateEventDialog() {
+    final titleController = TextEditingController();
+    final locationNameController = TextEditingController();
+    final locationAddressController = TextEditingController();
+    final sportNameController = TextEditingController();
+    DateTime? selectedDate;
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Create Event'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: titleController,
+                      decoration: const InputDecoration(
+                        labelText: 'Title *',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Title is required';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    InkWell(
+                      onTap: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.now(),
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 365),
+                          ),
+                        );
+                        if (date != null) {
+                          selectedDate = date;
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today),
+                            const SizedBox(width: 8),
+                            Text(
+                              selectedDate != null
+                                  ? selectedDate!.toString().split(' ')[0]
+                                  : 'Select Date *',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: locationNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Location Name *',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Location Name is required';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: locationAddressController,
+                      decoration: const InputDecoration(
+                        labelText: 'Location Address *',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 3,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Location Address is required';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: sportNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Sport Name *',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Sport Name is required';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (titleController.text.isEmpty ||
+                      locationNameController.text.isEmpty ||
+                      locationAddressController.text.isEmpty ||
+                      sportNameController.text.isEmpty ||
+                      selectedDate == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please fill in all required fields'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+
+                  final success = await _eventService.createEvent(
+                    title: titleController.text,
+                    date: selectedDate!,
+                    locationName: locationNameController.text,
+                    locationAddress: locationAddressController.text,
+                    sportName: sportNameController.text,
+                  );
+
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          success
+                              ? 'Event created successfully!'
+                              : 'Failed to create event.',
+                        ),
+                        backgroundColor: success ? Colors.green : Colors.red,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green[600],
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Save'),
               ),
             ],
           ),

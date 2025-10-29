@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../widgets/custom_app_bar.dart';
+import '../services/event_service.dart';
+import '../models/event.dart';
 import 'main_navigation_screen.dart';
 
 class UpcomingEventsScreen extends StatefulWidget {
@@ -16,6 +18,23 @@ class UpcomingEventsScreen extends StatefulWidget {
 
 class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
   bool _isCopying = false; // Add flag to prevent rapid copying
+  final EventService _eventService = EventService();
+  List<Event> _events = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEvents();
+  }
+
+  Future<void> _loadEvents() async {
+    await _eventService.initialize();
+    setState(() {
+      _events = _eventService.upcomingEvents;
+      _isLoading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,24 +68,48 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
 
               // Events List
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: [
-                    _buildSimpleEventCard(
-                      'BasketBall Tournament 2025',
-                      'Sat. Nov. 8. 2025',
-                      'Masjid Istiqlal',
-                      '123 Main Street,\nSugar Land, TX\n77498',
-                    ),
-                    const SizedBox(height: 16),
-                    _buildSimpleEventCard(
-                      'Winter Pickleball Tournament',
-                      'Sat. Nov. 8. 2025',
-                      'Pickle Point',
-                      '12002 Southwest Fwy,\nMeadows Place, TX\n77477',
-                    ),
-                  ],
-                ),
+                child:
+                    _isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : _events.isEmpty
+                        ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.event_busy,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No upcoming events',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                        : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: _events.length,
+                          itemBuilder: (context, index) {
+                            final event = _events[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: _buildSimpleEventCard(
+                                event.title,
+                                _formatDate(event.date),
+                                event.locationName,
+                                event.locationAddress,
+                                event.sportName,
+                              ),
+                            );
+                          },
+                        ),
               ),
 
               // Registration Cart
@@ -77,11 +120,31 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
     );
   }
 
+  String _formatDate(DateTime date) {
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return '${days[date.weekday - 1]}. ${months[date.month - 1]}. ${date.day}. ${date.year}';
+  }
+
   Widget _buildSimpleEventCard(
     String title,
     String date,
     String location,
     String address,
+    String sportName,
   ) {
     return Card(
       elevation: 6,
@@ -101,6 +164,31 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Sport Name Badge
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2196F3).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFF2196F3).withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  sportName,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2196F3),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
               // Title
               Text(
                 title,
@@ -248,7 +336,13 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () {
                         // Show details dialog or navigate to details screen
-                        _showEventDetails(title, date, location, address);
+                        _showEventDetails(
+                          title,
+                          date,
+                          location,
+                          address,
+                          sportName,
+                        );
                       },
                       icon: const Icon(Icons.info_outline, size: 18),
                       label: const Text('DETAILS'),
@@ -277,6 +371,7 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
     String date,
     String location,
     String address,
+    String sportName,
   ) {
     showDialog(
       context: context,

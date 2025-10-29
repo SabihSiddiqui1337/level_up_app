@@ -313,7 +313,10 @@ class _PickleballProcessRegistrationScreenState
                                   ),
                                 ),
                                 TextSpan(
-                                  text: widget.event.date,
+                                  text:
+                                      widget.event.date.toString().split(
+                                        ' ',
+                                      )[0],
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.normal,
@@ -336,7 +339,7 @@ class _PickleballProcessRegistrationScreenState
                                   ),
                                 ),
                                 TextSpan(
-                                  text: widget.event.location,
+                                  text: widget.event.locationName,
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.normal,
@@ -348,7 +351,7 @@ class _PickleballProcessRegistrationScreenState
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            widget.event.address,
+                            widget.event.locationAddress,
                             style: const TextStyle(
                               fontSize: 16,
                               color: Colors.black87,

@@ -269,12 +269,14 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
       ); // Debug print
 
       // Create default event for basketball tournament
-      const event = Event(
+      final event = Event(
         id: 'basketball_tournament_2025',
         title: 'Basketball Tournament 2025',
-        date: 'Sat. Nov. 8. 2025',
-        location: 'Masjid Istiqlal',
-        address: '123 Main Street,\nSugar Land, TX\n77498',
+        date: DateTime(2025, 11, 8),
+        locationName: 'Masjid Istiqlal',
+        locationAddress: '123 Main Street,\nSugar Land, TX\n77498',
+        sportName: 'Basketball',
+        createdAt: DateTime.now(),
       );
 
       // If editing an existing team, call onSave callback

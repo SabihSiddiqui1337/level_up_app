@@ -3,6 +3,8 @@ import 'team_registration_screen.dart';
 import 'pickleball_team_registration_screen.dart';
 import '../models/team.dart';
 import '../models/pickleball_team.dart';
+import '../models/event.dart';
+import '../services/event_service.dart';
 import '../widgets/custom_app_bar.dart';
 
 class GameSelectionScreen extends StatefulWidget {
@@ -22,6 +24,27 @@ class GameSelectionScreen extends StatefulWidget {
 }
 
 class _GameSelectionScreenState extends State<GameSelectionScreen> {
+  final EventService _eventService = EventService();
+  List<Event> _events = [];
+  List<String> _sportNames = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEvents();
+  }
+
+  Future<void> _loadEvents() async {
+    await _eventService.initialize();
+    setState(() {
+      _events = _eventService.upcomingEvents;
+      // Get unique sport names from events
+      _sportNames = _events.map((e) => e.sportName).toSet().toList();
+      _isLoading = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -47,27 +70,85 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
   }
 
   Widget _buildRegularGameSelection() {
-    return GridView.count(
-      crossAxisCount: 2,
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      children: [
-        _buildGameCard(
-          context,
-          'Basketball',
-          Icons.sports_basketball,
-          const Color(0xFF2196F3),
-          () => _navigateToTeamRegistration(context, 'Basketball'),
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_sportNames.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.sports, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No sports available',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Check upcoming events for available sports',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            ),
+          ],
         ),
-        _buildGameCard(
-          context,
-          'Pickleball',
-          Icons.sports_tennis,
-          const Color(0xFF38A169),
-          () => _navigateToPickleballRegistration(context),
-        ),
-      ],
+      );
+    }
+
+    return GridView.builder(
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+      ),
+      itemCount: _sportNames.length,
+      itemBuilder: (context, index) {
+        final sportName = _sportNames[index];
+        final icon = _getSportIcon(sportName);
+        final color = _getSportColor(index);
+
+        return _buildGameCard(context, sportName, icon, color, () {
+          if (sportName.toLowerCase().contains('pickleball')) {
+            _navigateToPickleballRegistration(context);
+          } else {
+            _navigateToTeamRegistration(context, sportName);
+          }
+        });
+      },
     );
+  }
+
+  IconData _getSportIcon(String sportName) {
+    final lowerSport = sportName.toLowerCase();
+    if (lowerSport.contains('basketball')) {
+      return Icons.sports_basketball;
+    } else if (lowerSport.contains('pickleball') ||
+        lowerSport.contains('tennis')) {
+      return Icons.sports_tennis;
+    } else if (lowerSport.contains('soccer') ||
+        lowerSport.contains('football')) {
+      return Icons.sports_soccer;
+    } else if (lowerSport.contains('volleyball')) {
+      return Icons.sports_volleyball;
+    } else {
+      return Icons.sports;
+    }
+  }
+
+  Color _getSportColor(int index) {
+    final colors = [
+      const Color(0xFF2196F3), // Blue
+      const Color(0xFF38A169), // Green
+      const Color(0xFFE67E22), // Orange
+      const Color(0xFF9B59B6), // Purple
+      const Color(0xFFE74C3C), // Red
+      const Color(0xFF3498DB), // Light Blue
+    ];
+    return colors[index % colors.length];
   }
 
   Widget _buildGameCard(

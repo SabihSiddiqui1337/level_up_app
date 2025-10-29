@@ -79,6 +79,16 @@ class AuthService {
         role: 'management',
         createdAt: DateTime.now(),
       ),
+      User(
+        id: '7',
+        email: 'Sabih1337@levelup.com',
+        password: 'admin123',
+        name: 'Sabih Owner',
+        username: 'Sabih1337',
+        phone: '555-111-2222',
+        role: 'owner',
+        createdAt: DateTime.now(),
+      ),
     ];
     await _saveUsers();
     print('AuthService initialized with ${_users.length} admin users');

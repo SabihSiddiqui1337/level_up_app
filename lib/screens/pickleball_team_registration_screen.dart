@@ -196,12 +196,14 @@ class _PickleballTeamRegistrationScreenState
       );
 
       // Create default event for pickleball tournament
-      const event = Event(
+      final event = Event(
         id: 'pickleball_tournament_2025',
         title: PickleballScreenKeys.tournamentTitle,
-        date: PickleballScreenKeys.tournamentDate,
-        location: PickleballScreenKeys.tournamentLocation,
-        address: PickleballScreenKeys.tournamentAddress,
+        date: DateTime(2025, 11, 8), // Convert string date to DateTime
+        locationName: PickleballScreenKeys.tournamentLocation,
+        locationAddress: PickleballScreenKeys.tournamentAddress,
+        sportName: 'Pickleball',
+        createdAt: DateTime.now(),
       );
 
       // Navigate to process registration screen
