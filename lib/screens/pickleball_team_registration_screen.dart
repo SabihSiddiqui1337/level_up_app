@@ -78,12 +78,18 @@ class _PickleballTeamRegistrationScreenState
   @override
   void initState() {
     super.initState();
+    // Set division from event if available
+    if (widget.event?.division != null) {
+      _selectedDuprRating = widget.event!.division!;
+    } else if (widget.team != null) {
+      _selectedDuprRating = widget.team!.division;
+    }
+    
     if (widget.team != null) {
       _teamNameController.text = widget.team!.name;
       _coachNameController.text = widget.team!.coachName;
       _coachPhoneController.text = widget.team!.coachPhone;
       _coachEmailController.text = widget.team!.coachEmail;
-      _selectedDuprRating = widget.team!.division;
       _players.addAll(widget.team!.players);
     }
   }
@@ -191,7 +197,7 @@ class _PickleballTeamRegistrationScreenState
         coachEmail: isManagement ? 'management@levelupsports.com' : _coachEmailController.text,
         players: List.from(_players), // Create a copy of the players list
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
-        division: _selectedDuprRating,
+        division: widget.event?.division ?? _selectedDuprRating,
         createdByUserId: currentUser?.id,
         isPrivate:
             !isAdmin && !isManagement,
@@ -271,7 +277,7 @@ class _PickleballTeamRegistrationScreenState
         coachEmail: 'management@levelupsports.com',
         players: [], // Empty players list for management
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
-        division: _selectedDuprRating,
+        division: widget.event?.division ?? _selectedDuprRating,
         createdByUserId: currentUser?.id,
         isPrivate: false, // Public team
         eventId: widget.event?.id ?? '',
@@ -382,27 +388,39 @@ class _PickleballTeamRegistrationScreenState
             ),
             const SizedBox(height: 24),
 
-            // DUPR Rating Field
-            DropdownButtonFormField<String>(
-              value: _selectedDuprRating,
-              decoration: InputDecoration(
-                labelText: 'DUPR Rating',
-                prefixIcon: const Icon(Icons.star),
-                border: const OutlineInputBorder(),
-              ),
-              items:
-                  _duprRatings.map((String rating) {
-                    return DropdownMenuItem<String>(
-                      value: rating,
-                      child: Text(rating),
-                    );
-                  }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedDuprRating = value!;
-                });
-              },
-            ),
+            // DUPR Rating Field - Show as read-only text if event has division, otherwise dropdown
+            widget.event?.division != null
+                ? TextFormField(
+                    initialValue: widget.event!.division,
+                    decoration: const InputDecoration(
+                      labelText: 'DUPR Rating',
+                      prefixIcon: Icon(Icons.star),
+                      border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: Colors.grey,
+                    ),
+                    readOnly: true,
+                  )
+                : DropdownButtonFormField<String>(
+                    value: _selectedDuprRating,
+                    decoration: InputDecoration(
+                      labelText: 'DUPR Rating',
+                      prefixIcon: const Icon(Icons.star),
+                      border: const OutlineInputBorder(),
+                    ),
+                    items:
+                        _duprRatings.map((String rating) {
+                          return DropdownMenuItem<String>(
+                            value: rating,
+                            child: Text(rating),
+                          );
+                        }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedDuprRating = value!;
+                      });
+                    },
+                  ),
             const SizedBox(height: 32),
 
             // Save Button
@@ -547,26 +565,39 @@ class _PickleballTeamRegistrationScreenState
                   },
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: _selectedDuprRating,
-                  decoration: InputDecoration(
-                    labelText: 'DUPR Rating',
-                    prefixIcon: const Icon(Icons.star),
-                    border: const OutlineInputBorder(),
-                  ),
-                  items:
-                      _duprRatings.map((String rating) {
-                        return DropdownMenuItem<String>(
-                          value: rating,
-                          child: Text(rating),
-                        );
-                      }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedDuprRating = value!;
-                    });
-                  },
-                ),
+                // DUPR Rating Field - Show as read-only text if event has division, otherwise dropdown
+                widget.event?.division != null
+                    ? TextFormField(
+                        initialValue: widget.event!.division,
+                        decoration: const InputDecoration(
+                          labelText: 'DUPR Rating',
+                          prefixIcon: Icon(Icons.star),
+                          border: OutlineInputBorder(),
+                          filled: true,
+                          fillColor: Colors.grey,
+                        ),
+                        readOnly: true,
+                      )
+                    : DropdownButtonFormField<String>(
+                        value: _selectedDuprRating,
+                        decoration: InputDecoration(
+                          labelText: 'DUPR Rating',
+                          prefixIcon: const Icon(Icons.star),
+                          border: const OutlineInputBorder(),
+                        ),
+                        items:
+                            _duprRatings.map((String rating) {
+                              return DropdownMenuItem<String>(
+                                value: rating,
+                                child: Text(rating),
+                              );
+                            }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedDuprRating = value!;
+                          });
+                        },
+                      ),
               ],
             ),
           ),

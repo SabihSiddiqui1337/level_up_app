@@ -86,7 +86,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
   final AuthService _authService = AuthService();
 
   final List<Player> _players = [];
-  String _selectedDivision = 'Adult 18+';
+  String? _selectedDivision; // Will be set from event if available
   bool _hasUnsavedChanges = false;
   bool _isSaving = false; // Add flag to prevent rapid saving
 
@@ -103,13 +103,10 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
   }
 
   void _initializeForm() {
-    if (widget.team != null) {
-      _teamNameController.text = widget.team!.name;
-      _coachNameController.text = widget.team!.coachName;
-      _coachPhoneController.text = widget.team!.coachPhone;
-      _coachEmailController.text = widget.team!.coachEmail;
-      _coachAgeController.text = widget.team!.coachAge.toString();
-
+    // Set division from event if available, otherwise use team's division or default
+    if (widget.event?.division != null) {
+      _selectedDivision = widget.event!.division;
+    } else if (widget.team != null) {
       // Map old division values to new ones
       String existingDivision = widget.team!.division;
       if (existingDivision == 'Adult (18-35)' ||
@@ -121,6 +118,16 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         // Default to Adult 18+ if division doesn't match
         _selectedDivision = 'Adult 18+';
       }
+    } else {
+      _selectedDivision = 'Adult 18+'; // Default
+    }
+    
+    if (widget.team != null) {
+      _teamNameController.text = widget.team!.name;
+      _coachNameController.text = widget.team!.coachName;
+      _coachPhoneController.text = widget.team!.coachPhone;
+      _coachEmailController.text = widget.team!.coachEmail;
+      _coachAgeController.text = widget.team!.coachAge.toString();
 
       // Load existing players and trigger UI update
       _players.clear();
@@ -171,7 +178,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
       context: context,
       builder:
           (context) => _PlayerDialog(
-            selectedDivision: _selectedDivision,
+            selectedDivision: _selectedDivision ?? 'Adult 18+',
             onSave: (player) {
               print('Adding player to team: ${player.name}'); // Debug print
               setState(() {
@@ -191,7 +198,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
       builder:
           (context) => _PlayerDialog(
             player: _players[index],
-            selectedDivision: _selectedDivision,
+            selectedDivision: _selectedDivision ?? 'Adult 18+',
             onSave: (player) {
               setState(() {
                 _players[index] = player;
@@ -259,7 +266,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
             25, // Default to 25 if invalid
         players: List.from(_players), // Create a copy of the players list
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
-        division: _selectedDivision,
+        division: widget.event?.division ?? _selectedDivision ?? 'Adult 18+',
         createdByUserId: currentUser?.id,
         isPrivate:
             !isAdmin, // Regular users create private teams, admins create public teams
@@ -499,27 +506,45 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Division Field
-                DropdownButtonFormField<String>(
-                  value: _selectedDivision,
-                  decoration: const InputDecoration(
-                    labelText: 'Division',
-                    border: OutlineInputBorder(),
-                  ),
-                  items:
-                      _divisions.map((String division) {
-                        return DropdownMenuItem<String>(
-                          value: division,
-                          child: Text(division),
-                        );
-                      }).toList(),
-                  onChanged: (String? newValue) {
-                    setState(() {
-                      _selectedDivision = newValue!;
-                      _hasUnsavedChanges = true;
-                    });
-                  },
-                ),
+                // Division Field - Show as read-only text if event has division, otherwise dropdown
+                widget.event?.division != null
+                    ? TextFormField(
+                        initialValue: widget.event!.division,
+                        style: const TextStyle(color: Colors.black87),
+                        decoration: InputDecoration(
+                          labelText: 'Division',
+                          labelStyle: TextStyle(color: Colors.grey[600]),
+                          border: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.grey[300]!),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.grey[300]!),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                        ),
+                        readOnly: true,
+                      )
+                    : DropdownButtonFormField<String>(
+                        value: _selectedDivision,
+                        decoration: const InputDecoration(
+                          labelText: 'Division',
+                          border: OutlineInputBorder(),
+                        ),
+                        items:
+                            _divisions.map((String division) {
+                              return DropdownMenuItem<String>(
+                                value: division,
+                                child: Text(division),
+                              );
+                            }).toList(),
+                        onChanged: (String? newValue) {
+                          setState(() {
+                            _selectedDivision = newValue!;
+                            _hasUnsavedChanges = true;
+                          });
+                        },
+                      ),
                 const SizedBox(height: 24),
 
                 // Save Button
@@ -538,7 +563,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                               end: Alignment.centerRight,
                             )
                             : LinearGradient(
-                              colors: [Colors.grey[400]!, Colors.grey[500]!],
+                              colors: [Colors.grey[300]!, Colors.grey[400]!],
                               begin: Alignment.centerLeft,
                               end: Alignment.centerRight,
                             ),
@@ -647,28 +672,47 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: _selectedDivision,
-                  decoration: const InputDecoration(
-                    labelText: 'Division',
-                    border: OutlineInputBorder(),
-                  ),
-                  items:
-                      _divisions.map((String division) {
-                        return DropdownMenuItem<String>(
-                          value: division,
-                          child: Text(division),
-                        );
-                      }).toList(),
-                  onChanged: (String? newValue) {
-                    setState(() {
-                      _selectedDivision = newValue!;
-                      _hasUnsavedChanges = true;
-                    });
-                    _validatePlayersForDivision();
-                    _formKey.currentState?.validate();
-                  },
-                ),
+                // Division Field - Show as read-only text if event has division, otherwise dropdown
+                widget.event?.division != null
+                    ? TextFormField(
+                        initialValue: widget.event!.division,
+                        style: const TextStyle(color: Colors.black87),
+                        decoration: InputDecoration(
+                          labelText: 'Division',
+                          labelStyle: TextStyle(color: Colors.grey[600]),
+                          border: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.grey[300]!),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.grey[300]!),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                        ),
+                        readOnly: true,
+                      )
+                    : DropdownButtonFormField<String>(
+                        value: _selectedDivision,
+                        decoration: const InputDecoration(
+                          labelText: 'Division',
+                          border: OutlineInputBorder(),
+                        ),
+                        items:
+                            _divisions.map((String division) {
+                              return DropdownMenuItem<String>(
+                                value: division,
+                                child: Text(division),
+                              );
+                            }).toList(),
+                        onChanged: (String? newValue) {
+                          setState(() {
+                            _selectedDivision = newValue!;
+                            _hasUnsavedChanges = true;
+                          });
+                          _validatePlayersForDivision();
+                          _formKey.currentState?.validate();
+                        },
+                      ),
               ],
             ),
           ),
@@ -980,7 +1024,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         coachAge: 25, // Default age
         players: [], // Empty players list for management
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
-        division: _selectedDivision,
+        division: widget.event?.division ?? _selectedDivision ?? 'Adult 18+',
         createdByUserId: currentUser?.id,
         isPrivate: !isAdmin,
         eventId: widget.event?.id ?? '',

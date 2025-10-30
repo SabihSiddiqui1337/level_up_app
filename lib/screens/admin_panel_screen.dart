@@ -569,6 +569,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                           (context, index) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final event = events[index];
+                        return FutureBuilder<bool>(
+                          future: _eventService.isEventCompleted(event.id),
+                          builder: (context, snapshot) {
+                            final isCompleted = snapshot.data ?? false;
                         return Container(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           child: Row(
@@ -579,9 +583,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                   children: [
                                     Text(
                                       event.title,
-                                      style: const TextStyle(
+                                          style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
+                                            color: isCompleted ? Colors.grey[600] : Colors.black87,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
@@ -616,25 +621,47 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                           style: TextStyle(
                                             fontSize: 13,
                                             color: Colors.grey[600],
-                                          ),
-                                        ),
+                                              ),
+                                            ),
+                                            if (isCompleted) ...[
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.green,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: const Text(
+                                                  'Completed',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                       ],
                                     ),
                                   ],
                                 ),
                               ),
                               IconButton(
-                                icon: const Icon(
+                                    icon: Icon(
                                   Icons.delete,
-                                  color: Colors.red,
+                                      color: isCompleted ? Colors.grey[400] : Colors.red,
                                 ),
-                                onPressed: () {
+                                    onPressed: isCompleted
+                                        ? null
+                                        : () {
                                   Navigator.pop(context);
                                   _confirmDeleteEvent(event);
                                 },
                               ),
                             ],
                           ),
+                            );
+                          },
                         );
                       },
                     ),
@@ -768,12 +795,20 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                           (context, index) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final event = events[index];
+                        return FutureBuilder<bool>(
+                          future: _eventService.isEventCompleted(event.id),
+                          builder: (context, snapshot) {
+                            final isCompleted = snapshot.data ?? false;
                         return InkWell(
-                          onTap: () {
+                              onTap: isCompleted
+                                  ? null
+                                  : () {
                             Navigator.pop(context);
                             _showEditEventForm(event);
                           },
                           borderRadius: BorderRadius.circular(12),
+                              child: Opacity(
+                                opacity: isCompleted ? 0.6 : 1.0,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               vertical: 16,
@@ -796,9 +831,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                     children: [
                                       Text(
                                         event.title,
-                                        style: const TextStyle(
+                                              style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w600,
+                                                color: isCompleted ? Colors.grey[600] : Colors.black87,
                                         ),
                                       ),
                                       const SizedBox(height: 6),
@@ -829,8 +865,26 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                             style: TextStyle(
                                               fontSize: 13,
                                               color: Colors.grey[600],
-                                            ),
-                                          ),
+                                                  ),
+                                                ),
+                                                if (isCompleted) ...[
+                                                  const SizedBox(width: 8),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.green,
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: const Text(
+                                                      'Completed',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: Colors.white,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                         ],
                                       ),
                                     ],
@@ -839,11 +893,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                 Icon(
                                   Icons.arrow_forward_ios,
                                   size: 16,
-                                  color: Colors.grey[400],
+                                        color: isCompleted ? Colors.grey[300] : Colors.grey[400],
                                 ),
                               ],
+                                  ),
                             ),
                           ),
+                            );
+                          },
                         );
                       },
                     ),
@@ -865,6 +922,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     final descriptionController = TextEditingController(text: event.description ?? '');
     DateTime? selectedDate = event.date;
     String? selectedSport = event.sportName;
+    String? selectedDivision = event.division; // Initialize division from event
     bool isAddingNewSport = false;
     final List<String> existingAddresses =
         _eventService.events.map((e) => e.locationAddress).toSet().toList();
@@ -874,6 +932,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     bool locationError = false;
     bool addressError = false;
     bool sportError = false;
+    bool divisionError = false;
 
     showDialog(
       context: context,
@@ -1258,9 +1317,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                                         setDialogState(() {
                                                           selectedSport =
                                                               'Basketball';
+                                                          selectedDivision = null; // Clear division when sport changes
                                                           isAddingNewSport =
                                                               false;
                                                           sportError = false;
+                                                          divisionError = false;
                                                         });
                                                       },
                                                       child: Container(
@@ -1341,9 +1402,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                                         setDialogState(() {
                                                           selectedSport =
                                                               'Pickleball';
+                                                          selectedDivision = null; // Clear division when sport changes
                                                           isAddingNewSport =
                                                               false;
                                                           sportError = false;
+                                                          divisionError = false;
                                                         });
                                                       },
                                                       child: Container(
@@ -1650,13 +1713,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                   sportError =
                                       selectedSport == null &&
                                       sportNameController.text.isEmpty;
+                                  // Division is required only for Basketball and Pickleball
+                                  divisionError = (selectedSport == 'Basketball' || selectedSport == 'Pickleball') && 
+                                                 (selectedDivision == null || selectedDivision!.trim().isEmpty);
 
                                   hasErrors =
                                       titleError ||
                                       dateError ||
                                       locationError ||
                                       addressError ||
-                                      sportError;
+                                      sportError ||
+                                      divisionError;
                                 });
 
                                 if (hasErrors) {
@@ -1676,6 +1743,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                       addressController.text.trim(),
                                   sportName: sportName,
                                   description: descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+                                  division: selectedDivision, // Include division in update
                                 );
 
                                 final success = await _eventService.updateEvent(
@@ -1733,7 +1801,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+                children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Text(
@@ -1745,9 +1813,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ),
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey[100],
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: hasError ? Colors.red : Colors.grey[200]!,
@@ -1770,26 +1838,26 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Row(
-            children: [
+                    child: Row(
+                      children: [
               Icon(icon, size: 18, color: const Color(0xFF2196F3)),
-              const SizedBox(width: 8),
+                        const SizedBox(width: 8),
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 13,
+                            style: TextStyle(
+                              fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: Colors.grey[700],
                   letterSpacing: 0.3,
-                ),
-              ),
-            ],
-          ),
-        ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
         Container(
           decoration: BoxDecoration(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.grey[300]!, width: 1),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1891,7 +1959,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                       '$sportName (${teams.length} teams)',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                              fontSize: 16,
                       ),
                     ),
                     children:
@@ -1900,6 +1968,50 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             leading: const Icon(Icons.group),
                             title: Text(team.name),
                             subtitle: Text('Division: ${team.division}'),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () async {
+                                // Confirm deletion
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Delete Team'),
+                                    content: Text('Are you sure you want to delete "${team.name}"? This action cannot be undone.'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        onPressed: () => Navigator.pop(context, true),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                
+                                if (confirmed == true) {
+                                  // Delete the team
+                                  if (sportName == 'Basketball') {
+                                    await _teamService.deleteTeam(team.id);
+                                  } else if (sportName == 'Pickleball') {
+                                    await _pickleballTeamService.deleteTeam(team.id);
+                                  }
+                                  
+                                  // Reload teams and refresh dialog
+      await _teamService.loadTeams();
+      await _pickleballTeamService.loadTeams();
+                                  if (mounted) {
+                                    Navigator.pop(context); // Close current dialog
+                                    _showTeamRegisteredDialog(); // Reopen with updated data
+                                  }
+                                }
+                              },
+                            ),
                           );
                         }).toList(),
                   );
@@ -1923,11 +2035,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     final descriptionController = TextEditingController();
     DateTime? selectedDate;
     String? selectedSport;
+    String? selectedDivision;
     bool titleError = false;
     bool dateError = false;
     bool locationError = false;
     bool addressError = false;
     bool sportError = false;
+    bool divisionError = false;
 
     showDialog(
       context: context,
@@ -1938,50 +2052,50 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           child: SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+                      children: [
                   Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Create Event',
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Create Event',
                           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      IconButton(
+                                ),
+                              ),
+                              IconButton(
                         icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
+                                onPressed: () => Navigator.pop(context),
+                              ),
+                            ],
+                          ),
                   const SizedBox(height: 12),
-                  _buildImageStyleField(
-                    label: 'Event name',
-                    hasError: titleError,
-                    child: TextField(
-                      controller: titleController,
-                      decoration: InputDecoration(
-                        hintText: 'Enter event name',
-                        border: InputBorder.none,
+                                _buildImageStyleField(
+                                  label: 'Event name',
+                                  hasError: titleError,
+                                  child: TextField(
+                                    controller: titleController,
+                                    decoration: InputDecoration(
+                                      hintText: 'Enter event name',
+                                      border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                       ),
                       onChanged: (v) {
                         if (titleError && v.isNotEmpty) {
                           setDialogState(() => titleError = false);
-                        }
-                      },
-                    ),
-                  ),
+                                      }
+                                    },
+                                  ),
+                                ),
                   const SizedBox(height: 16),
-                  _buildImageStyleField(
-                    label: 'Date',
-                    hasError: dateError,
-                    child: InkWell(
-                      onTap: () async {
+                                _buildImageStyleField(
+                                  label: 'Date',
+                                  hasError: dateError,
+                                  child: InkWell(
+                                    onTap: () async {
                         final picked = await showDatePicker(
-                          context: context,
+                                        context: context,
                           initialDate: selectedDate != null && selectedDate!.isAfter(DateTime.now())
                               ? selectedDate!
                               : DateTime.now(),
@@ -1995,68 +2109,68 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                           },
                         );
                         if (picked != null) {
-                          setDialogState(() {
+                                        setDialogState(() {
                             selectedDate = picked;
-                            dateError = false;
-                          });
-                        }
-                      },
-                      child: Padding(
+                                          dateError = false;
+                                        });
+                                      }
+                                    },
+                                    child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                        child: Row(
-                          children: [
+                                      child: Row(
+                                        children: [
                             Icon(Icons.calendar_today, size: 20, color: Colors.grey[600]),
                             const SizedBox(width: 12),
                             Text(
-                              selectedDate != null
+                                              selectedDate != null
                                   ? '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}'
-                                  : 'Select date',
-                              style: TextStyle(
-                                fontSize: 16,
+                                                  : 'Select date',
+                                              style: TextStyle(
+                                                fontSize: 16,
                                 color: selectedDate != null ? Colors.black87 : Colors.grey[400],
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
                   const SizedBox(height: 16),
-                  _buildImageStyleField(
-                    label: 'Location',
-                    hasError: locationError,
-                    child: TextField(
-                      controller: locationController,
-                      decoration: InputDecoration(
-                        hintText: 'Enter location name',
-                        border: InputBorder.none,
+                                _buildImageStyleField(
+                                  label: 'Location',
+                                  hasError: locationError,
+                                  child: TextField(
+                                    controller: locationController,
+                                    decoration: InputDecoration(
+                                      hintText: 'Enter location name',
+                                      border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                       ),
                       onChanged: (v) {
                         if (locationError && v.isNotEmpty) {
                           setDialogState(() => locationError = false);
-                        }
-                      },
-                    ),
-                  ),
+                                      }
+                                    },
+                                  ),
+                                ),
                   const SizedBox(height: 16),
-                  _buildImageStyleField(
-                    label: 'Address',
-                    hasError: addressError,
-                    child: TextField(
-                      controller: addressController,
-                      decoration: InputDecoration(
-                        hintText: 'Enter full address',
-                        border: InputBorder.none,
+                                    _buildImageStyleField(
+                                      label: 'Address',
+                                      hasError: addressError,
+                                      child: TextField(
+                                        controller: addressController,
+                                        decoration: InputDecoration(
+                                          hintText: 'Enter full address',
+                                          border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                       ),
                       onChanged: (v) {
                         if (addressError && v.isNotEmpty) {
                           setDialogState(() => addressError = false);
                         }
-                      },
-                    ),
-                  ),
+                                        },
+                                      ),
+                                    ),
                   const SizedBox(height: 16),
                   _buildImageStyleField(
                     label: 'Description',
@@ -2073,9 +2187,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _buildImageStyleField(
-                    label: 'Sport name',
-                    hasError: sportError,
+                                _buildImageStyleField(
+                                  label: 'Sport name',
+                                  hasError: sportError,
                     child: InkWell(
                       onTap: () {
                         showDialog(
@@ -2086,30 +2200,36 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                               padding: const EdgeInsets.all(20),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
-                                children: [
+                                            children: [
                                   const Text('Select Sport', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 20),
                                   _buildSportPickItem(dialogContext, 'Basketball', Icons.sports_basketball, () {
                                     Navigator.pop(dialogContext);
-                                    setDialogState(() {
+                                                      setDialogState(() {
                                       selectedSport = 'Basketball';
-                                      sportError = false;
+                                      selectedDivision = null; // Clear division when sport changes
+                                                        sportError = false;
+                                      divisionError = false;
                                     });
                                   }),
                                   const SizedBox(height: 12),
                                   _buildSportPickItem(dialogContext, 'Pickleball', Icons.sports_tennis, () {
                                     Navigator.pop(dialogContext);
-                                    setDialogState(() {
+                                                    setDialogState(() {
                                       selectedSport = 'Pickleball';
+                                      selectedDivision = null; // Clear division when sport changes
                                       sportError = false;
+                                      divisionError = false;
                                     });
                                   }, color: Colors.green),
                                   const SizedBox(height: 12),
                                   _buildSportPickItem(dialogContext, 'Soccer', Icons.sports_soccer, () {
                                     Navigator.pop(dialogContext);
-                                    setDialogState(() {
+                                                                setDialogState(() {
                                       selectedSport = 'Soccer';
+                                      selectedDivision = null; // Clear division when sport changes
                                       sportError = false;
+                                      divisionError = false;
                                     });
                                   }, color: Colors.blueGrey),
                                   const SizedBox(height: 12),
@@ -2117,34 +2237,117 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                     Navigator.pop(dialogContext);
                                     setDialogState(() {
                                       selectedSport = 'Volleyball';
+                                      selectedDivision = null; // Clear division when sport changes
                                       sportError = false;
+                                      divisionError = false;
                                     });
                                   }, color: Colors.deepPurple),
-                                ],
-                              ),
-                            ),
-                          ),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                            ),
                         );
                       },
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                        child: Row(
-                          children: [
+                                                                child: Row(
+                                                                  children: [
                             Expanded(
-                              child: Text(
+                                                                      child: Text(
                                 selectedSport ?? 'Select sport',
-                                style: TextStyle(
+                                                                        style: TextStyle(
                                   fontSize: 16,
                                   color: selectedSport != null ? Colors.black87 : Colors.grey[400],
-                                ),
-                              ),
-                            ),
+                                                                        ),
+                                                                      ),
+                                                                    ),
                             const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
-                          ],
-                        ),
-                      ),
-                    ),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                            ),
                   ),
+                  // Division selection - only show for Basketball or Pickleball
+                  if (selectedSport == 'Basketball' || selectedSport == 'Pickleball') ...[
+                    const SizedBox(height: 16),
+                    _buildImageStyleField(
+                      label: 'Division',
+                      hasError: divisionError,
+                      child: InkWell(
+                                                              onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (dialogContext) => Dialog(
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text('Select Division', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 20),
+                                    // Basketball divisions
+                                    if (selectedSport == 'Basketball') ...[
+                                      _buildDivisionPickItem(dialogContext, 'Youth (18 or under)', () {
+                                        Navigator.pop(dialogContext);
+                                        setDialogState(() {
+                                          selectedDivision = 'Youth (18 or under)';
+                                          divisionError = false;
+                                        });
+                                      }),
+                                      const SizedBox(height: 12),
+                                      _buildDivisionPickItem(dialogContext, 'Adult 18+', () {
+                                        Navigator.pop(dialogContext);
+                                        setDialogState(() {
+                                          selectedDivision = 'Adult 18+';
+                                          divisionError = false;
+                                        });
+                                      }),
+                                    ],
+                                    // Pickleball divisions - only 3.5 or under and 4.0 or above
+                                    if (selectedSport == 'Pickleball') ...[
+                                      _buildDivisionPickItem(dialogContext, '3.5 or under', () {
+                                        Navigator.pop(dialogContext);
+                                        setDialogState(() {
+                                          selectedDivision = '3.5 or under';
+                                          divisionError = false;
+                                        });
+                                      }),
+                                      const SizedBox(height: 12),
+                                      _buildDivisionPickItem(dialogContext, '4.0 or above', () {
+                                        Navigator.pop(dialogContext);
+                                        setDialogState(() {
+                                          selectedDivision = '4.0 or above';
+                                          divisionError = false;
+                                        });
+                                      }),
+                                    ],
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                              );
+                                            },
+                                            child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                                              child: Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                  selectedDivision ?? 'Select division',
+                                                      style: TextStyle(
+                                                        fontSize: 16,
+                                    color: selectedDivision != null ? Colors.black87 : Colors.grey[400],
+                                                      ),
+                                                    ),
+                                                  ),
+                              const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                ),
+                  ],
                   const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -2155,30 +2358,34 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: () async {
-                          setDialogState(() {
+                              onPressed: () async {
+                                setDialogState(() {
                             titleError = titleController.text.trim().isEmpty;
-                            dateError = selectedDate == null;
+                                  dateError = selectedDate == null;
                             locationError = locationController.text.trim().isEmpty;
                             addressError = addressController.text.trim().isEmpty;
                             sportError = (selectedSport == null || selectedSport!.trim().isEmpty);
+                            // Division is required only for Basketball and Pickleball
+                            divisionError = (selectedSport == 'Basketball' || selectedSport == 'Pickleball') && 
+                                           (selectedDivision == null || selectedDivision!.trim().isEmpty);
                           });
-                          if (titleError || dateError || locationError || addressError || sportError) return;
+                          if (titleError || dateError || locationError || addressError || sportError || divisionError) return;
 
                           final ok = await _eventService.createEvent(
-                            title: titleController.text.trim(),
-                            date: selectedDate!,
-                            locationName: locationController.text.trim(),
+                                  title: titleController.text.trim(),
+                                  date: selectedDate!,
+                                  locationName: locationController.text.trim(),
                             locationAddress: addressController.text.trim(),
                             sportName: selectedSport!.trim(),
                             description: descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+                            division: selectedDivision,
                           );
                           if (ok) {
                             await _eventService.initialize();
-                            if (mounted) {
+                                if (mounted) {
                               setState(() {});
                             }
-                            Navigator.pop(context);
+                                  Navigator.pop(context);
                           }
                         },
                         child: const Text('Create'),
@@ -2187,10 +2394,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   ),
                 ],
               ),
-            ),
+                    ),
+                  ),
+                ),
           ),
-        ),
-      ),
     );
   }
 
@@ -2199,19 +2406,43 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
+          decoration: BoxDecoration(
           color: Colors.grey[50],
-          borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.grey[200]!, width: 1),
         ),
-        child: Row(
-          children: [
+          child: Row(
+            children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(color: color.withOpacity(0.10), borderRadius: BorderRadius.circular(8)),
               child: Icon(icon, color: color, size: 24),
             ),
             const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.black87),
+                ),
+              ),
+            ],
+          ),
+        ),
+    );
+  }
+
+  Widget _buildDivisionPickItem(BuildContext dialogContext, String label, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+          color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[200]!, width: 1),
+      ),
+        child: Row(
+        children: [
             Expanded(
               child: Text(
                 label,
@@ -2225,14 +2456,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   }
 
   void _confirmDeleteEvent(Event event) {
-    showDialog(
-      context: context,
+      showDialog(
+        context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Event'),
         content: Text('Are you sure you want to delete "${event.title}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
@@ -2250,9 +2481,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               if (mounted) Navigator.pop(context);
             },
             child: const Text('Delete'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }

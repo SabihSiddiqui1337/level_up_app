@@ -9,6 +9,7 @@ import 'main_navigation_screen.dart';
 import 'event_detail_screen.dart';
 import 'team_registration_screen.dart';
 import 'pickleball_team_registration_screen.dart';
+import 'sport_schedule_screen.dart';
 
 class UpcomingEventsScreen extends StatefulWidget {
   final VoidCallback? onHomePressed;
@@ -22,8 +23,11 @@ class UpcomingEventsScreen extends StatefulWidget {
 class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
   bool _isCopying = false; // Add flag to prevent rapid copying
   final EventService _eventService = EventService();
-  List<Event> _events = [];
+  List<Event> _upcomingEvents = [];
+  List<Event> _pastEvents = [];
   bool _isLoading = true;
+  bool _isUpcomingExpanded = true; // Track expansion state for upcoming events
+  bool _isPastExpanded = true; // Track expansion state for past events
 
   @override
   void initState() {
@@ -31,12 +35,26 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
     _loadEvents();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload events when screen becomes visible to show updated past events
+    _loadEvents();
+  }
+
   Future<void> _loadEvents() async {
     await _eventService.initialize();
-    setState(() {
-      _events = _eventService.upcomingEvents;
-      _isLoading = false;
-    });
+    // Load upcoming events (exclude completed ones)
+    final upcomingEvents = await _eventService.getUpcomingEventsExcludingCompleted();
+    // Load past events
+    final pastEvents = await _eventService.getPastEvents();
+    if (mounted) {
+      setState(() {
+        _upcomingEvents = upcomingEvents;
+        _pastEvents = pastEvents;
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -53,56 +71,83 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              // Title
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  'Upcoming Events',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFFE67E22),
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
-
-              // Events List
-              Expanded(
-                child:
-                    _isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : _events.isEmpty
-                        ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Upcoming Events Section - Always show with expand/collapse
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _isUpcomingExpanded = !_isUpcomingExpanded;
+                            });
+                          },
+                          child: Row(
                             children: [
-                              Icon(
-                                Icons.event_busy,
-                                size: 64,
-                                color: Colors.grey[400],
-                              ),
-                              const SizedBox(height: 16),
                               Text(
-                                'No upcoming events',
+                                'Upcoming Events',
                                 style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey[600],
-                                  fontWeight: FontWeight.w500,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFFE67E22),
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              const Spacer(),
+                              AnimatedRotation(
+                                turns: _isUpcomingExpanded ? 0.5 : 0,
+                                duration: const Duration(milliseconds: 200),
+                                child: const Icon(
+                                  Icons.keyboard_arrow_down,
+                                  color: Color(0xFFE67E22),
+                                  size: 28,
                                 ),
                               ),
                             ],
                           ),
+                        ),
+                      ),
+                      
+                      // Show events or empty message (collapsible)
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 300),
+                        child: _isUpcomingExpanded
+                            ? Column(
+                                children: [
+                                  if (_upcomingEvents.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+                          child: Center(
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.event_busy,
+                                  size: 64,
+                                  color: Colors.grey[400],
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No upcoming events',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    color: Colors.grey[600],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         )
-                        : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: _events.length,
-                          itemBuilder: (context, index) {
-                            final event = _events[index];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 16),
+                      else
+                        ..._upcomingEvents.map((event) => Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
                               child: _buildSimpleEventCard(
                                 event.title,
                                 _formatDate(event.date),
@@ -110,15 +155,104 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                                 event.locationAddress,
                                 event.sportName,
                                 event,
+                                isCompleted: false,
                               ),
-                            );
+                            )),
+                                ],
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                      
+                      // Past Events Section - Always show with expand/collapse
+                      const SizedBox(height: 32),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _isPastExpanded = !_isPastExpanded;
+                            });
                           },
+                          child: Row(
+                            children: [
+                              Text(
+                                'Past Events',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFFE67E22),
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              const Spacer(),
+                              AnimatedRotation(
+                                turns: _isPastExpanded ? 0.5 : 0,
+                                duration: const Duration(milliseconds: 200),
+                                child: const Icon(
+                                  Icons.keyboard_arrow_down,
+                                  color: Color(0xFFE67E22),
+                                  size: 28,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-              ),
-
-              // Registration Cart
-            ],
-          ),
+                      ),
+                      
+                      // Past events content (collapsible) - Always show, even if empty
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 300),
+                        child: _isPastExpanded
+                            ? Column(
+                                children: [
+                                  if (_pastEvents.isEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+                                      child: Center(
+                                        child: Column(
+                                          children: [
+                                            Icon(
+                                              Icons.event_busy,
+                                              size: 64,
+                                              color: Colors.grey[400],
+                                            ),
+                                            const SizedBox(height: 16),
+                                            Text(
+                                              'No past events',
+                                              style: TextStyle(
+                                                fontSize: 18,
+                                                color: Colors.grey[600],
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    ..._pastEvents.map((event) => Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 8,
+                                          ),
+                                          child: _buildSimpleEventCard(
+                                            event.title,
+                                            _formatDate(event.date),
+                                            event.locationName,
+                                            event.locationAddress,
+                                            event.sportName,
+                                            event,
+                                            isCompleted: true,
+                                          ),
+                                        )),
+                                  const SizedBox(height: 20),
+                                ],
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ),
+                ),
         ),
       ),
     );
@@ -150,6 +284,7 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
     String address,
     String sportName,
     Event? event,
+    {bool isCompleted = false}
   ) {
     // Determine which image to use based on sport name
     String? imagePath;
@@ -226,28 +361,59 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Sport Name Badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.5),
-                        width: 1,
+                  // Sport Name Badge with Division
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          sportName,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2196F3),
+                          ),
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      sportName,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF2196F3),
-                      ),
-                    ),
+                      // Division badge (if available)
+                      if (event?.division != null && event!.division!.trim().isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.5),
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            event.division!,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFE67E22),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 12),
 
@@ -397,97 +563,132 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                   const SizedBox(height: 10),
 
                   // Action buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => const MainNavigationScreen(
-                                      initialIndex: 1,
-                                    ),
+                  if (isCompleted)
+                    // For completed events - only "Check Score" button
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        // Navigate directly to Sport Schedule screen (Preliminary Rounds tab)
+                        if (event != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SportScheduleScreen(
+                                sportName: event.sportName,
+                                tournamentTitle: event.title,
                               ),
-                            );
-                          },
-                          icon: const Icon(Icons.app_registration, size: 16),
-                          label: const Text(
-                            'REGISTER',
-                            style: TextStyle(fontSize: 13),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFE67E22),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
                             ),
-                            elevation: 2,
-                          ),
-                        ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.score, size: 16),
+                      label: const Text(
+                        'CHECK SCORE',
+                        style: TextStyle(fontSize: 13),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            // Show details dialog or navigate to details screen
-                            if (event != null) {
-                              Navigator.push(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2196F3),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        minimumSize: const Size(double.infinity, 0),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 2,
+                      ),
+                    )
+                  else
+                    // For upcoming events - Register and Details buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.pushReplacement(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => EventDetailScreen(
-                                    event: event,
-                                    onSignUp: () {
-                                      final sport = event.sportName.toLowerCase();
-                                      if (sport.contains('pickleball') || sport.contains('pickelball')) {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => PickleballTeamRegistrationScreen(event: event),
-                                          ),
-                                        );
-                                      } else {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => TeamRegistrationScreen(event: event),
-                                          ),
-                                        );
-                                      }
-                                    },
-                                  ),
+                                  builder:
+                                      (context) => const MainNavigationScreen(
+                                        initialIndex: 1,
+                                      ),
                                 ),
                               );
-                            } else {
-                              _showEventDetails(
-                                title,
-                                date,
-                                location,
-                                address,
-                                sportName,
-                              );
-                            }
-                          },
-                          icon: const Icon(Icons.info_outline, size: 16),
-                          label: const Text(
-                            'DETAILS',
-                            style: TextStyle(fontSize: 13),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.9),
-                            foregroundColor: Colors.black87,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                            },
+                            icon: const Icon(Icons.app_registration, size: 16),
+                            label: const Text(
+                              'REGISTER',
+                              style: TextStyle(fontSize: 13),
                             ),
-                            elevation: 2,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFE67E22),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              elevation: 2,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              // Show details dialog or navigate to details screen
+                              if (event != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => EventDetailScreen(
+                                      event: event,
+                                      onSignUp: () {
+                                        final sport = event.sportName.toLowerCase();
+                                        if (sport.contains('pickleball') || sport.contains('pickelball')) {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => PickleballTeamRegistrationScreen(event: event),
+                                            ),
+                                          );
+                                        } else {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => TeamRegistrationScreen(event: event),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                _showEventDetails(
+                                  title,
+                                  date,
+                                  location,
+                                  address,
+                                  sportName,
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.info_outline, size: 16),
+                            label: const Text(
+                              'DETAILS',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white.withOpacity(0.9),
+                              foregroundColor: Colors.black87,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              elevation: 2,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),

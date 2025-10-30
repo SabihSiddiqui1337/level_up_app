@@ -6,6 +6,7 @@ class Event {
   final String locationAddress;
   final String sportName;
   final String? description;
+  final String? division; // Division for Basketball/Pickleball events
   final DateTime createdAt;
 
   Event({
@@ -17,6 +18,7 @@ class Event {
     required this.sportName,
     required this.createdAt,
     this.description,
+    this.division,
   });
 
   // Convert Event to JSON
@@ -29,6 +31,7 @@ class Event {
       'locationAddress': locationAddress,
       'sportName': sportName,
       'description': description,
+      'division': division,
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -43,6 +46,7 @@ class Event {
       locationAddress: json['locationAddress'] ?? '',
       sportName: json['sportName'] ?? '',
       description: json['description'],
+      division: json['division'],
       createdAt: DateTime.parse(json['createdAt']),
     );
   }
@@ -56,6 +60,7 @@ class Event {
     String? locationAddress,
     String? sportName,
     String? description,
+    String? division,
     DateTime? createdAt,
   }) {
     return Event(
@@ -66,6 +71,7 @@ class Event {
       locationAddress: locationAddress ?? this.locationAddress,
       sportName: sportName ?? this.sportName,
       description: description ?? this.description,
+      division: division ?? this.division,
       createdAt: createdAt ?? this.createdAt,
     );
   }

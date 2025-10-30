@@ -77,6 +77,7 @@ class EventService {
     required String locationAddress,
     required String sportName,
     String? description,
+    String? division,
   }) async {
     try {
       final newEvent = Event(
@@ -87,6 +88,7 @@ class EventService {
         locationAddress: locationAddress,
         sportName: sportName,
         description: description,
+        division: division,
         createdAt: DateTime.now(),
       );
 
@@ -153,5 +155,106 @@ class EventService {
     _events.clear();
     await _saveEvents();
     print('All events cleared');
+  }
+
+  // Track completed events (events where finals have been completed)
+  static const String _completedEventsKey = 'completed_events';
+
+  // Mark an event as completed (finals completed)
+  Future<void> markEventCompleted(String eventId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final completedIds = prefs.getStringList(_completedEventsKey) ?? [];
+      print('DEBUG: Marking event as completed - ID: $eventId');
+      print('DEBUG: Current completed IDs before: $completedIds');
+      if (!completedIds.contains(eventId)) {
+        completedIds.add(eventId);
+        await prefs.setStringList(_completedEventsKey, completedIds);
+        print('DEBUG: Event $eventId marked as completed successfully');
+        print('DEBUG: Completed IDs after: $completedIds');
+      } else {
+        print('DEBUG: Event $eventId was already marked as completed');
+      }
+    } catch (e) {
+      print('Error marking event as completed: $e');
+    }
+  }
+
+  // Check if an event is completed
+  Future<bool> isEventCompleted(String eventId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final completedIds = prefs.getStringList(_completedEventsKey) ?? [];
+      return completedIds.contains(eventId);
+    } catch (e) {
+      print('Error checking if event is completed: $e');
+      return false;
+    }
+  }
+
+  // Get completed events (past events)
+  Future<List<Event>> getPastEvents() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final completedIds = prefs.getStringList(_completedEventsKey) ?? [];
+      print('DEBUG: Getting past events, completed IDs: $completedIds');
+      final pastEvents = _events
+          .where((event) => completedIds.contains(event.id))
+          .toList();
+      pastEvents.sort((a, b) => b.date.compareTo(a.date)); // Most recent first
+      print('DEBUG: Past events count: ${pastEvents.length}');
+      return pastEvents;
+    } catch (e) {
+      print('Error getting past events: $e');
+      return [];
+    }
+  }
+
+  // Get upcoming events (exclude completed ones)
+  Future<List<Event>> getUpcomingEventsExcludingCompleted() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final completedIds = prefs.getStringList(_completedEventsKey) ?? [];
+      print('DEBUG: Completed event IDs: $completedIds');
+      print('DEBUG: Total events: ${_events.length}');
+      
+      final now = DateTime.now();
+      final upcoming = _events
+          .where((event) {
+            final isCompleted = completedIds.contains(event.id);
+            final isFuture = event.date.isAfter(now);
+            print('DEBUG: Event "${event.title}" (${event.id}): completed=$isCompleted, future=$isFuture');
+            return !isCompleted && isFuture;
+          })
+          .toList();
+      upcoming.sort((a, b) => a.date.compareTo(b.date));
+      print('DEBUG: Upcoming events (excluding completed): ${upcoming.length}');
+      return upcoming;
+    } catch (e) {
+      print('Error getting upcoming events: $e');
+      return [];
+    }
+  }
+
+  // Find event by sport name and tournament title
+  Event? findEventBySportAndTitle(String sportName, String tournamentTitle) {
+    try {
+      print('DEBUG: Searching for event - sportName: "$sportName", title: "$tournamentTitle"');
+      print('DEBUG: Available events:');
+      for (var event in _events) {
+        print('  - "${event.sportName}" / "${event.title}" (id: ${event.id})');
+      }
+      
+      final found = _events.firstWhere(
+        (event) =>
+            event.sportName.toLowerCase() == sportName.toLowerCase() &&
+            event.title.toLowerCase() == tournamentTitle.toLowerCase(),
+      );
+      print('DEBUG: Found event: ${found.id} - "${found.title}"');
+      return found;
+    } catch (e) {
+      print('DEBUG: Event not found - sportName: "$sportName", title: "$tournamentTitle", error: $e');
+      return null;
+    }
   }
 }

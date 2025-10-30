@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/event.dart';
 import '../widgets/custom_app_bar.dart';
 
-class EventDetailScreen extends StatelessWidget {
+class EventDetailScreen extends StatefulWidget {
   final Event event;
   final VoidCallback? onHomePressed;
   final VoidCallback onSignUp;
@@ -13,6 +14,13 @@ class EventDetailScreen extends StatelessWidget {
     required this.onSignUp,
     this.onHomePressed,
   });
+
+  @override
+  State<EventDetailScreen> createState() => _EventDetailScreenState();
+}
+
+class _EventDetailScreenState extends State<EventDetailScreen> {
+  bool _isCopying = false;
 
   String? _imageForSport(String sportName) {
     final s = sportName.toLowerCase();
@@ -25,10 +33,10 @@ class EventDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imagePath = _imageForSport(event.sportName);
+    final imagePath = _imageForSport(widget.event.sportName);
 
     return Scaffold(
-      appBar: CustomAppBar(onHomePressed: onHomePressed),
+      appBar: CustomAppBar(onHomePressed: widget.onHomePressed),
       body: Column(
         children: [
           // 1) Top sport image with back button overlay
@@ -67,7 +75,7 @@ class EventDetailScreen extends StatelessWidget {
                 children: [
                   // Title
                   Text(
-                    event.title,
+                    widget.event.title,
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
@@ -81,11 +89,25 @@ class EventDetailScreen extends StatelessWidget {
                       const Icon(Icons.event, size: 18, color: Colors.black54),
                       const SizedBox(width: 6),
                       Text(
-                        _formatDate(event.date),
+                        _formatDate(widget.event.date),
                         style: const TextStyle(fontSize: 16, color: Colors.black87),
                       ),
                     ],
                   ),
+                  // Division (if available)
+                  if (widget.event.division != null && widget.event.division!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(Icons.group, size: 18, color: Colors.black54),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Division: ${widget.event.division}',
+                          style: const TextStyle(fontSize: 16, color: Colors.black87),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 12),
 
                   // Location
@@ -99,13 +121,35 @@ class EventDetailScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              event.locationName,
+                              widget.event.locationName,
                               style: const TextStyle(fontSize: 16, color: Colors.black87),
                             ),
                             const SizedBox(height: 2),
-                            Text(
-                              event.locationAddress,
-                              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    widget.event.locationAddress,
+                                    style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: _isCopying ? null : () => _copyToClipboard(widget.event.locationAddress),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF2196F3).withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Icon(
+                                      Icons.copy,
+                                      size: 16,
+                                      color: _isCopying ? Colors.grey : const Color(0xFF2196F3),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -127,9 +171,9 @@ class EventDetailScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    (event.description == null || event.description!.trim().isEmpty)
-                        ? _defaultDescriptionForSport(event.sportName)
-                        : event.description!,
+                    (widget.event.description == null || widget.event.description!.trim().isEmpty)
+                        ? _defaultDescriptionForSport(widget.event.sportName)
+                        : widget.event.description!,
                     style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.4),
                   ),
                 ],
@@ -152,7 +196,7 @@ class EventDetailScreen extends StatelessWidget {
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
-              onPressed: onSignUp,
+              onPressed: widget.onSignUp,
               child: const Text('Sign up  >', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             ),
           ),
@@ -184,6 +228,41 @@ class EventDetailScreen extends StatelessWidget {
       return 'Bump, set, spike! Register your volleyball team and join the fun.';
     }
     return 'Register your team and join the competition!';
+  }
+
+  void _copyToClipboard(String text) async {
+    if (_isCopying) return; // Prevent rapid clicking
+
+    setState(() {
+      _isCopying = true;
+    });
+
+    // Convert multi-line address to single line for copying
+    final singleLineText = text.replaceAll('\n', ' ');
+    await Clipboard.setData(ClipboardData(text: singleLineText));
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Address copied to clipboard!',
+            style: TextStyle(color: Colors.white),
+          ),
+          backgroundColor: const Color(0xFF38A169),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+
+    // Add delay before allowing another copy
+    await Future.delayed(const Duration(seconds: 1));
+    if (mounted) {
+      setState(() {
+        _isCopying = false;
+      });
+    }
   }
 }
 

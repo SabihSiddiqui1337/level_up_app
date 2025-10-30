@@ -36,10 +36,19 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
     _loadEvents();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload events when screen becomes visible to exclude newly completed events
+    _loadEvents();
+  }
+
   Future<void> _loadEvents() async {
     await _eventService.initialize();
+    // Load upcoming events excluding completed ones
+    final upcomingEvents = await _eventService.getUpcomingEventsExcludingCompleted();
     setState(() {
-      _events = _eventService.upcomingEvents;
+      _events = upcomingEvents;
       // Get unique sport names from events
       _sportNames = _events.map((e) => e.sportName).toSet().toList();
       _isLoading = false;
