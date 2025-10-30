@@ -3102,45 +3102,22 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     final team1Id = match.team1Id ?? '';
     final team2Id = match.team2Id ?? '';
 
-    // Use stored format to determine if we show best of 3
-    final storedFormat = _matchFormats['QF'] ?? '1game';
-    final showBestOf3 = storedFormat == 'bestof3';
+    // For Semi Finals and Finals, always show best-of-3 and use 15 points
+    final bool showBestOf3 = true;
 
-    // Determine winner based on format
+    // Determine winner based on best of 3 (always)
     String? winner;
-    if (showBestOf3) {
-      // Best of 3: check games won
-      final team1GamesWon = _getGamesWon(match.id, team1Id);
-      final team2GamesWon = _getGamesWon(match.id, team2Id);
-      winner =
-          team1GamesWon >= 2
-              ? match.team1Id
-              : (team2GamesWon >= 2 ? match.team2Id : null);
-    } else {
-      // Single game: check game 1 winner
-      if (match.team1Id != null && match.team2Id != null) {
-        final team1Game1Score = _getGameScore(match.id, team1Id, 1) ?? 0;
-        final team2Game1Score = _getGameScore(match.id, team2Id, 1) ?? 0;
-        final minScore = _gameWinningScores[storedFormat] ?? 15;
-        if (team1Game1Score >= minScore &&
-            team1Game1Score >= team2Game1Score + 2) {
-          winner = match.team1Id;
-        } else if (team2Game1Score >= minScore &&
-            team2Game1Score >= team1Game1Score + 2) {
-          winner = match.team2Id;
-        }
-      }
-    }
+    final team1GamesWon = _getGamesWon(match.id, team1Id);
+    final team2GamesWon = _getGamesWon(match.id, team2Id);
+    winner = team1GamesWon >= 2
+        ? match.team1Id
+        : (team2GamesWon >= 2 ? match.team2Id : null);
 
     final isSelected = _selectedMatch?.id == match.id;
 
     // Get actual seeding numbers for the teams
     final team1Seeding = _getTeamSeeding(match.team1Id);
     final team2Seeding = _getTeamSeeding(match.team2Id);
-
-    // Check if SF is locked (when Finals has started)
-    // final isSemiFinalsLocked =
-    //     _hasFinalsScores && _authService.canScore && match.day == 'Semi Finals';
 
     return GestureDetector(
       onTap:
@@ -3243,15 +3220,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                   const SizedBox(height: 12),
                   Builder(
                     builder: (context) {
-                      // Calculate games won for display (only used for best of 3)
-                      final team1GamesWon =
-                          showBestOf3
-                              ? _getGamesWon(match.id, team1Id)
-                              : (winner == match.team1Id ? 1 : 0);
-                      final team2GamesWon =
-                          showBestOf3
-                              ? _getGamesWon(match.id, team2Id)
-                              : (winner == match.team2Id ? 1 : 0);
+                      // Calculate games won for display
+                      final team1GamesWon = _getGamesWon(match.id, team1Id);
+                      final team2GamesWon = _getGamesWon(match.id, team2Id);
 
                       return Column(
                         children: [
@@ -4191,7 +4162,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                                     : FontWeight.normal,
                             color:
                                 winningTeamId == match.team1Id
-                                    ? Colors.green[700]
+                                    ? Color.fromARGB(255, 105, 196, 2)
                                     : Colors.black,
                           ),
                         ),
@@ -4251,7 +4222,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                                     : FontWeight.normal,
                             color:
                                 winningTeamId == match.team2Id
-                                    ? Colors.green[700]
+                                    ? Color.fromARGB(255, 105, 196, 2)
                                     : Colors.black,
                           ),
                         ),
@@ -4301,7 +4272,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                               'Winner',
                               textAlign: TextAlign.left,
                               style: TextStyle(
-                                color: Colors.lightGreen,
+                                color: Color.fromARGB(255, 105, 196, 2),
                                 fontSize: 25,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -4324,7 +4295,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                               'Winner',
                               textAlign: TextAlign.right,
                               style: TextStyle(
-                                color: Colors.lightGreen,
+                                color: Color.fromARGB(255, 105, 196, 2),
                                 fontSize: 25,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -5291,10 +5262,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       if (_teams.length == 8) {
         // 8-team case: tabs are [SF, Finals]
         if (playoffSubTabIndex == 0) {
-          final semiFinals = _getSemiFinalsDirect();
+          final semiFinals = _getSemiFinals();
           return semiFinals.any((m) => m.id == _selectedMatch!.id);
         } else if (playoffSubTabIndex == 1) {
-          final finals = _getFinalsDirect();
+          final finals = _getFinals();
           return finals.any((m) => m.id == _selectedMatch!.id);
         }
       } else {
@@ -5305,10 +5276,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           print('DEBUG: _isSelectedMatchInCurrentTab - QF view, isInQuarterFinals: $isInQuarterFinals');
           return isInQuarterFinals;
         } else if (playoffSubTabIndex == 1) {
-          final semiFinals = _getSemiFinalsDirect();
+          final semiFinals = _getSemiFinals();
           return semiFinals.any((m) => m.id == _selectedMatch!.id);
         } else if (playoffSubTabIndex == 2) {
-          final finals = _getFinalsDirect();
+          final finals = _getFinals();
           return finals.any((m) => m.id == _selectedMatch!.id);
         }
       }
@@ -7477,6 +7448,41 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   }
 
   // TODO: Call _showTeamRegisteredDialog() from Admin tab or relevant location (e.g., an admin button/action)
+
+  void _startSemiFinalsScoring() {
+    if (_selectedMatch == null) return;
+    final match = _selectedMatch!;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SemiFinalsScoringScreen(
+          match: match,
+          initialScores: _playoffScores[_getPlayoffMatchKey(match.id)],
+          matchFormat: 'bestof3',
+          gameWinningScore: 15,
+          canAdjustSettings: false,
+          isFirstCard: false,
+          onScoresUpdated: (scores) async {
+            setState(() {
+              _playoffScores[_getPlayoffMatchKey(match.id)] = Map<String, int>.from(scores);
+              _selectedMatch = null;
+              _cachedStandings = null;
+              _lastStandingsCacheKey = null;
+            });
+            try {
+              await _scoreService.savePlayoffScores(_playoffScores);
+              await _scoreService.saveSemiFinalsScoresForDivision(
+                _selectedDivision ?? 'all',
+                _getCurrentDivisionPlayoffScores(),
+              );
+            } catch (e) {
+              print('Error saving SF scores: $e');
+            }
+          },
+        ),
+      ),
+    );
+  }
 }
 
 // Game Settings Screen for Quarter Finals

@@ -802,7 +802,7 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
         if (t1 == 0 && t2 == 0) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Please enter a valid score for every Game that is enabled!'))
+              SnackBar(content: Text('Please enter a valid score for every Game'))
             );
           }
           return;
