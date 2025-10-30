@@ -515,7 +515,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       controller: controller,
       keyboardType: keyboardType,
       autocorrect: false,
-      enableSuggestions: false,
+      enableSuggestions: true,
       validator: validator,
       style: const TextStyle(color: Colors.black),
       decoration: InputDecoration(
@@ -975,7 +975,7 @@ class AboutScreen extends StatelessWidget {
                 width: 85,
                 height: 85,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
+                  shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
                       color: Colors.grey.withOpacity(0.2),
@@ -984,10 +984,9 @@ class AboutScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
+                child: ClipOval(
                   child: Image.asset(
-                    'assets/level_up_sport.png',
+                    'assets/app_logo.jpg',
                     width: 85,
                     height: 85,
                     fit: BoxFit.cover,

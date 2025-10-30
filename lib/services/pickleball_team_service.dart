@@ -96,6 +96,11 @@ class PickleballTeamService {
     await _saveTeams();
   }
 
+  Future<void> deleteTeamsByEventId(String eventId) async {
+    _teams.removeWhere((team) => team.eventId == eventId);
+    await _saveTeams();
+  }
+
   PickleballTeam? getTeamById(String id) {
     try {
       return _teams.firstWhere((team) => team.id == id);

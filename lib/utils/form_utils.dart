@@ -15,11 +15,12 @@ class FormUtils {
     List<TextInputFormatter>? inputFormatters,
     TextCapitalization textCapitalization = TextCapitalization.none,
   }) {
+    final bool suggestions = !obscureText && keyboardType != TextInputType.phone;
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       autocorrect: false,
-      enableSuggestions: false,
+      enableSuggestions: suggestions,
       validator: validator,
       onChanged: onChanged,
       obscureText: obscureText,

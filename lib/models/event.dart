@@ -5,6 +5,7 @@ class Event {
   final String locationName;
   final String locationAddress;
   final String sportName;
+  final String? description;
   final DateTime createdAt;
 
   Event({
@@ -15,6 +16,7 @@ class Event {
     required this.locationAddress,
     required this.sportName,
     required this.createdAt,
+    this.description,
   });
 
   // Convert Event to JSON
@@ -26,6 +28,7 @@ class Event {
       'locationName': locationName,
       'locationAddress': locationAddress,
       'sportName': sportName,
+      'description': description,
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -39,6 +42,7 @@ class Event {
       locationName: json['locationName'] ?? '',
       locationAddress: json['locationAddress'] ?? '',
       sportName: json['sportName'] ?? '',
+      description: json['description'],
       createdAt: DateTime.parse(json['createdAt']),
     );
   }
@@ -51,6 +55,7 @@ class Event {
     String? locationName,
     String? locationAddress,
     String? sportName,
+    String? description,
     DateTime? createdAt,
   }) {
     return Event(
@@ -60,13 +65,14 @@ class Event {
       locationName: locationName ?? this.locationName,
       locationAddress: locationAddress ?? this.locationAddress,
       sportName: sportName ?? this.sportName,
+      description: description ?? this.description,
       createdAt: createdAt ?? this.createdAt,
     );
   }
 
   @override
   String toString() {
-    return 'Event(id: $id, title: $title, date: $date, locationName: $locationName, locationAddress: $locationAddress, sportName: $sportName, createdAt: $createdAt)';
+    return 'Event(id: $id, title: $title, date: $date, locationName: $locationName, locationAddress: $locationAddress, sportName: $sportName, description: $description, createdAt: $createdAt)';
   }
 
   @override

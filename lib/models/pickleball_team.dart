@@ -12,6 +12,7 @@ class PickleballTeam {
   final String?
   createdByUserId; // ID of user who created this team (null = public team)
   final bool isPrivate; // true if team is private to creator only
+  final String eventId;
 
   PickleballTeam({
     required this.id,
@@ -24,6 +25,7 @@ class PickleballTeam {
     required this.division,
     this.createdByUserId,
     this.isPrivate = false,
+    required this.eventId,
   });
 
   Map<String, dynamic> toJson() {
@@ -38,6 +40,7 @@ class PickleballTeam {
       'division': division,
       'createdByUserId': createdByUserId,
       'isPrivate': isPrivate,
+      'eventId': eventId,
     };
   }
 
@@ -48,14 +51,14 @@ class PickleballTeam {
       coachName: json['coachName'],
       coachPhone: json['coachPhone'],
       coachEmail: json['coachEmail'],
-      players:
-          (json['players'] as List)
-              .map((playerJson) => PickleballPlayer.fromJson(playerJson))
-              .toList(),
+      players: (json['players'] as List)
+          .map((playerJson) => PickleballPlayer.fromJson(playerJson))
+          .toList(),
       registrationDate: DateTime.parse(json['registrationDate']),
       division: json['division'],
       createdByUserId: json['createdByUserId'],
       isPrivate: json['isPrivate'] ?? false,
+      eventId: json['eventId'] ?? '',
     );
   }
 }

@@ -31,18 +31,20 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Image.asset(
-                          'assets/level_up_sport.png',
-                          width: 40,
-                          height: 40,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(
-                              Icons.sports_basketball,
-                              color: Color(0xFF2196F3),
-                              size: 40,
-                            );
-                          },
+                        ClipOval(
+                          child: Image.asset(
+                            'assets/app_logo.jpg',
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.sports_basketball,
+                                color: Color(0xFF2196F3),
+                                size: 40,
+                              );
+                            },
+                          ),
                         ),
                         const SizedBox(width: 4),
                         Text(

@@ -85,6 +85,11 @@ class TeamService {
     await _saveTeams();
   }
 
+  Future<void> deleteTeamsByEventId(String eventId) async {
+    _teams.removeWhere((team) => team.eventId == eventId);
+    await _saveTeams();
+  }
+
   void loadDemoData() {
     if (_teams.isEmpty) {
       _teams.addAll([
@@ -98,6 +103,7 @@ class TeamService {
           players: [],
           registrationDate: DateTime.now().subtract(const Duration(days: 5)),
           division: 'Adult 18+',
+          eventId: '', // Provide a value or use a mock event ID
         ),
       ]);
     }

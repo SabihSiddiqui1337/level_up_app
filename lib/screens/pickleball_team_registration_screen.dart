@@ -48,8 +48,9 @@ class PhoneNumberFormatter extends TextInputFormatter {
 class PickleballTeamRegistrationScreen extends StatefulWidget {
   final PickleballTeam? team; // For editing existing team
   final Function(PickleballTeam)? onSave;
+  final Event? event; // Event being registered for
 
-  const PickleballTeamRegistrationScreen({super.key, this.team, this.onSave});
+  const PickleballTeamRegistrationScreen({super.key, this.team, this.onSave, this.event});
 
   @override
   State<PickleballTeamRegistrationScreen> createState() =>
@@ -180,19 +181,21 @@ class _PickleballTeamRegistrationScreenState
       final currentUser = _authService.currentUser;
       final isAdmin =
           currentUser?.role == 'scoring' || currentUser?.role == 'owner';
+      final isManagement = _authService.isManagement;
 
       final team = PickleballTeam(
         id: teamId,
         name: _teamNameController.text,
         coachName: _coachNameController.text,
-        coachPhone: _coachPhoneController.text,
-        coachEmail: _coachEmailController.text,
+        coachPhone: isManagement ? '000-000-0000' : _coachPhoneController.text,
+        coachEmail: isManagement ? 'management@levelupsports.com' : _coachEmailController.text,
         players: List.from(_players), // Create a copy of the players list
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
         division: _selectedDuprRating,
         createdByUserId: currentUser?.id,
         isPrivate:
-            !isAdmin, // Regular users create private teams, admins create public teams
+            !isAdmin && !isManagement,
+        eventId: widget.event?.id ?? '',
       );
 
       // Create default event for pickleball tournament
@@ -271,6 +274,7 @@ class _PickleballTeamRegistrationScreenState
         division: _selectedDuprRating,
         createdByUserId: currentUser?.id,
         isPrivate: false, // Public team
+        eventId: widget.event?.id ?? '',
       );
 
       // Save the team
@@ -344,7 +348,7 @@ class _PickleballTeamRegistrationScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Quick Team Registration (Management)',
+              widget.event?.title ?? 'Register Team',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: const Color(0xFF38A169),

@@ -30,7 +30,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Future<void> _loadEvents() async {
     await _eventService.initialize();
     setState(() {
-      _events = _eventService.events;
+      _events = _eventService.upcomingEvents;
     });
   }
 
@@ -58,73 +58,58 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Widget _buildSportsList() {
-    // Check if there are any events at all
+    // Show all upcoming events as individual rows
     if (_events.isEmpty) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(32.0),
           child: Text(
-            'No sports event',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey,
-              fontWeight: FontWeight.w500,
-            ),
+            'No upcoming events',
+            style: TextStyle(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.w500),
           ),
         ),
       );
     }
 
-    // Build list of sport cards only for sports that have events
-    final List<Widget> sportCards = [];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 0; i < _events.length; i++) ...[
+          _buildEventRow(_events[i]),
+          if (i != _events.length - 1) const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
 
-    // Check for Basketball events
-    if (_hasEventForSport(ScheduleScreenKeys.basketball)) {
-      sportCards.add(
-        _buildSportCard(
-          ScheduleScreenKeys.basketball,
-          const Color(0xFFE67E22), // Orange
-          Icons.sports_basketball,
-          ScheduleScreenKeys.basketballTournament,
-          _getEventTitleForSport(ScheduleScreenKeys.basketball),
-        ),
-      );
+  Widget _buildEventRow(Event event) {
+    final sport = event.sportName;
+    IconData icon;
+    Color color;
+    if (sport.toLowerCase().contains('basketball')) {
+      icon = Icons.sports_basketball;
+      color = const Color(0xFFE67E22);
+    } else if (sport.toLowerCase().contains('pickleball') || sport.toLowerCase().contains('pickelball')) {
+      icon = Icons.sports_tennis;
+      color = const Color(0xFF38A169);
+    } else if (sport.toLowerCase().contains('volleyball')) {
+      icon = Icons.sports_volleyball;
+      color = const Color(0xFF9B59B6);
+    } else if (sport.toLowerCase().contains('soccer')) {
+      icon = Icons.sports_soccer;
+      color = const Color(0xFF1E88E5);
+    } else {
+      icon = Icons.sports;
+      color = const Color(0xFF3498DB);
     }
 
-    // Check for Pickleball events
-    if (_hasEventForSport(ScheduleScreenKeys.pickleball)) {
-      if (sportCards.isNotEmpty) {
-        sportCards.add(const SizedBox(height: 16));
-      }
-      sportCards.add(
-        _buildSportCard(
-          ScheduleScreenKeys.pickleball,
-          const Color(0xFF38A169), // Green
-          Icons.sports_tennis,
-          ScheduleScreenKeys.pickleballTournament,
-          _getEventTitleForSport(ScheduleScreenKeys.pickleball),
-        ),
-      );
-    }
-
-    // If no sport cards were added (events exist but not for these sports)
-    if (sportCards.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32.0),
-          child: Text(
-            'No sports event',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Column(mainAxisSize: MainAxisSize.min, children: sportCards);
+    return _buildSportCard(
+      sport,
+      color,
+      icon,
+      event.title,
+      event.title,
+    );
   }
 
   Future<void> _loadExpansionState() async {

@@ -13,6 +13,7 @@ class Team {
   final String?
   createdByUserId; // ID of user who created this team (null = public team)
   final bool isPrivate; // true if team is private to creator only
+  final String eventId;
 
   Team({
     required this.id,
@@ -26,6 +27,7 @@ class Team {
     required this.division,
     this.createdByUserId,
     this.isPrivate = false,
+    required this.eventId,
   });
 
   Map<String, dynamic> toJson() {
@@ -41,6 +43,7 @@ class Team {
       'division': division,
       'createdByUserId': createdByUserId,
       'isPrivate': isPrivate,
+      'eventId': eventId,
     };
   }
 
@@ -60,6 +63,7 @@ class Team {
       division: json['division'],
       createdByUserId: json['createdByUserId'],
       isPrivate: json['isPrivate'] ?? false,
+      eventId: json['eventId'] ?? '',
     );
   }
 }

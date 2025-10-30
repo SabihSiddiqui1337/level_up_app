@@ -6,6 +6,7 @@ import '../models/event.dart';
 import '../services/team_service.dart';
 import '../services/pickleball_team_service.dart';
 import '../widgets/simple_app_bar.dart';
+import '../widgets/custom_app_bar.dart';
 import '../services/auth_service.dart';
 import '../models/user.dart';
 import '../utils/role_utils.dart';
@@ -52,19 +53,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Admin Panel',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: const Color(0xFF2196F3),
-        elevation: 0,
-        automaticallyImplyLeading: false,
-      ),
+      appBar: const CustomAppBar(),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -162,6 +151,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     showDialog(
       context: context,
       barrierColor: Colors.black.withOpacity(0.6),
+      barrierDismissible: false,
       builder:
           (context) => Dialog(
             shape: RoundedRectangleBorder(
@@ -524,6 +514,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder:
           (context) => Dialog(
             shape: RoundedRectangleBorder(
@@ -871,6 +862,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       text: event.locationAddress,
     );
     final sportNameController = TextEditingController();
+    final descriptionController = TextEditingController(text: event.description ?? '');
     DateTime? selectedDate = event.date;
     String? selectedSport = event.sportName;
     bool isAddingNewSport = false;
@@ -886,6 +878,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     showDialog(
       context: context,
       barrierColor: Colors.black.withOpacity(0.5),
+      barrierDismissible: false,
       builder:
           (context) => StatefulBuilder(
             builder:
@@ -958,7 +951,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                   child: TextField(
                                     controller: titleController,
                                     autocorrect: false,
-                                    enableSuggestions: false,
+                                    enableSuggestions: true,
                                     textCapitalization:
                                         TextCapitalization.sentences,
                                     style: const TextStyle(
@@ -988,6 +981,25 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
+                                // Description
+                                _buildImageStyleField(
+                                  label: 'Description',
+                                  hasError: false,
+                                  child: TextField(
+                                    controller: descriptionController,
+                                    minLines: 3,
+                                    maxLines: 5,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Enter event description',
+                                      border: InputBorder.none,
+                                      contentPadding: EdgeInsets.symmetric(
+                                        vertical: 14,
+                                        horizontal: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
                                 // Date
                                 _buildImageStyleField(
                                   label: 'Date',
@@ -997,9 +1009,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                       final pickedDate = await showDatePicker(
                                         context: context,
                                         initialDate:
-                                            selectedDate ?? DateTime.now(),
-                                        firstDate: DateTime(2000),
+                                            selectedDate != null && selectedDate!.isAfter(DateTime.now())
+                                                ? selectedDate!
+                                                : DateTime.now(),
+                                        firstDate: DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
                                         lastDate: DateTime(2100),
+                                        selectableDayPredicate: (day) {
+                                          final today = DateTime.now();
+                                          final normalizedToday = DateTime(today.year, today.month, today.day);
+                                          final normalizedDay = DateTime(day.year, day.month, day.day);
+                                          return !normalizedDay.isBefore(normalizedToday);
+                                        },
                                       );
                                       if (pickedDate != null) {
                                         setDialogState(() {
@@ -1046,7 +1066,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                   child: TextField(
                                     controller: locationController,
                                     autocorrect: false,
-                                    enableSuggestions: false,
+                                    enableSuggestions: true,
                                     textCapitalization:
                                         TextCapitalization.sentences,
                                     style: const TextStyle(
@@ -1286,7 +1306,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                                                 color: Color(
                                                                   0xFF2196F3,
                                                                 ),
-                                                                size: 24,
+                                                                size:
+                                                                    24,
                                                               ),
                                                             ),
                                                             const SizedBox(
@@ -1385,6 +1406,58 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                                                   color:
                                                                       Colors
                                                                           .black87,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 12),
+                                                    // Soccer Option
+                                                    InkWell(
+                                                      onTap: () {
+                                                        Navigator.pop(
+                                                          dialogContext,
+                                                        );
+                                                        setDialogState(() {
+                                                          selectedSport = 'Soccer';
+                                                          isAddingNewSport = false;
+                                                          sportError = false;
+                                                        });
+                                                      },
+                                                      child: Container(
+                                                        padding: const EdgeInsets.all(16),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.grey[50],
+                                                          borderRadius: BorderRadius.circular(12),
+                                                          border: Border.all(
+                                                            color: Colors.grey[200]!,
+                                                            width: 1,
+                                                          ),
+                                                        ),
+                                                        child: Row(
+                                                          children: [
+                                                            Container(
+                                                              padding: const EdgeInsets.all(8),
+                                                              decoration: BoxDecoration(
+                                                                color: Colors.blueGrey.withOpacity(0.10),
+                                                                borderRadius: BorderRadius.circular(8),
+                                                              ),
+                                                              child: const Icon(
+                                                                Icons.sports_soccer,
+                                                                color: Colors.blueGrey,
+                                                                size: 24,
+                                                              ),
+                                                            ),
+                                                            const SizedBox(width: 12),
+                                                            const Expanded(
+                                                              child: Text(
+                                                                'Soccer',
+                                                                style: TextStyle(
+                                                                  fontSize: 16,
+                                                                  fontWeight: FontWeight.w500,
+                                                                  color: Colors.black87,
                                                                 ),
                                                               ),
                                                             ),
@@ -1602,6 +1675,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                   locationAddress:
                                       addressController.text.trim(),
                                   sportName: sportName,
+                                  description: descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
                                 );
 
                                 final success = await _eventService.updateEvent(
@@ -1636,1069 +1710,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                               ),
                               child: const Text(
                                 'Update',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-          ),
-    );
-  }
-
-  void _confirmDeleteEvent(Event event) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Warning Icon
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.red[50],
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.warning_amber_rounded,
-                      size: 48,
-                      color: Colors.red[700],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Confirm Delete',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Are you sure you want to delete',
-                    style: TextStyle(fontSize: 15, color: Colors.grey[700]),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '"${event.title}"',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange[200]!, width: 1),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          size: 20,
-                          color: Colors.orange[700],
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'This will also delete all teams registered for ${event.sportName}.',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.orange[900],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  // Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(color: Colors.grey[300]!),
-                            ),
-                          ),
-                          child: Text(
-                            'Cancel',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey[700],
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            Navigator.pop(context); // Close confirmation dialog
-
-                            // Delete all teams for this sport
-                            await _deleteTeamsForSport(event.sportName);
-
-                            // Delete the event
-                            final success = await _eventService.deleteEvent(
-                              event.id,
-                            );
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    success
-                                        ? 'Event and associated teams deleted successfully!'
-                                        : 'Failed to delete event.',
-                                  ),
-                                  backgroundColor:
-                                      success ? Colors.green : Colors.red,
-                                ),
-                              );
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red[600],
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'Delete',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-  }
-
-  Future<void> _deleteTeamsForSport(String sportName) async {
-    try {
-      await _teamService.loadTeams();
-      await _pickleballTeamService.loadTeams();
-
-      // Delete basketball teams if sport is Basketball
-      if (sportName.toLowerCase() == 'basketball') {
-        final basketballTeams = _teamService.teams;
-        for (var team in basketballTeams) {
-          await _teamService.deleteTeam(team.id);
-        }
-      }
-
-      // Delete pickleball teams if sport is Pickleball
-      if (sportName.toLowerCase() == 'pickleball') {
-        final pickleballTeams = _pickleballTeamService.teams;
-        for (var team in pickleballTeams) {
-          await _pickleballTeamService.deleteTeam(team.id);
-        }
-      }
-
-      print('Deleted all teams for sport: $sportName');
-    } catch (e) {
-      print('Error deleting teams for sport $sportName: $e');
-    }
-  }
-
-  void _showCreateEventDialog() {
-    final titleController = TextEditingController();
-    final locationController = TextEditingController();
-    final addressController = TextEditingController();
-    final sportNameController = TextEditingController();
-    DateTime? selectedDate;
-    String? selectedSport;
-    bool isAddingNewSport = false;
-    final List<String> existingAddresses =
-        _eventService.events.map((e) => e.locationAddress).toSet().toList();
-    List<String> filteredAddresses = [];
-    bool titleError = false;
-    bool dateError = false;
-    bool locationError = false;
-    bool addressError = false;
-    bool sportError = false;
-
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.5),
-      builder:
-          (context) => StatefulBuilder(
-            builder:
-                (context, setDialogState) => Dialog(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Container(
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.9,
-                      maxHeight: MediaQuery.of(context).size.height * 0.85,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      color: Colors.white,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Simple Header
-                        Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Row(
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  'Create Event',
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.close,
-                                  color: Colors.black87,
-                                ),
-                                onPressed: () => Navigator.pop(context),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Form Content
-                        Expanded(
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                // Event Name
-                                _buildImageStyleField(
-                                  label: 'Event name',
-                                  hasError: titleError,
-                                  child: TextField(
-                                    controller: titleController,
-                                    autocorrect: false,
-                                    enableSuggestions: false,
-                                    textCapitalization:
-                                        TextCapitalization.sentences,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.black87,
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText: 'Enter event name',
-                                      hintStyle: TextStyle(
-                                        color: Colors.grey[400],
-                                        fontSize: 16,
-                                      ),
-                                      border: InputBorder.none,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            vertical: 14,
-                                            horizontal: 16,
-                                          ),
-                                    ),
-                                    onChanged: (value) {
-                                      if (titleError && value.isNotEmpty) {
-                                        setDialogState(() {
-                                          titleError = false;
-                                        });
-                                      }
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                // Date
-                                _buildImageStyleField(
-                                  label: 'Date',
-                                  hasError: dateError,
-                                  child: InkWell(
-                                    onTap: () async {
-                                      final date = await showDatePicker(
-                                        context: context,
-                                        initialDate:
-                                            selectedDate ?? DateTime.now(),
-                                        firstDate: DateTime.now(),
-                                        lastDate: DateTime.now().add(
-                                          const Duration(days: 365),
-                                        ),
-                                        builder: (context, child) {
-                                          return Theme(
-                                            data: Theme.of(context).copyWith(
-                                              colorScheme:
-                                                  const ColorScheme.light(
-                                                    primary: Color(0xFF2196F3),
-                                                  ),
-                                            ),
-                                            child: child!,
-                                          );
-                                        },
-                                      );
-                                      if (date != null) {
-                                        setDialogState(() {
-                                          selectedDate = date;
-                                          dateError = false;
-                                        });
-                                      }
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 14,
-                                        horizontal: 16,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              selectedDate != null
-                                                  ? _formatDate(selectedDate!)
-                                                  : 'Select date',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                color:
-                                                    selectedDate != null
-                                                        ? Colors.black87
-                                                        : Colors.grey[400],
-                                              ),
-                                            ),
-                                          ),
-                                          Icon(
-                                            Icons.calendar_today,
-                                            size: 18,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                // Location
-                                _buildImageStyleField(
-                                  label: 'Location',
-                                  hasError: locationError,
-                                  child: TextField(
-                                    controller: locationController,
-                                    autocorrect: false,
-                                    enableSuggestions: false,
-                                    textCapitalization:
-                                        TextCapitalization.sentences,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.black87,
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText: 'Enter location name',
-                                      hintStyle: TextStyle(
-                                        color: Colors.grey[400],
-                                        fontSize: 16,
-                                      ),
-                                      border: InputBorder.none,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            vertical: 14,
-                                            horizontal: 16,
-                                          ),
-                                    ),
-                                    onChanged: (value) {
-                                      if (locationError && value.isNotEmpty) {
-                                        setDialogState(() {
-                                          locationError = false;
-                                        });
-                                      }
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                // Address
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildImageStyleField(
-                                      label: 'Address',
-                                      hasError: addressError,
-                                      child: TextField(
-                                        controller: addressController,
-                                        autocorrect: false,
-                                        enableSuggestions: false,
-                                        textCapitalization:
-                                            TextCapitalization.sentences,
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          color: Colors.black87,
-                                        ),
-                                        decoration: InputDecoration(
-                                          hintText: 'Enter full address',
-                                          hintStyle: TextStyle(
-                                            color: Colors.grey[400],
-                                            fontSize: 16,
-                                          ),
-                                          border: InputBorder.none,
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                vertical: 14,
-                                                horizontal: 16,
-                                              ),
-                                        ),
-                                        onChanged: (value) {
-                                          setDialogState(() {
-                                            if (addressError &&
-                                                value.isNotEmpty) {
-                                              addressError = false;
-                                            }
-                                            if (value.isEmpty) {
-                                              filteredAddresses = [];
-                                            } else {
-                                              filteredAddresses =
-                                                  existingAddresses
-                                                      .where(
-                                                        (address) => address
-                                                            .toLowerCase()
-                                                            .contains(
-                                                              value
-                                                                  .toLowerCase(),
-                                                            ),
-                                                      )
-                                                      .toList();
-                                            }
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                    if (filteredAddresses.isNotEmpty &&
-                                        addressController.text.isNotEmpty)
-                                      Container(
-                                        margin: const EdgeInsets.only(top: 4),
-                                        constraints: const BoxConstraints(
-                                          maxHeight: 180,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.grey[300]!,
-                                            width: 1,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(
-                                                0.05,
-                                              ),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 2),
-                                            ),
-                                          ],
-                                        ),
-                                        child: ListView.separated(
-                                          shrinkWrap: true,
-                                          itemCount: filteredAddresses.length,
-                                          separatorBuilder:
-                                              (context, index) => Divider(
-                                                height: 1,
-                                                thickness: 1,
-                                                color: Colors.grey[200]!,
-                                              ),
-                                          itemBuilder: (context, index) {
-                                            final address =
-                                                filteredAddresses[index];
-                                            return InkWell(
-                                              onTap: () {
-                                                setDialogState(() {
-                                                  addressController.text =
-                                                      address;
-                                                  filteredAddresses = [];
-                                                });
-                                              },
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 12,
-                                                      horizontal: 16,
-                                                    ),
-                                                child: Text(
-                                                  address,
-                                                  style: const TextStyle(
-                                                    fontSize: 14,
-                                                    color: Colors.black87,
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 24),
-                                // Sport Name
-                                _buildImageStyleField(
-                                  label: 'Sport name',
-                                  hasError: sportError,
-                                  child:
-                                      isAddingNewSport
-                                          ? Row(
-                                            children: [
-                                              Expanded(
-                                                child: TextField(
-                                                  controller:
-                                                      sportNameController,
-                                                  autocorrect: false,
-                                                  enableSuggestions: false,
-                                                  textCapitalization:
-                                                      TextCapitalization
-                                                          .sentences,
-                                                  style: const TextStyle(
-                                                    fontSize: 16,
-                                                    color: Colors.black87,
-                                                  ),
-                                                  decoration: InputDecoration(
-                                                    hintText:
-                                                        'Enter sport name',
-                                                    hintStyle: TextStyle(
-                                                      color: Colors.grey[400],
-                                                      fontSize: 16,
-                                                    ),
-                                                    border: InputBorder.none,
-                                                    contentPadding:
-                                                        const EdgeInsets.symmetric(
-                                                          vertical: 14,
-                                                          horizontal: 16,
-                                                        ),
-                                                  ),
-                                                  onChanged: (value) {
-                                                    if (sportError &&
-                                                        value.isNotEmpty) {
-                                                      setDialogState(() {
-                                                        sportError = false;
-                                                      });
-                                                    }
-                                                  },
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  right: 8,
-                                                ),
-                                                child: IconButton(
-                                                  icon: const Icon(
-                                                    Icons.close,
-                                                    size: 20,
-                                                  ),
-                                                  onPressed: () {
-                                                    setDialogState(() {
-                                                      isAddingNewSport = false;
-                                                      sportNameController
-                                                          .clear();
-                                                      selectedSport = null;
-                                                    });
-                                                  },
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                          : InkWell(
-                                            onTap: () {
-                                              showDialog(
-                                                context: context,
-                                                barrierColor: Colors.black
-                                                    .withOpacity(0.5),
-                                                builder:
-                                                    (dialogContext) => Dialog(
-                                                      shape: RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              16,
-                                                            ),
-                                                      ),
-                                                      child: Container(
-                                                        constraints:
-                                                            const BoxConstraints(
-                                                              maxWidth: 300,
-                                                            ),
-                                                        padding:
-                                                            const EdgeInsets.all(
-                                                              20,
-                                                            ),
-                                                        child: Column(
-                                                          mainAxisSize:
-                                                              MainAxisSize.min,
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .stretch,
-                                                          children: [
-                                                            const Text(
-                                                              'Select Sport',
-                                                              style: TextStyle(
-                                                                fontSize: 20,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                color:
-                                                                    Colors
-                                                                        .black87,
-                                                              ),
-                                                              textAlign:
-                                                                  TextAlign
-                                                                      .center,
-                                                            ),
-                                                            const SizedBox(
-                                                              height: 24,
-                                                            ),
-                                                            // Basketball Option
-                                                            InkWell(
-                                                              onTap: () {
-                                                                Navigator.pop(
-                                                                  dialogContext,
-                                                                );
-                                                                setDialogState(() {
-                                                                  selectedSport =
-                                                                      'Basketball';
-                                                                  isAddingNewSport =
-                                                                      false;
-                                                                  sportError =
-                                                                      false;
-                                                                });
-                                                              },
-                                                              child: Container(
-                                                                padding:
-                                                                    const EdgeInsets.all(
-                                                                      16,
-                                                                    ),
-                                                                decoration: BoxDecoration(
-                                                                  color:
-                                                                      Colors
-                                                                          .grey[50],
-                                                                  borderRadius:
-                                                                      BorderRadius.circular(
-                                                                        12,
-                                                                      ),
-                                                                  border: Border.all(
-                                                                    color:
-                                                                        Colors
-                                                                            .grey[200]!,
-                                                                    width: 1,
-                                                                  ),
-                                                                ),
-                                                                child: Row(
-                                                                  children: [
-                                                                    Container(
-                                                                      padding:
-                                                                          const EdgeInsets.all(
-                                                                            8,
-                                                                          ),
-                                                                      decoration: BoxDecoration(
-                                                                        color: const Color(
-                                                                          0xFF2196F3,
-                                                                        ).withOpacity(
-                                                                          0.1,
-                                                                        ),
-                                                                        borderRadius:
-                                                                            BorderRadius.circular(
-                                                                              8,
-                                                                            ),
-                                                                      ),
-                                                                      child: const Icon(
-                                                                        Icons
-                                                                            .sports_basketball,
-                                                                        color: Color(
-                                                                          0xFF2196F3,
-                                                                        ),
-                                                                        size:
-                                                                            24,
-                                                                      ),
-                                                                    ),
-                                                                    const SizedBox(
-                                                                      width: 12,
-                                                                    ),
-                                                                    const Expanded(
-                                                                      child: Text(
-                                                                        'Basketball',
-                                                                        style: TextStyle(
-                                                                          fontSize:
-                                                                              16,
-                                                                          fontWeight:
-                                                                              FontWeight.w500,
-                                                                          color:
-                                                                              Colors.black87,
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                              height: 12,
-                                                            ),
-                                                            // Pickleball Option
-                                                            InkWell(
-                                                              onTap: () {
-                                                                Navigator.pop(
-                                                                  dialogContext,
-                                                                );
-                                                                setDialogState(() {
-                                                                  selectedSport =
-                                                                      'Pickleball';
-                                                                  isAddingNewSport =
-                                                                      false;
-                                                                  sportError =
-                                                                      false;
-                                                                });
-                                                              },
-                                                              child: Container(
-                                                                padding:
-                                                                    const EdgeInsets.all(
-                                                                      16,
-                                                                    ),
-                                                                decoration: BoxDecoration(
-                                                                  color:
-                                                                      Colors
-                                                                          .grey[50],
-                                                                  borderRadius:
-                                                                      BorderRadius.circular(
-                                                                        12,
-                                                                      ),
-                                                                  border: Border.all(
-                                                                    color:
-                                                                        Colors
-                                                                            .grey[200]!,
-                                                                    width: 1,
-                                                                  ),
-                                                                ),
-                                                                child: Row(
-                                                                  children: [
-                                                                    Container(
-                                                                      padding:
-                                                                          const EdgeInsets.all(
-                                                                            8,
-                                                                          ),
-                                                                      decoration: BoxDecoration(
-                                                                        color: const Color(
-                                                                          0xFF38A169,
-                                                                        ).withOpacity(
-                                                                          0.1,
-                                                                        ),
-                                                                        borderRadius:
-                                                                            BorderRadius.circular(
-                                                                              8,
-                                                                            ),
-                                                                      ),
-                                                                      child: const Icon(
-                                                                        Icons
-                                                                            .sports_tennis,
-                                                                        color: Color(
-                                                                          0xFF38A169,
-                                                                        ),
-                                                                        size:
-                                                                            24,
-                                                                      ),
-                                                                    ),
-                                                                    const SizedBox(
-                                                                      width: 12,
-                                                                    ),
-                                                                    const Expanded(
-                                                                      child: Text(
-                                                                        'Pickleball',
-                                                                        style: TextStyle(
-                                                                          fontSize:
-                                                                              16,
-                                                                          fontWeight:
-                                                                              FontWeight.w500,
-                                                                          color:
-                                                                              Colors.black87,
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                              height: 12,
-                                                            ),
-                                                            // Add New Option
-                                                            InkWell(
-                                                              onTap: () {
-                                                                Navigator.pop(
-                                                                  dialogContext,
-                                                                );
-                                                                setDialogState(() {
-                                                                  isAddingNewSport =
-                                                                      true;
-                                                                  selectedSport =
-                                                                      null;
-                                                                  sportError =
-                                                                      false;
-                                                                });
-                                                              },
-                                                              child: Container(
-                                                                padding:
-                                                                    const EdgeInsets.all(
-                                                                      16,
-                                                                    ),
-                                                                decoration: BoxDecoration(
-                                                                  color:
-                                                                      Colors
-                                                                          .grey[50],
-                                                                  borderRadius:
-                                                                      BorderRadius.circular(
-                                                                        12,
-                                                                      ),
-                                                                  border: Border.all(
-                                                                    color:
-                                                                        Colors
-                                                                            .grey[200]!,
-                                                                    width: 1,
-                                                                  ),
-                                                                ),
-                                                                child: Row(
-                                                                  children: [
-                                                                    Container(
-                                                                      padding:
-                                                                          const EdgeInsets.all(
-                                                                            8,
-                                                                          ),
-                                                                      decoration: BoxDecoration(
-                                                                        color: Colors
-                                                                            .orange
-                                                                            .withOpacity(
-                                                                              0.1,
-                                                                            ),
-                                                                        borderRadius:
-                                                                            BorderRadius.circular(
-                                                                              8,
-                                                                            ),
-                                                                      ),
-                                                                      child: Icon(
-                                                                        Icons
-                                                                            .add_circle_outline,
-                                                                        color:
-                                                                            Colors.orange,
-                                                                        size:
-                                                                            24,
-                                                                      ),
-                                                                    ),
-                                                                    const SizedBox(
-                                                                      width: 12,
-                                                                    ),
-                                                                    const Expanded(
-                                                                      child: Text(
-                                                                        'Add New',
-                                                                        style: TextStyle(
-                                                                          fontSize:
-                                                                              16,
-                                                                          fontWeight:
-                                                                              FontWeight.w500,
-                                                                          color:
-                                                                              Colors.black87,
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                              height: 16,
-                                                            ),
-                                                            // Cancel Button
-                                                            TextButton(
-                                                              onPressed: () {
-                                                                Navigator.pop(
-                                                                  dialogContext,
-                                                                );
-                                                              },
-                                                              style: TextButton.styleFrom(
-                                                                padding:
-                                                                    const EdgeInsets.symmetric(
-                                                                      vertical:
-                                                                          12,
-                                                                    ),
-                                                                shape: RoundedRectangleBorder(
-                                                                  borderRadius:
-                                                                      BorderRadius.circular(
-                                                                        8,
-                                                                      ),
-                                                                ),
-                                                              ),
-                                                              child: const Text(
-                                                                'Cancel',
-                                                                style: TextStyle(
-                                                                  fontSize: 16,
-                                                                  color:
-                                                                      Colors
-                                                                          .grey,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w500,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ),
-                                              );
-                                            },
-                                            child: Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 14,
-                                                    horizontal: 16,
-                                                  ),
-                                              child: Row(
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      selectedSport ??
-                                                          'Select sport',
-                                                      style: TextStyle(
-                                                        fontSize: 16,
-                                                        color:
-                                                            selectedSport !=
-                                                                    null
-                                                                ? Colors.black87
-                                                                : Colors
-                                                                    .grey[400],
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  Icon(
-                                                    Icons.arrow_forward_ios,
-                                                    size: 14,
-                                                    color: Colors.grey[400],
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                ),
-                                const SizedBox(height: 32),
-                              ],
-                            ),
-                          ),
-                        ),
-                        // Create Button
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              top: BorderSide(color: Colors.grey[200]!),
-                            ),
-                          ),
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: () async {
-                                // Validate fields and set error states
-                                bool hasErrors = false;
-                                setDialogState(() {
-                                  titleError = titleController.text.isEmpty;
-                                  dateError = selectedDate == null;
-                                  locationError =
-                                      locationController.text.isEmpty;
-                                  addressError = addressController.text.isEmpty;
-                                  sportError =
-                                      selectedSport == null &&
-                                      sportNameController.text.isEmpty;
-
-                                  hasErrors =
-                                      titleError ||
-                                      dateError ||
-                                      locationError ||
-                                      addressError ||
-                                      sportError;
-                                });
-
-                                if (hasErrors) {
-                                  return;
-                                }
-
-                                final sportName =
-                                    isAddingNewSport
-                                        ? sportNameController.text.trim()
-                                        : selectedSport!;
-
-                                final success = await _eventService.createEvent(
-                                  title: titleController.text.trim(),
-                                  date: selectedDate!,
-                                  locationName: locationController.text.trim(),
-                                  locationAddress:
-                                      addressController.text.trim(),
-                                  sportName: sportName,
-                                );
-
-                                if (mounted) {
-                                  Navigator.pop(context);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        success
-                                            ? 'Event created successfully!'
-                                            : 'Failed to create event.',
-                                      ),
-                                      backgroundColor:
-                                          success ? Colors.green : Colors.red,
-                                    ),
-                                  );
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2196F3),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                elevation: 0,
-                              ),
-                              child: const Text(
-                                'Create',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -2902,6 +1913,346 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               ),
             ],
           ),
+    );
+  }
+
+  void _showCreateEventDialog() {
+    final titleController = TextEditingController();
+    final locationController = TextEditingController();
+    final addressController = TextEditingController();
+    final descriptionController = TextEditingController();
+    DateTime? selectedDate;
+    String? selectedSport;
+    bool titleError = false;
+    bool dateError = false;
+    bool locationError = false;
+    bool addressError = false;
+    bool sportError = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Create Event',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _buildImageStyleField(
+                    label: 'Event name',
+                    hasError: titleError,
+                    child: TextField(
+                      controller: titleController,
+                      decoration: InputDecoration(
+                        hintText: 'Enter event name',
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                      ),
+                      onChanged: (v) {
+                        if (titleError && v.isNotEmpty) {
+                          setDialogState(() => titleError = false);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildImageStyleField(
+                    label: 'Date',
+                    hasError: dateError,
+                    child: InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate != null && selectedDate!.isAfter(DateTime.now())
+                              ? selectedDate!
+                              : DateTime.now(),
+                          firstDate: DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
+                          lastDate: DateTime(2100),
+                          selectableDayPredicate: (day) {
+                            final today = DateTime.now();
+                            final normalizedToday = DateTime(today.year, today.month, today.day);
+                            final normalizedDay = DateTime(day.year, day.month, day.day);
+                            return !normalizedDay.isBefore(normalizedToday);
+                          },
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedDate = picked;
+                            dateError = false;
+                          });
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        child: Row(
+                          children: [
+                            Icon(Icons.calendar_today, size: 20, color: Colors.grey[600]),
+                            const SizedBox(width: 12),
+                            Text(
+                              selectedDate != null
+                                  ? '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}'
+                                  : 'Select date',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: selectedDate != null ? Colors.black87 : Colors.grey[400],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildImageStyleField(
+                    label: 'Location',
+                    hasError: locationError,
+                    child: TextField(
+                      controller: locationController,
+                      decoration: InputDecoration(
+                        hintText: 'Enter location name',
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                      ),
+                      onChanged: (v) {
+                        if (locationError && v.isNotEmpty) {
+                          setDialogState(() => locationError = false);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildImageStyleField(
+                    label: 'Address',
+                    hasError: addressError,
+                    child: TextField(
+                      controller: addressController,
+                      decoration: InputDecoration(
+                        hintText: 'Enter full address',
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                      ),
+                      onChanged: (v) {
+                        if (addressError && v.isNotEmpty) {
+                          setDialogState(() => addressError = false);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildImageStyleField(
+                    label: 'Description',
+                    hasError: false,
+                    child: TextField(
+                      controller: descriptionController,
+                      minLines: 3,
+                      maxLines: 5,
+                      decoration: const InputDecoration(
+                        hintText: 'Enter event description',
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildImageStyleField(
+                    label: 'Sport name',
+                    hasError: sportError,
+                    child: InkWell(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (dialogContext) => Dialog(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text('Select Sport', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 20),
+                                  _buildSportPickItem(dialogContext, 'Basketball', Icons.sports_basketball, () {
+                                    Navigator.pop(dialogContext);
+                                    setDialogState(() {
+                                      selectedSport = 'Basketball';
+                                      sportError = false;
+                                    });
+                                  }),
+                                  const SizedBox(height: 12),
+                                  _buildSportPickItem(dialogContext, 'Pickleball', Icons.sports_tennis, () {
+                                    Navigator.pop(dialogContext);
+                                    setDialogState(() {
+                                      selectedSport = 'Pickleball';
+                                      sportError = false;
+                                    });
+                                  }, color: Colors.green),
+                                  const SizedBox(height: 12),
+                                  _buildSportPickItem(dialogContext, 'Soccer', Icons.sports_soccer, () {
+                                    Navigator.pop(dialogContext);
+                                    setDialogState(() {
+                                      selectedSport = 'Soccer';
+                                      sportError = false;
+                                    });
+                                  }, color: Colors.blueGrey),
+                                  const SizedBox(height: 12),
+                                  _buildSportPickItem(dialogContext, 'Volleyball', Icons.sports_volleyball, () {
+                                    Navigator.pop(dialogContext);
+                                    setDialogState(() {
+                                      selectedSport = 'Volleyball';
+                                      sportError = false;
+                                    });
+                                  }, color: Colors.deepPurple),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                selectedSport ?? 'Select sport',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: selectedSport != null ? Colors.black87 : Colors.grey[400],
+                                ),
+                              ),
+                            ),
+                            const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () async {
+                          setDialogState(() {
+                            titleError = titleController.text.trim().isEmpty;
+                            dateError = selectedDate == null;
+                            locationError = locationController.text.trim().isEmpty;
+                            addressError = addressController.text.trim().isEmpty;
+                            sportError = (selectedSport == null || selectedSport!.trim().isEmpty);
+                          });
+                          if (titleError || dateError || locationError || addressError || sportError) return;
+
+                          final ok = await _eventService.createEvent(
+                            title: titleController.text.trim(),
+                            date: selectedDate!,
+                            locationName: locationController.text.trim(),
+                            locationAddress: addressController.text.trim(),
+                            sportName: selectedSport!.trim(),
+                            description: descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+                          );
+                          if (ok) {
+                            await _eventService.initialize();
+                            if (mounted) {
+                              setState(() {});
+                            }
+                            Navigator.pop(context);
+                          }
+                        },
+                        child: const Text('Create'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSportPickItem(BuildContext dialogContext, String label, IconData icon, VoidCallback onTap, {Color color = const Color(0xFF2196F3)}) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[200]!, width: 1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: color.withOpacity(0.10), borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.black87),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteEvent(Event event) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Event'),
+        content: Text('Are you sure you want to delete "${event.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              // Delete all teams linked to this event
+              await TeamService().deleteTeamsByEventId(event.id);
+              await PickleballTeamService().deleteTeamsByEventId(event.id);
+              // Now delete the event
+              final ok = await _eventService.deleteEvent(event.id);
+              if (ok) {
+                await _eventService.initialize();
+                if (mounted) setState(() {});
+              }
+              if (mounted) Navigator.pop(context);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
   }
 }

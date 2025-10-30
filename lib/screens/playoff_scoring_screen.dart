@@ -740,6 +740,8 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
   }
 
   Future<void> _saveScores() async {
+    final minScore = widget.gameWinningScore;
+    // If all scores are zero, saving is allowed (will reset the card)
     bool allScoresAreZero = true;
     for (int i = 1; i <= 3; i++) {
       final team1Key = '${widget.match.team1Id}_game$i';
@@ -751,104 +753,88 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
         break;
       }
     }
-
     if (allScoresAreZero) {
-      setState(() {
-        _isLoading = true;
-      });
+      setState(() { _isLoading = true; });
       try {
         final scoresToSave = _convertScoresForPreliminaries(_scores);
         await widget.onScoresUpdated(scoresToSave);
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
+        if (mounted) Navigator.of(context).pop();
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error saving scores: $e'),
-              backgroundColor: Colors.red,
-            ),
+            SnackBar(content: Text('Error saving scores: $e'), backgroundColor: Colors.red)
           );
         }
       } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+        if (mounted) setState(() { _isLoading = false; });
       }
       return;
     }
 
-    final minScore = widget.gameWinningScore;
-
-    bool allGamesValid = true;
-    for (int i = 1; i <= 3; i++) {
-      final team1Key = '${widget.match.team1Id}_game$i';
-      final team2Key = '${widget.match.team2Id}_game$i';
-
-      final team1Score = _scores[team1Key] ?? 0;
-      final team2Score = _scores[team2Key] ?? 0;
-
-      if (team1Score > 0 || team2Score > 0) {
-        bool hasWinner = false;
-
-        if (team1Score >= minScore && team1Score >= team2Score + 2) {
-          hasWinner = true;
-        } else if (team2Score >= minScore && team2Score >= team1Score + 2) {
-          hasWinner = true;
+    // ENFORCE: for best of 3, every enabled game must have a valid winner
+    if (widget.matchFormat == 'bestof3') {
+      // figure out which games are enabled
+      // Game 1 is always enabled
+      List<int> enabledGames = [1];
+      final team1Key = '${widget.match.team1Id}_game';
+      final team2Key = '${widget.match.team2Id}_game';
+      // Check if Game 1 was completed validly
+      final game1Team1 = _scores['${team1Key}1'] ?? 0;
+      final game1Team2 = _scores['${team2Key}1'] ?? 0;
+      bool game1Complete = (game1Team1 >= minScore && game1Team1 >= game1Team2 + 2) || (game1Team2 >= minScore && game1Team2 >= game1Team1 + 2);
+      if (game1Complete) enabledGames.add(2);
+      // Check Game 2 completion
+      final game2Team1 = _scores['${team1Key}2'] ?? 0;
+      final game2Team2 = _scores['${team2Key}2'] ?? 0;
+      bool game2Complete = (game2Team1 >= minScore && game2Team1 >= game2Team2 + 2) || (game2Team2 >= minScore && game2Team2 >= game2Team1 + 2);
+      // Only enable Game 3 if BOTH G1+G2 complete and neither team won 2 yet
+      int team1Wins = 0, team2Wins = 0;
+      if (game1Team1 >= minScore && game1Team1 >= game1Team2 + 2) team1Wins++;
+      if (game1Team2 >= minScore && game1Team2 >= game1Team1 + 2) team2Wins++;
+      if (game2Team1 >= minScore && game2Team1 >= game2Team2 + 2) team1Wins++;
+      if (game2Team2 >= minScore && game2Team2 >= game2Team1 + 2) team2Wins++;
+      bool matchDecided = team1Wins == 2 || team2Wins == 2;
+      if (game1Complete && game2Complete && !matchDecided) enabledGames.add(3);
+      // For each enabled game, check: must have a winner; if scores are both zero, it's incomplete
+      for (final gameNum in enabledGames) {
+        final t1 = _scores['$team1Key$gameNum'] ?? 0;
+        final t2 = _scores['$team2Key$gameNum'] ?? 0;
+        if (t1 == 0 && t2 == 0) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Please enter a valid score for every Game that is enabled!'))
+            );
+          }
+          return;
         }
-
-        if (!hasWinner) {
-          allGamesValid = false;
-          break;
+        bool validWinner = false;
+        if (t1 >= minScore && t1 >= t2 + 2) validWinner = true;
+        if (t2 >= minScore && t2 >= t1 + 2) validWinner = true;
+        if (!validWinner) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Each enabled Game must have a valid winner. ($minScore points, win by 2)'))
+            );
+          }
+          return;
         }
       }
     }
 
-    if (!allGamesValid) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Cannot save: Each game must have a winner ($minScore points, win by 2)',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-        setState(() {
-          _isLoading = false;
-        });
-      }
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
+    // ... proceed with original allGamesValid logic ...
+    setState(() { _isLoading = true; });
     try {
       final scoresToSave = _convertScoresForPreliminaries(_scores);
       await widget.onScoresUpdated(scoresToSave);
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
+      if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error saving scores: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error saving scores: $e'), backgroundColor: Colors.red)
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() { _isLoading = false; });
     }
   }
 

@@ -6,7 +6,7 @@ import '../models/team.dart';
 import '../models/player.dart';
 import '../models/event.dart';
 import '../services/auth_service.dart';
-import 'process_registration_screen.dart';
+import '../screens/main_navigation_screen.dart'; // Added import for MainNavigationScreen
 
 class PhoneNumberFormatter extends TextInputFormatter {
   @override
@@ -68,8 +68,9 @@ class AgeFormatter extends TextInputFormatter {
 class TeamRegistrationScreen extends StatefulWidget {
   final Team? team; // For editing existing team
   final Function(Team)? onSave;
+  final Event? event; // Event being registered for
 
-  const TeamRegistrationScreen({super.key, this.team, this.onSave});
+  const TeamRegistrationScreen({super.key, this.team, this.onSave, this.event});
 
   @override
   State<TeamRegistrationScreen> createState() => _TeamRegistrationScreenState();
@@ -262,47 +263,25 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         createdByUserId: currentUser?.id,
         isPrivate:
             !isAdmin, // Regular users create private teams, admins create public teams
+        eventId: widget.event?.id ?? '',
       );
       print('Team created with ${team.players.length} players'); // Debug print
       print(
         'Team players: ${team.players.map((p) => p.name).toList()}',
       ); // Debug print
 
-      // Create default event for basketball tournament
-      final event = Event(
-        id: 'basketball_tournament_2025',
-        title: 'Basketball Tournament 2025',
-        date: DateTime(2025, 11, 8),
-        locationName: 'Masjid Istiqlal',
-        locationAddress: '123 Main Street,\nSugar Land, TX\n77498',
-        sportName: 'Basketball',
-        createdAt: DateTime.now(),
+      // Navigate to schedule tab after registering
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const MainNavigationScreen(initialIndex: 2)),
+        (route) => false,
       );
 
-      // If editing an existing team, call onSave callback
-      if (widget.team != null && widget.onSave != null) {
-        widget.onSave!(team);
-        setState(() {
-          _hasUnsavedChanges = false;
-          _isSaving = false;
-        });
-      } else {
-        // Navigate to process registration screen for new teams
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder:
-                (context) =>
-                    ProcessRegistrationScreen(team: team, event: event),
-          ),
-        );
-
-        // Reset unsaved changes flag
-        setState(() {
-          _hasUnsavedChanges = false;
-          _isSaving = false;
-        });
-      }
+      // Reset unsaved changes flag
+      setState(() {
+        _hasUnsavedChanges = false;
+        _isSaving = false;
+      });
     } else if (_players.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -486,7 +465,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Quick Team Registration (Management)',
+                  widget.event?.title ?? 'Register Team',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: const Color(0xFF1976D2),
@@ -1004,6 +983,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         division: _selectedDivision,
         createdByUserId: currentUser?.id,
         isPrivate: !isAdmin,
+        eventId: widget.event?.id ?? '',
       );
 
       // If editing an existing team, call onSave callback

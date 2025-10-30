@@ -76,6 +76,7 @@ class EventService {
     required String locationName,
     required String locationAddress,
     required String sportName,
+    String? description,
   }) async {
     try {
       final newEvent = Event(
@@ -85,6 +86,7 @@ class EventService {
         locationName: locationName,
         locationAddress: locationAddress,
         sportName: sportName,
+        description: description,
         createdAt: DateTime.now(),
       );
 

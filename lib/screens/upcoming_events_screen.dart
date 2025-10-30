@@ -6,6 +6,9 @@ import '../widgets/custom_app_bar.dart';
 import '../services/event_service.dart';
 import '../models/event.dart';
 import 'main_navigation_screen.dart';
+import 'event_detail_screen.dart';
+import 'team_registration_screen.dart';
+import 'pickleball_team_registration_screen.dart';
 
 class UpcomingEventsScreen extends StatefulWidget {
   final VoidCallback? onHomePressed;
@@ -106,6 +109,7 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                                 event.locationName,
                                 event.locationAddress,
                                 event.sportName,
+                                event,
                               ),
                             );
                           },
@@ -145,6 +149,7 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
     String location,
     String address,
     String sportName,
+    Event? event,
   ) {
     // Determine which image to use based on sport name
     String? imagePath;
@@ -154,6 +159,10 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
         sportName.toLowerCase().contains('pickelball')) {
       imagePath =
           'assets/pickelball.png'; // Note: using the actual filename with typo
+    } else if (sportName.toLowerCase().contains('volleyball')) {
+      imagePath = 'assets/volleyball.png';
+    } else if (sportName.toLowerCase().contains('soccer')) {
+      imagePath = 'assets/soccer.png';
     }
     // No default fallback - if sport doesn't match, use gradient background
 
@@ -424,13 +433,42 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                         child: ElevatedButton.icon(
                           onPressed: () {
                             // Show details dialog or navigate to details screen
-                            _showEventDetails(
-                              title,
-                              date,
-                              location,
-                              address,
-                              sportName,
-                            );
+                            if (event != null) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => EventDetailScreen(
+                                    event: event,
+                                    onSignUp: () {
+                                      final sport = event.sportName.toLowerCase();
+                                      if (sport.contains('pickleball') || sport.contains('pickelball')) {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => PickleballTeamRegistrationScreen(event: event),
+                                          ),
+                                        );
+                                      } else {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => TeamRegistrationScreen(event: event),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ),
+                              );
+                            } else {
+                              _showEventDetails(
+                                title,
+                                date,
+                                location,
+                                address,
+                                sportName,
+                              );
+                            }
                           },
                           icon: const Icon(Icons.info_outline, size: 16),
                           label: const Text(

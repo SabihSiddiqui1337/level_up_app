@@ -127,7 +127,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         controller: _emailController,
                         textCapitalization: TextCapitalization.none,
                         autocorrect: false,
-                        enableSuggestions: false,
+                        enableSuggestions: true,
                         keyboardType: TextInputType.emailAddress,
                         decoration: InputDecoration(
                           hintText: 'Email Address',

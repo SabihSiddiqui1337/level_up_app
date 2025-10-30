@@ -160,11 +160,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 // Header
                 Container(
                   padding: const EdgeInsets.all(20),
-                  child: Image.asset(
-                    'assets/level_up_sport.png',
-                    width: 100,
-                    height: 100,
-                    fit: BoxFit.contain,
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/app_logo.jpg',
+                      width: 100,
+                      height: 100,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -202,7 +204,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           TextFormField(
                             controller: _nameController,
                             autocorrect: false,
-                            enableSuggestions: false,
+                            enableSuggestions: true,
                             decoration: InputDecoration(
                               labelText: 'Full Name',
                               prefixIcon: Icon(
@@ -249,7 +251,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             controller: _usernameController,
                             textCapitalization: TextCapitalization.none,
                             autocorrect: false,
-                            enableSuggestions: false,
+                            enableSuggestions: true,
                             decoration: InputDecoration(
                               labelText: 'Username',
                               prefixIcon: Icon(
@@ -299,7 +301,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             controller: _emailController,
                             textCapitalization: TextCapitalization.none,
                             autocorrect: false,
-                            enableSuggestions: false,
+                            enableSuggestions: true,
                             decoration: InputDecoration(
                               labelText: 'Email',
                               prefixIcon: Icon(

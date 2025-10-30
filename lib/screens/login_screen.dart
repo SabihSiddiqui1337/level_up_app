@@ -91,6 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -104,12 +105,15 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              // Top Widget - Logo and Title
-              Expanded(
-                flex: 1,
-                child: Padding(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Top Widget - Logo and Title
+                Padding(
                   padding: const EdgeInsets.only(top: 20),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
@@ -117,11 +121,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       // Logo
                       Container(
                         padding: const EdgeInsets.all(20),
-                        child: Image.asset(
-                          'assets/level_up_sport.png',
-                          width: 100,
-                          height: 100,
-                          fit: BoxFit.contain,
+                        child: ClipOval(
+                          child: Image.asset(
+                            'assets/app_logo.jpg',
+                            width: 100,
+                            height: 100,
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -140,12 +146,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
                 ),
-              ),
 
-              // Middle Widget - Login Form
-              Expanded(
-                flex: 3,
-                child: SingleChildScrollView(
+                // Middle Widget - Login Form
+                Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 32.0),
                   child: Column(
                     children: [
@@ -170,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           controller: _emailController,
                           textCapitalization: TextCapitalization.none,
                           autocorrect: false,
-                          enableSuggestions: false,
+                          enableSuggestions: true,
                           decoration: InputDecoration(
                             hintText: LoginScreenKeys.emailUsernameHint,
                             hintStyle: TextStyle(color: Colors.grey[500]),
@@ -408,8 +411,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'team_registration_screen.dart';
 import 'pickleball_team_registration_screen.dart';
+import 'event_detail_screen.dart';
 import '../models/team.dart';
 import '../models/pickleball_team.dart';
 import '../models/event.dart';
@@ -111,12 +112,40 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
         final icon = _getSportIcon(sportName);
         final color = _getSportColor(index);
 
-        return _buildGameCard(context, sportName, icon, color, () {
-          if (sportName.toLowerCase().contains('pickleball')) {
-            _navigateToPickleballRegistration(context);
-          } else {
-            _navigateToTeamRegistration(context, sportName);
+        return _buildGameCard(context, sportName, icon, color, () async {
+          // Find the first upcoming event for this sport
+          final eventsForSport = _events
+              .where((e) => e.sportName.toLowerCase() == sportName.toLowerCase())
+              .toList();
+          if (eventsForSport.isEmpty) {
+            // Fallback: go directly to registration if no event found
+            if (sportName.toLowerCase().contains('pickleball')) {
+              _navigateToPickleballRegistration(context);
+            } else {
+              _navigateToTeamRegistration(context, sportName);
+            }
+            return;
           }
+
+          final event = eventsForSport.first;
+
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EventDetailScreen(
+                event: event,
+                onHomePressed: widget.onHomePressed,
+                onSignUp: () {
+                  // Navigate to appropriate registration form
+                  if (sportName.toLowerCase().contains('pickleball')) {
+                    _navigateToPickleballRegistration(context);
+                  } else {
+                    _navigateToTeamRegistration(context, sportName, event: event);
+                  }
+                },
+              ),
+            ),
+          );
         });
       },
     );
@@ -166,6 +195,10 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
         gameName.toLowerCase().contains('pickelball')) {
       imagePath =
           'assets/pickelball.png'; // Note: using the actual filename with typo
+    } else if (gameName.toLowerCase().contains('volleyball')) {
+      imagePath = 'assets/volleyball.png';
+    } else if (gameName.toLowerCase().contains('soccer')) {
+      imagePath = 'assets/soccer.png';
     }
 
     return Column(
@@ -253,12 +286,13 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
     );
   }
 
-  void _navigateToTeamRegistration(BuildContext context, String gameType) {
+  void _navigateToTeamRegistration(BuildContext context, String gameType, {Event? event}) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder:
             (context) => TeamRegistrationScreen(
+              event: event,
               onSave: (team) {
                 // Add game type to team
                 final teamWithGame = Team(
@@ -271,6 +305,9 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
                   players: team.players,
                   registrationDate: team.registrationDate,
                   division: team.division,
+                  createdByUserId: team.createdByUserId,
+                  isPrivate: team.isPrivate,
+                  eventId: event?.id ?? team.eventId,
                 );
 
                 widget.onSave(teamWithGame);
