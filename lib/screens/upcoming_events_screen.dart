@@ -43,11 +43,21 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
   }
 
   Future<void> _loadEvents() async {
+    // Ensure refresh indicator shows for at least 1 second
+    final startTime = DateTime.now();
+    
     await _eventService.initialize();
     // Load upcoming events (exclude completed ones)
     final upcomingEvents = await _eventService.getUpcomingEventsExcludingCompleted();
     // Load past events
     final pastEvents = await _eventService.getPastEvents();
+    
+    // Calculate elapsed time and ensure minimum 1 second duration
+    final elapsed = DateTime.now().difference(startTime);
+    if (elapsed.inMilliseconds < 1000) {
+      await Future.delayed(Duration(milliseconds: 1000 - elapsed.inMilliseconds));
+    }
+    
     if (mounted) {
       setState(() {
         _upcomingEvents = upcomingEvents;
@@ -73,10 +83,13 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
         child: SafeArea(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
-              : SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+              : RefreshIndicator(
+                  onRefresh: _loadEvents,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                       // Upcoming Events Section - Always show with expand/collapse
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -251,11 +264,12 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                             : const SizedBox.shrink(),
                       ),
                     ],
-                  ),
-                ),
-        ),
-      ),
-    );
+                  ), // Column closes
+                ), // SingleChildScrollView closes
+              ), // RefreshIndicator closes
+            ),
+          )
+  );
   }
 
   String _formatDate(DateTime date) {

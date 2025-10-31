@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'screens/splash_screen.dart';
@@ -8,6 +9,15 @@ import 'services/pickleball_team_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
+  try {
+    await Firebase.initializeApp();
+    print('Firebase initialized successfully');
+  } catch (e) {
+    print('Error initializing Firebase: $e');
+    print('Note: Make sure Firebase is configured properly (google-services.json, etc.)');
+  }
 
   // Add global error handling to prevent keyboard event crashes
   FlutterError.onError = (FlutterErrorDetails details) {

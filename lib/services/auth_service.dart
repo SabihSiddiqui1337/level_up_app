@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide User;
 import '../models/user.dart';
 
 class AuthService {
@@ -16,8 +17,8 @@ class AuthService {
     await _loadUsers();
     await _loadCurrentUser(); // Load current user session
 
-    // Force reinitialize with admin accounts (for fixing login issues)
-    _users = [
+    // Define admin accounts to ensure they exist
+    final adminAccounts = [
       // Admin accounts with scoring access
       User(
         id: '1',
@@ -81,7 +82,7 @@ class AuthService {
       ),
       User(
         id: '7',
-        email: 'Sabih1337@levelup.com',
+        email: 'sabih-1337@live.com',
         password: 'admin123',
         name: 'Sabih Owner',
         username: 'Sabih1337',
@@ -90,8 +91,25 @@ class AuthService {
         createdAt: DateTime.now(),
       ),
     ];
-    await _saveUsers();
-    print('AuthService initialized with ${_users.length} admin users');
+
+    // Add admin accounts only if they don't already exist (by ID)
+    bool hasChanges = false;
+    for (final adminAccount in adminAccounts) {
+      final exists = _users.any((user) => user.id == adminAccount.id);
+      if (!exists) {
+        _users.add(adminAccount);
+        hasChanges = true;
+        print('Added admin account: ${adminAccount.username}');
+      }
+    }
+
+    // Only save if we added new admin accounts
+    if (hasChanges) {
+      await _saveUsers();
+    }
+    
+    print('AuthService initialized with ${_users.length} total users');
+    print('User list: ${_users.map((u) => '${u.username}(${u.email})').toList()}');
   }
 
   // Load users from SharedPreferences
@@ -229,20 +247,49 @@ class AuthService {
     required String username,
     required String phone,
   }) async {
-    print('AuthService.register called with: $email, $username');
+    print('AuthService.register called with: $email, $username, $phone');
     await Future.delayed(const Duration(seconds: 1)); // Simulate network delay
 
-    // Check if user already exists
+    // Check for email conflicts
     try {
       _users.firstWhere(
-        (user) =>
-            user.email.toLowerCase() == email.toLowerCase() ||
-            user.username.toLowerCase() == username.toLowerCase(),
+        (user) => user.email.toLowerCase() == email.toLowerCase(),
       );
-      print('User already exists');
-      return false; // User already exists
+      // If we get here, email exists
+      throw Exception('EMAIL_TAKEN');
     } catch (e) {
-      // User doesn't exist, proceed with registration
+      if (e.toString().contains('EMAIL_TAKEN')) {
+        rethrow;
+      }
+      // StateError means email not found, which is good - continue checking
+    }
+
+    // Check for username conflicts
+    try {
+      _users.firstWhere(
+        (user) => user.username.toLowerCase() == username.toLowerCase(),
+      );
+      // If we get here, username exists
+      throw Exception('USERNAME_TAKEN');
+    } catch (e) {
+      if (e.toString().contains('USERNAME_TAKEN')) {
+        rethrow;
+      }
+      // StateError means username not found, which is good - continue checking
+    }
+
+    // Check for phone conflicts
+    try {
+      _users.firstWhere(
+        (user) => user.phone == phone,
+      );
+      // If we get here, phone exists
+      throw Exception('PHONE_TAKEN');
+    } catch (e) {
+      if (e.toString().contains('PHONE_TAKEN')) {
+        rethrow;
+      }
+      // StateError means phone not found, which is good - proceed with registration
     }
 
     try {
@@ -263,7 +310,11 @@ class AuthService {
       return true;
     } catch (e) {
       print('Error registering user: $e');
-      return false;
+      // Re-throw if it's one of our specific exceptions
+      if (e.toString().contains('_TAKEN')) {
+        rethrow;
+      }
+      throw Exception('Registration failed. Please try again.');
     }
   }
 
@@ -393,6 +444,77 @@ class AuthService {
       return true;
     } catch (e) {
       print('Error deleting user: $e');
+      return false;
+    }
+  }
+
+  // Send password reset email using Firebase Auth
+  Future<bool> sendPasswordResetEmail(String email) async {
+    try {
+      // Check if email exists in local database first
+      final emailExists = await checkEmailExists(email);
+      if (!emailExists) {
+        print('Email not found in local database: $email');
+        return false;
+      }
+
+      // Send password reset email via Firebase Auth
+      await FirebaseAuth.instance.sendPasswordResetEmail(
+        email: email,
+      );
+      
+      print('Password reset email sent successfully to: $email');
+      return true;
+    } on FirebaseAuthException catch (e) {
+      print('Firebase Auth error sending password reset: ${e.code} - ${e.message}');
+      // Handle specific Firebase Auth errors
+      if (e.code == 'user-not-found') {
+        print('User not found in Firebase Auth');
+      } else if (e.code == 'invalid-email') {
+        print('Invalid email address');
+      }
+      return false;
+    } catch (e) {
+      print('Error sending password reset email: $e');
+      return false;
+    }
+  }
+
+  // Reset password for a user by email (updates local database)
+  Future<bool> resetPassword(String email, String newPassword) async {
+    try {
+      final userIndex = _users.indexWhere(
+        (user) => user.email.toLowerCase() == email.toLowerCase(),
+      );
+      
+      if (userIndex == -1) {
+        print('User not found for password reset: $email');
+        return false;
+      }
+
+      // Update the user's password
+      _users[userIndex] = User(
+        id: _users[userIndex].id,
+        name: _users[userIndex].name,
+        email: _users[userIndex].email,
+        password: newPassword,
+        username: _users[userIndex].username,
+        phone: _users[userIndex].phone,
+        role: _users[userIndex].role,
+        createdAt: _users[userIndex].createdAt,
+      );
+
+      // If the current user is the one resetting, update current user too
+      if (_currentUser != null && _currentUser!.email.toLowerCase() == email.toLowerCase()) {
+        _currentUser = _users[userIndex];
+        await _saveCurrentUser();
+      }
+
+      await _saveUsers();
+      print('Password reset successful for: $email');
+      return true;
+    } catch (e) {
+      print('Error resetting password: $e');
       return false;
     }
   }

@@ -44,36 +44,52 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
   }
 
   Future<void> _loadEvents() async {
+    // Ensure refresh indicator shows for at least 1 second
+    final startTime = DateTime.now();
+    
     await _eventService.initialize();
     // Load upcoming events excluding completed ones
     final upcomingEvents = await _eventService.getUpcomingEventsExcludingCompleted();
-    setState(() {
-      _events = upcomingEvents;
-      // Get unique sport names from events
-      _sportNames = _events.map((e) => e.sportName).toSet().toList();
-      _isLoading = false;
-    });
+    
+    // Calculate elapsed time and ensure minimum 1 second duration
+    final elapsed = DateTime.now().difference(startTime);
+    if (elapsed.inMilliseconds < 1000) {
+      await Future.delayed(Duration(milliseconds: 1000 - elapsed.inMilliseconds));
+    }
+    
+    if (mounted) {
+      setState(() {
+        _events = upcomingEvents;
+        // Get unique sport names from events
+        _sportNames = _events.map((e) => e.sportName).toSet().toList();
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: CustomAppBar(onHomePressed: widget.onHomePressed),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Choose a sport to register your team:',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.grey[700],
-                fontWeight: FontWeight.w500,
+      body: RefreshIndicator(
+        onRefresh: _loadEvents,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Choose a sport to register your team:',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: Colors.grey[700],
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            const SizedBox(height: 32),
-            Expanded(child: _buildRegularGameSelection()),
-          ],
+              const SizedBox(height: 32),
+              _buildRegularGameSelection(),
+            ],
+          ),
         ),
       ),
     );
@@ -109,14 +125,18 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
       );
     }
 
-    return GridView.builder(
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-      ),
-      itemCount: _sportNames.length,
-      itemBuilder: (context, index) {
+    return SizedBox(
+      height: (_sportNames.length / 2).ceil() * 200.0, // Approximate height based on items
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+        ),
+        itemCount: _sportNames.length,
+        itemBuilder: (context, index) {
         final sportName = _sportNames[index];
         final icon = _getSportIcon(sportName);
         final color = _getSportColor(index);
@@ -157,6 +177,7 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
           );
         });
       },
+      ),
     );
   }
 

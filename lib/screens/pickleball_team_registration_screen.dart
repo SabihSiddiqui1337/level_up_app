@@ -6,6 +6,7 @@ import '../models/pickleball_team.dart';
 import '../models/pickleball_player.dart';
 import '../models/event.dart';
 import '../services/auth_service.dart';
+import '../services/event_service.dart';
 import '../keys/pickleball_screen/pickleball_screen_keys.dart';
 import 'pickleball_process_registration_screen.dart';
 
@@ -167,6 +168,26 @@ class _PickleballTeamRegistrationScreenState
 
   Future<void> _saveTeam() async {
     if (_isSaving) return; // Prevent rapid clicking
+
+    // Check if event still exists (if registering for an event)
+    if (widget.event != null) {
+      final eventService = EventService();
+      await eventService.initialize();
+      final existingEvent = eventService.getEventById(widget.event!.id);
+      if (existingEvent == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This event has been deleted. Registration is no longer available.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          Navigator.pop(context);
+        }
+        return;
+      }
+    }
 
     if (_formKey.currentState!.validate() && _players.isNotEmpty) {
       setState(() {

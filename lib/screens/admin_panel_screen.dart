@@ -2033,6 +2033,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     final locationController = TextEditingController();
     final addressController = TextEditingController();
     final descriptionController = TextEditingController();
+    final titleFocusNode = FocusNode();
+    final locationFocusNode = FocusNode();
+    final addressFocusNode = FocusNode();
+    final descriptionFocusNode = FocusNode();
     DateTime? selectedDate;
     String? selectedSport;
     String? selectedDivision;
@@ -2066,7 +2070,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                               ),
                               IconButton(
                         icon: const Icon(Icons.close),
-                                onPressed: () => Navigator.pop(context),
+                                onPressed: () {
+                                  // Dismiss keyboard and dispose focus nodes
+                                  FocusScope.of(context).unfocus();
+                                  titleFocusNode.dispose();
+                                  locationFocusNode.dispose();
+                                  addressFocusNode.dispose();
+                                  descriptionFocusNode.dispose();
+                                  Navigator.pop(context);
+                                },
                               ),
                             ],
                           ),
@@ -2076,6 +2088,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                   hasError: titleError,
                                   child: TextField(
                                     controller: titleController,
+                                    focusNode: titleFocusNode,
                                     decoration: InputDecoration(
                                       hintText: 'Enter event name',
                                       border: InputBorder.none,
@@ -2085,6 +2098,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                         if (titleError && v.isNotEmpty) {
                           setDialogState(() => titleError = false);
                                       }
+                                    },
+                                    onTap: () {
+                                      // Dismiss other keyboards when tapping this field
+                                      FocusScope.of(context).unfocus();
+                                      Future.delayed(const Duration(milliseconds: 100), () {
+                                        titleFocusNode.requestFocus();
+                                      });
                                     },
                                   ),
                                 ),
@@ -2141,6 +2161,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                   hasError: locationError,
                                   child: TextField(
                                     controller: locationController,
+                                    focusNode: locationFocusNode,
                                     decoration: InputDecoration(
                                       hintText: 'Enter location name',
                                       border: InputBorder.none,
@@ -2151,6 +2172,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                           setDialogState(() => locationError = false);
                                       }
                                     },
+                                    onTap: () {
+                                      // Dismiss other keyboards when tapping this field
+                                      FocusScope.of(context).unfocus();
+                                      Future.delayed(const Duration(milliseconds: 100), () {
+                                        locationFocusNode.requestFocus();
+                                      });
+                                    },
                                   ),
                                 ),
                   const SizedBox(height: 16),
@@ -2159,6 +2187,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                       hasError: addressError,
                                       child: TextField(
                                         controller: addressController,
+                                        focusNode: addressFocusNode,
                                         decoration: InputDecoration(
                                           hintText: 'Enter full address',
                                           border: InputBorder.none,
@@ -2169,6 +2198,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                           setDialogState(() => addressError = false);
                         }
                                         },
+                                        onTap: () {
+                                          // Dismiss other keyboards when tapping this field
+                                          FocusScope.of(context).unfocus();
+                                          Future.delayed(const Duration(milliseconds: 100), () {
+                                            addressFocusNode.requestFocus();
+                                          });
+                                        },
                                       ),
                                     ),
                   const SizedBox(height: 16),
@@ -2177,6 +2213,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     hasError: false,
                     child: TextField(
                       controller: descriptionController,
+                      focusNode: descriptionFocusNode,
                       minLines: 3,
                       maxLines: 5,
                       decoration: const InputDecoration(
@@ -2184,6 +2221,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                       ),
+                      onTap: () {
+                        // Dismiss other keyboards when tapping this field
+                        FocusScope.of(context).unfocus();
+                        Future.delayed(const Duration(milliseconds: 100), () {
+                          descriptionFocusNode.requestFocus();
+                        });
+                      },
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -2353,7 +2397,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () {
+                          // Dismiss keyboard and dispose focus nodes
+                          FocusScope.of(context).unfocus();
+                          titleFocusNode.dispose();
+                          locationFocusNode.dispose();
+                          addressFocusNode.dispose();
+                          descriptionFocusNode.dispose();
+                          Navigator.pop(context);
+                        },
                         child: const Text('Cancel'),
                       ),
                       const SizedBox(width: 8),
@@ -2381,6 +2433,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             division: selectedDivision,
                           );
                           if (ok) {
+                            // Dismiss keyboard and dispose focus nodes
+                            FocusScope.of(context).unfocus();
+                            titleFocusNode.dispose();
+                            locationFocusNode.dispose();
+                            addressFocusNode.dispose();
+                            descriptionFocusNode.dispose();
                             await _eventService.initialize();
                                 if (mounted) {
                               setState(() {});
@@ -2475,8 +2533,27 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               // Now delete the event
               final ok = await _eventService.deleteEvent(event.id);
               if (ok) {
+                // Reload events to ensure deletion is reflected
                 await _eventService.initialize();
-                if (mounted) setState(() {});
+                if (mounted) {
+                  setState(() {});
+                  // Show success message
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Event "${event.title}" deleted successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } else {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Error deleting event'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               }
               if (mounted) Navigator.pop(context);
             },

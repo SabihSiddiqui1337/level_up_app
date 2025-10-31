@@ -1,0 +1,28 @@
+{
+  "project_info": {
+    "project_number": "779252114785",
+    "project_id": "levelupsports-1014f",
+    "storage_bucket": "levelupsports-1014f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:779252114785:android:b31161984933c5989c1120",
+        "android_client_info": {
+          "package_name": "com.example.level_up_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEudAwgmSYq6wsOyRCeqSSr53nRfsHEeo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"

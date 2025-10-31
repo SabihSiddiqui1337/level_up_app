@@ -6,6 +6,7 @@ import '../models/team.dart';
 import '../models/player.dart';
 import '../models/event.dart';
 import '../services/auth_service.dart';
+import '../services/event_service.dart';
 import '../screens/main_navigation_screen.dart'; // Added import for MainNavigationScreen
 
 class PhoneNumberFormatter extends TextInputFormatter {
@@ -243,8 +244,28 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
     );
   }
 
-  void _saveTeam() {
+  void _saveTeam() async {
     if (_isSaving) return; // Prevent rapid clicking
+
+    // Check if event still exists (if registering for an event)
+    if (widget.event != null) {
+      final eventService = EventService();
+      await eventService.initialize();
+      final existingEvent = eventService.getEventById(widget.event!.id);
+      if (existingEvent == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This event has been deleted. Registration is no longer available.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          Navigator.pop(context);
+        }
+        return;
+      }
+    }
 
     if (_formKey.currentState!.validate() && _players.isNotEmpty) {
       setState(() {

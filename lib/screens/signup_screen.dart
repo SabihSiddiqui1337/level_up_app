@@ -117,13 +117,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
       }
     } catch (e) {
       if (mounted) {
-        String errorMessage = e.toString().replaceFirst('Exception: ', '');
-        if (errorMessage.contains('already exists')) {
-          errorMessage =
-              'Email is already taken. Please use a different email.';
-        } else if (errorMessage.contains('Username is already taken')) {
-          errorMessage = 'Username is already taken. Please try again.';
+        String errorMessage = '';
+        String errorString = e.toString();
+        
+        if (errorString.contains('EMAIL_TAKEN')) {
+          errorMessage = 'This email is already taken. Please use a different email address.';
+        } else if (errorString.contains('USERNAME_TAKEN')) {
+          errorMessage = 'This username is already taken. Please choose a different username.';
+        } else if (errorString.contains('PHONE_TAKEN')) {
+          errorMessage = 'This phone number is already registered. Please use a different phone number.';
+        } else {
+          errorMessage = errorString.replaceFirst('Exception: ', '');
+          if (errorMessage.contains('already exists')) {
+            errorMessage = 'Email is already taken. Please use a different email.';
+          } else if (errorMessage.contains('Username is already taken')) {
+            errorMessage = 'Username is already taken. Please try again.';
+          }
         }
+        
         SnackBarUtils.showError(context, message: errorMessage);
       }
     } finally {

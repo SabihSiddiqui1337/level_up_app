@@ -28,10 +28,22 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Future<void> _loadEvents() async {
+    // Ensure refresh indicator shows for at least 1 second
+    final startTime = DateTime.now();
+    
     await _eventService.initialize();
-    setState(() {
-      _events = _eventService.upcomingEvents;
-    });
+    
+    // Calculate elapsed time and ensure minimum 1 second duration
+    final elapsed = DateTime.now().difference(startTime);
+    if (elapsed.inMilliseconds < 1000) {
+      await Future.delayed(Duration(milliseconds: 1000 - elapsed.inMilliseconds));
+    }
+    
+    if (mounted) {
+      setState(() {
+        _events = _eventService.upcomingEvents;
+      });
+    }
   }
 
   String _getEventTitleForSport(String sportName) {
@@ -146,11 +158,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          child: RefreshIndicator(
+            onRefresh: _loadEvents,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 // Title
                 Center(
                   child: Text(
@@ -214,6 +229,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   ),
                 ),
               ],
+              ),
             ),
           ),
         ),
