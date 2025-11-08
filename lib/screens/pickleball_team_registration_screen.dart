@@ -1,4 +1,4 @@
-// ignore_for_file: avoid_print
+// ignore_for_file: avoid_print, use_build_context_synchronously
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +7,7 @@ import '../models/pickleball_player.dart';
 import '../models/event.dart';
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
+import '../services/pickleball_team_service.dart';
 import '../keys/pickleball_screen/pickleball_screen_keys.dart';
 import 'pickleball_process_registration_screen.dart';
 
@@ -136,6 +137,7 @@ class _PickleballTeamRegistrationScreenState
       context: context,
       builder:
           (context) => _PickleballPlayerDialog(
+            fixedDuprRating: widget.event?.division ?? _selectedDuprRating,
             onSave: (player) {
               setState(() {
                 _players.add(player);
@@ -151,6 +153,7 @@ class _PickleballTeamRegistrationScreenState
       builder:
           (context) => _PickleballPlayerDialog(
             player: _players[index],
+            fixedDuprRating: widget.event?.division ?? _selectedDuprRating,
             onSave: (updatedPlayer) {
               setState(() {
                 _players[index] = updatedPlayer;
@@ -222,7 +225,7 @@ class _PickleballTeamRegistrationScreenState
         createdByUserId: currentUser?.id,
         isPrivate:
             !isAdmin && !isManagement,
-        eventId: widget.event?.id ?? '',
+        eventId: widget.event?.id ?? widget.team?.eventId ?? '',
       );
 
       // Create default event for pickleball tournament
@@ -289,6 +292,8 @@ class _PickleballTeamRegistrationScreenState
           widget.team?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
 
       final currentUser = _authService.currentUser;
+      final isAdmin = _authService.isManagement ||
+          currentUser?.role == 'scoring' || currentUser?.role == 'owner';
 
       final team = PickleballTeam(
         id: teamId,
@@ -300,13 +305,18 @@ class _PickleballTeamRegistrationScreenState
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
         division: widget.event?.division ?? _selectedDuprRating,
         createdByUserId: currentUser?.id,
-        isPrivate: false, // Public team
-        eventId: widget.event?.id ?? '',
+        // Admin/management teams should be public (visible to all)
+        // Regular user teams should be private (visible only to creator)
+        isPrivate: !isAdmin,
+        eventId: widget.event?.id ?? widget.team?.eventId ?? '',
       );
 
       // Save the team
       if (widget.onSave != null) {
         widget.onSave!(team);
+      } else {
+        // Persist via service when no callback is provided
+        await PickleballTeamService().addTeam(team);
       }
 
       // Show success message
@@ -413,12 +423,20 @@ class _PickleballTeamRegistrationScreenState
             widget.event?.division != null
                 ? TextFormField(
                     initialValue: widget.event!.division,
-                    decoration: const InputDecoration(
-                      labelText: 'DUPR Rating',
-                      prefixIcon: Icon(Icons.star),
-                      border: OutlineInputBorder(),
+                    style: const TextStyle(color: Colors.black87),
+                    decoration: InputDecoration(
+                      labelText: 'DUPR Rating (Preset)',
+                      labelStyle: TextStyle(color: Colors.grey[600]),
+                      prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
+                      border: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                      ),
                       filled: true,
-                      fillColor: Colors.grey,
+                      fillColor: Colors.grey[200],
+                      suffixIcon: Icon(Icons.info_outline, color: Colors.grey[500], size: 20),
                     ),
                     readOnly: true,
                   )
@@ -590,12 +608,20 @@ class _PickleballTeamRegistrationScreenState
                 widget.event?.division != null
                     ? TextFormField(
                         initialValue: widget.event!.division,
-                        decoration: const InputDecoration(
-                          labelText: 'DUPR Rating',
-                          prefixIcon: Icon(Icons.star),
-                          border: OutlineInputBorder(),
+                        style: const TextStyle(color: Colors.black87),
+                        decoration: InputDecoration(
+                          labelText: 'DUPR Rating (Preset)',
+                          labelStyle: TextStyle(color: Colors.grey[600]),
+                          prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
+                          border: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                          ),
                           filled: true,
-                          fillColor: Colors.grey,
+                          fillColor: Colors.grey[200],
+                          suffixIcon: Icon(Icons.info_outline, color: Colors.grey[500], size: 20),
                         ),
                         readOnly: true,
                       )
@@ -761,8 +787,9 @@ class _PickleballTeamRegistrationScreenState
 class _PickleballPlayerDialog extends StatefulWidget {
   final PickleballPlayer? player;
   final Function(PickleballPlayer) onSave;
+  final String fixedDuprRating; // Enforced DUPR rating (from team/event division)
 
-  const _PickleballPlayerDialog({this.player, required this.onSave});
+  const _PickleballPlayerDialog({this.player, required this.onSave, required this.fixedDuprRating});
 
   @override
   State<_PickleballPlayerDialog> createState() =>
@@ -774,17 +801,13 @@ class _PickleballPlayerDialogState extends State<_PickleballPlayerDialog> {
   final _nameController = TextEditingController();
   String _selectedDuprRating = PickleballScreenKeys.duprRatingUnder35;
 
-  final List<String> _duprRatings = [
-    PickleballScreenKeys.duprRatingUnder35,
-    PickleballScreenKeys.duprRatingOver4,
-  ];
-
   @override
   void initState() {
     super.initState();
+    // Always lock the rating to the provided fixed rating
+    _selectedDuprRating = widget.fixedDuprRating;
     if (widget.player != null) {
       _nameController.text = widget.player!.name;
-      _selectedDuprRating = widget.player!.duprRating;
     }
   }
 
@@ -818,24 +841,25 @@ class _PickleballPlayerDialogState extends State<_PickleballPlayerDialog> {
                 },
               ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _selectedDuprRating,
-                decoration: const InputDecoration(
-                  labelText: 'DUPR Rating',
-                  border: OutlineInputBorder(),
+              // Show locked DUPR rating (read-only)
+              TextFormField(
+                initialValue: _selectedDuprRating,
+                style: const TextStyle(color: Colors.black87),
+                decoration: InputDecoration(
+                  labelText: 'DUPR Rating (Preset)',
+                  labelStyle: TextStyle(color: Colors.grey[600]),
+                  prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[200],
+                  suffixIcon: Icon(Icons.info_outline, color: Colors.grey[500], size: 20),
                 ),
-                items:
-                    _duprRatings.map((String rating) {
-                      return DropdownMenuItem<String>(
-                        value: rating,
-                        child: Text(rating),
-                      );
-                    }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedDuprRating = value!;
-                  });
-                },
+                readOnly: true,
               ),
             ],
           ),

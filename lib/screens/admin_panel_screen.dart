@@ -1102,7 +1102,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                           const SizedBox(width: 12),
                                           Text(
                                             selectedDate != null
-                                                ? '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}'
+                                                ? '${selectedDate!.month}/${selectedDate!.day}/${selectedDate!.year}'
                                                 : 'Select date',
                                             style: TextStyle(
                                               fontSize: 16,
@@ -1746,6 +1746,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                   division: selectedDivision, // Include division in update
                                 );
 
+                                // Dismiss keyboard before saving
+                                FocusScope.of(context).unfocus();
+                                
                                 final success = await _eventService.updateEvent(
                                   updatedEvent,
                                 );
@@ -2033,10 +2036,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     final locationController = TextEditingController();
     final addressController = TextEditingController();
     final descriptionController = TextEditingController();
+    final amountController = TextEditingController();
     final titleFocusNode = FocusNode();
     final locationFocusNode = FocusNode();
     final addressFocusNode = FocusNode();
     final descriptionFocusNode = FocusNode();
+    final amountFocusNode = FocusNode();
     DateTime? selectedDate;
     String? selectedSport;
     String? selectedDivision;
@@ -2077,6 +2082,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                   locationFocusNode.dispose();
                                   addressFocusNode.dispose();
                                   descriptionFocusNode.dispose();
+                                  amountFocusNode.dispose();
                                   Navigator.pop(context);
                                 },
                               ),
@@ -2143,7 +2149,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             const SizedBox(width: 12),
                             Text(
                                               selectedDate != null
-                                  ? '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}'
+                                  ? '${selectedDate!.month}/${selectedDate!.day}/${selectedDate!.year}'
                                                   : 'Select date',
                                               style: TextStyle(
                                                 fontSize: 16,
@@ -2391,6 +2397,29 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                             ),
                                           ),
                                 ),
+                  const SizedBox(height: 16),
+                  // Amount field
+                  _buildImageStyleField(
+                    label: 'Amount (Leave empty for free event)',
+                    hasError: false,
+                    child: TextField(
+                      controller: amountController,
+                      focusNode: amountFocusNode,
+                      keyboardType: TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        hintText: 'Enter registration amount (e.g., 350.00)',
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        prefixText: '\$ ',
+                      ),
+                      onTap: () {
+                        FocusScope.of(context).unfocus();
+                        Future.delayed(const Duration(milliseconds: 100), () {
+                          amountFocusNode.requestFocus();
+                        });
+                      },
+                    ),
+                  ),
                   ],
                   const SizedBox(height: 20),
                   Row(
@@ -2404,6 +2433,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                           locationFocusNode.dispose();
                           addressFocusNode.dispose();
                           descriptionFocusNode.dispose();
+                          amountFocusNode.dispose();
                           Navigator.pop(context);
                         },
                         child: const Text('Cancel'),
@@ -2423,6 +2453,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                           });
                           if (titleError || dateError || locationError || addressError || sportError || divisionError) return;
 
+                          // Parse amount (null if empty means free event)
+                          double? amount;
+                          if (amountController.text.trim().isNotEmpty) {
+                            final parsedAmount = double.tryParse(amountController.text.trim());
+                            if (parsedAmount != null && parsedAmount > 0) {
+                              amount = parsedAmount;
+                            }
+                          }
+
                           final ok = await _eventService.createEvent(
                                   title: titleController.text.trim(),
                                   date: selectedDate!,
@@ -2431,6 +2470,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             sportName: selectedSport!.trim(),
                             description: descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
                             division: selectedDivision,
+                            amount: amount,
                           );
                           if (ok) {
                             // Dismiss keyboard and dispose focus nodes
@@ -2439,6 +2479,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             locationFocusNode.dispose();
                             addressFocusNode.dispose();
                             descriptionFocusNode.dispose();
+                            amountFocusNode.dispose();
                             await _eventService.initialize();
                                 if (mounted) {
                               setState(() {});
@@ -2834,6 +2875,7 @@ class _UserManagementScreenState extends State<_UserManagementScreen> {
 
   void _showAddUserDialog() {
     final nameController = TextEditingController();
+    final usernameController = TextEditingController();
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
     final phoneController = TextEditingController();
@@ -2852,6 +2894,14 @@ class _UserManagementScreenState extends State<_UserManagementScreen> {
                     controller: nameController,
                     decoration: const InputDecoration(
                       labelText: 'Name',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: usernameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Username',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -2907,14 +2957,14 @@ class _UserManagementScreenState extends State<_UserManagementScreen> {
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
-                onPressed:
-                    () => _addUser(
-                      nameController.text,
-                      emailController.text,
-                      passwordController.text,
-                      phoneController.text,
-                      selectedRole,
-                    ),
+                onPressed: () => _addUser(
+                  nameController.text,
+                  emailController.text,
+                  passwordController.text,
+                  phoneController.text,
+                  selectedRole,
+                  usernameController.text,
+                ),
                 child: const Text('Add User'),
               ),
             ],
@@ -2928,17 +2978,19 @@ class _UserManagementScreenState extends State<_UserManagementScreen> {
     String password,
     String phone,
     String role,
+    String username,
   ) async {
     try {
       final user = User(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         email: email,
-        password: password,
+        password: password, // Temporary password, user must change on first login
         name: name,
-        username: email.split('@')[0],
+        username: (username.isNotEmpty ? username : email.split('@')[0]),
         phone: phone,
         role: role,
         createdAt: DateTime.now(),
+        needsPasswordSetup: true, // User needs to set password on first login
       );
 
       await widget.authService.addUser(user);

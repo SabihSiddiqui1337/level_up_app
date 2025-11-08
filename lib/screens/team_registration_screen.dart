@@ -1,4 +1,4 @@
-// ignore_for_file: avoid_print
+// ignore_for_file: avoid_print, use_build_context_synchronously
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,7 +7,9 @@ import '../models/player.dart';
 import '../models/event.dart';
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
+import '../services/team_service.dart';
 import '../screens/main_navigation_screen.dart'; // Added import for MainNavigationScreen
+import '../screens/process_registration_screen.dart'; // Added import for ProcessRegistrationScreen
 
 class PhoneNumberFormatter extends TextInputFormatter {
   @override
@@ -90,6 +92,10 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
   String? _selectedDivision; // Will be set from event if available
   bool _hasUnsavedChanges = false;
   bool _isSaving = false; // Add flag to prevent rapid saving
+  
+  // Validation states for real-time validation
+  final Map<String, String?> _fieldErrors = {};
+  bool _hasAttemptedValidation = false;
 
   final List<String> _divisions = ['Youth (18 or under)', 'Adult 18+'];
 
@@ -140,12 +146,90 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
       }
     }
 
-    // Add listeners to track form changes
-    _teamNameController.addListener(_onFormChanged);
-    _coachNameController.addListener(_onFormChanged);
-    _coachPhoneController.addListener(_onFormChanged);
-    _coachEmailController.addListener(_onFormChanged);
-    _coachAgeController.addListener(_onFormChanged);
+    // Add listeners to track form changes and validate in real-time
+    _teamNameController.addListener(() {
+      _onFormChanged();
+      _validateField('teamName', _teamNameController.text);
+    });
+    _coachNameController.addListener(() {
+      _onFormChanged();
+      _validateField('coachName', _coachNameController.text);
+    });
+    _coachPhoneController.addListener(() {
+      _onFormChanged();
+      _validateField('coachPhone', _coachPhoneController.text);
+    });
+    _coachEmailController.addListener(() {
+      _onFormChanged();
+      _validateField('coachEmail', _coachEmailController.text);
+    });
+    _coachAgeController.addListener(() {
+      _onFormChanged();
+      _validateField('coachAge', _coachAgeController.text);
+    });
+  }
+  
+  void _validateField(String fieldName, String value) {
+    if (!_hasAttemptedValidation) return;
+    
+    String? error;
+    switch (fieldName) {
+      case 'teamName':
+        if (value.isEmpty) {
+          error = 'Please enter team name';
+        }
+        break;
+      case 'coachName':
+        if (value.isEmpty) {
+          error = 'Please enter captain name';
+        }
+        break;
+      case 'coachPhone':
+        if (value.isEmpty) {
+          error = 'Please enter captain phone';
+        } else {
+          final digitsOnly = value.replaceAll(RegExp(r'[^\d]'), '');
+          if (digitsOnly.length != 10) {
+            error = 'Enter 10-digit number';
+          }
+        }
+        break;
+      case 'coachEmail':
+        if (value.isEmpty) {
+          error = 'Please enter captain email';
+        } else if (!value.contains('@')) {
+          error = 'Please enter a valid email';
+        }
+        break;
+      case 'coachAge':
+        if (value.isEmpty) {
+          error = 'Please enter captain age';
+        } else {
+          final age = int.tryParse(value);
+          if (age == null) {
+            error = 'Please enter a valid age';
+          } else if (_selectedDivision == 'Youth (18 or under)') {
+            if (age > 18) {
+              error = 'Captain age must be 18 or under for Youth division';
+            }
+          } else if (_selectedDivision == 'Adult 18+') {
+            if (age < 18) {
+              error = 'Captain age must be 18 or older for Adult division';
+            }
+          }
+        }
+        break;
+    }
+    
+    if (mounted) {
+      setState(() {
+        if (error != null) {
+          _fieldErrors[fieldName] = error;
+        } else {
+          _fieldErrors.remove(fieldName);
+        }
+      });
+    }
   }
 
   @override
@@ -267,14 +351,23 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
       }
     }
 
-    if (_formKey.currentState!.validate() && _players.isNotEmpty) {
+    // Mark that user has attempted validation
+    _hasAttemptedValidation = true;
+    
+    // Validate all fields
+    _validateField('teamName', _teamNameController.text);
+    _validateField('coachName', _coachNameController.text);
+    _validateField('coachPhone', _coachPhoneController.text);
+    _validateField('coachEmail', _coachEmailController.text);
+    _validateField('coachAge', _coachAgeController.text);
+    
+    if (_formKey.currentState!.validate() && _players.isNotEmpty && _fieldErrors.isEmpty) {
       setState(() {
         _isSaving = true;
       });
       print('Saving team with ${_players.length} players'); // Debug print
       final currentUser = _authService.currentUser;
-      final isAdmin =
-          currentUser?.role == 'scoring' || currentUser?.role == 'owner';
+      final isAdmin = currentUser?.role == 'scoring' || currentUser?.role == 'owner';
 
       final team = Team(
         id: widget.team?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
@@ -291,25 +384,72 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         createdByUserId: currentUser?.id,
         isPrivate:
             !isAdmin, // Regular users create private teams, admins create public teams
-        eventId: widget.event?.id ?? '',
+        eventId: widget.event?.id ?? widget.team?.eventId ?? '',
       );
       print('Team created with ${team.players.length} players'); // Debug print
       print(
         'Team players: ${team.players.map((p) => p.name).toList()}',
       ); // Debug print
 
-      // Navigate to schedule tab after registering
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const MainNavigationScreen(initialIndex: 2)),
-        (route) => false,
-      );
+      // Reset saving state before navigation
+      if (mounted) {
+        setState(() {
+          _hasUnsavedChanges = false;
+          _isSaving = false;
+        });
+      }
 
-      // Reset unsaved changes flag
-      setState(() {
-        _hasUnsavedChanges = false;
-        _isSaving = false;
-      });
+      // Navigate to summary/process registration screen, then payment
+      // Only navigate if we have an event (required for payment flow)
+      if (widget.event != null && mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProcessRegistrationScreen(
+              team: team,
+              event: widget.event!,
+            ),
+          ),
+        );
+      } else {
+        // If no event, save directly (for editing existing teams or when event is not provided)
+        if (widget.team != null && widget.onSave != null) {
+          // If editing an existing team, call onSave callback
+          widget.onSave!(team);
+          if (mounted) {
+            Navigator.pop(context);
+          }
+        } else if (widget.onSave != null) {
+          // If callback provided for new team, use it
+          widget.onSave!(team);
+          if (mounted) {
+            Navigator.pop(context);
+          }
+        } else {
+          // Persist via TeamService when no callback is provided
+          await TeamService().addTeam(team);
+          if (mounted) {
+            // Show success message
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  widget.team == null
+                      ? 'Team "${team.name}" created successfully!'
+                      : 'Team "${team.name}" updated successfully!',
+                ),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+            // Navigate to My Team tab after registering (index 2)
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const MainNavigationScreen(initialIndex: 2)),
+              (route) => false,
+            );
+          }
+        }
+      }
     } else if (_players.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -533,16 +673,16 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                         initialValue: widget.event!.division,
                         style: const TextStyle(color: Colors.black87),
                         decoration: InputDecoration(
-                          labelText: 'Division',
+                          labelText: 'Division (Preset)',
                           labelStyle: TextStyle(color: Colors.grey[600]),
                           border: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey[300]!),
+                            borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey[300]!),
+                            borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
                           ),
                           filled: true,
-                          fillColor: Colors.grey[100],
+                          fillColor: Colors.grey[200],
                         ),
                         readOnly: true,
                       )
@@ -676,11 +816,13 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                   enableSuggestions: false,
                   maxLength: 30,
                   inputFormatters: [LengthLimitingTextInputFormatter(30)],
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Team Name',
-                    prefixIcon: Icon(Icons.sports_basketball),
-                    border: OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.sports_basketball),
+                    border: const OutlineInputBorder(),
                     counterText: '',
+                    errorText: _hasAttemptedValidation ? _fieldErrors['teamName'] : null,
+                    errorStyle: const TextStyle(color: Colors.red),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -699,16 +841,16 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                         initialValue: widget.event!.division,
                         style: const TextStyle(color: Colors.black87),
                         decoration: InputDecoration(
-                          labelText: 'Division',
+                          labelText: 'Division (Preset)',
                           labelStyle: TextStyle(color: Colors.grey[600]),
                           border: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey[300]!),
+                            borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey[300]!),
+                            borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
                           ),
                           filled: true,
-                          fillColor: Colors.grey[100],
+                          fillColor: Colors.grey[200],
                         ),
                         readOnly: true,
                       )
@@ -731,6 +873,8 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                             _hasUnsavedChanges = true;
                           });
                           _validatePlayersForDivision();
+                          // Re-validate age field when division changes
+                          _validateField('coachAge', _coachAgeController.text);
                           _formKey.currentState?.validate();
                         },
                       ),
@@ -764,10 +908,12 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                   textCapitalization: TextCapitalization.words,
                   autocorrect: false,
                   enableSuggestions: false,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Team Captain Name',
-                    prefixIcon: Icon(Icons.person),
-                    border: OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.person),
+                    border: const OutlineInputBorder(),
+                    errorText: _hasAttemptedValidation ? _fieldErrors['coachName'] : null,
+                    errorStyle: const TextStyle(color: Colors.red),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -781,11 +927,13 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                   controller: _coachPhoneController,
                   autocorrect: false,
                   enableSuggestions: false,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Captain Phone Number',
-                    prefixIcon: Icon(Icons.phone),
-                    border: OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.phone),
+                    border: const OutlineInputBorder(),
                     hintText: 'XXX-XXX-XXXX',
+                    errorText: _hasAttemptedValidation ? _fieldErrors['coachPhone'] : null,
+                    errorStyle: const TextStyle(color: Colors.red),
                   ),
                   keyboardType: TextInputType.phone,
                   maxLength: 12,
@@ -810,10 +958,12 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                   controller: _coachEmailController,
                   autocorrect: false,
                   enableSuggestions: false,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Captain Email',
-                    prefixIcon: Icon(Icons.email),
-                    border: OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.email),
+                    border: const OutlineInputBorder(),
+                    errorText: _hasAttemptedValidation ? _fieldErrors['coachEmail'] : null,
+                    errorStyle: const TextStyle(color: Colors.red),
                   ),
                   keyboardType: TextInputType.emailAddress,
                   validator: (value) {
@@ -842,6 +992,8 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                               : Colors.green[700],
                       fontSize: 12,
                     ),
+                    errorText: _hasAttemptedValidation ? _fieldErrors['coachAge'] : null,
+                    errorStyle: const TextStyle(color: Colors.red),
                   ),
                   keyboardType: TextInputType.number,
                   validator: (value) {
@@ -1033,7 +1185,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
       });
 
       final currentUser = _authService.currentUser;
-      final isAdmin =
+      final isAdmin = _authService.isManagement ||
           currentUser?.role == 'scoring' || currentUser?.role == 'owner';
 
       final team = Team(
@@ -1047,8 +1199,10 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
         division: widget.event?.division ?? _selectedDivision ?? 'Adult 18+',
         createdByUserId: currentUser?.id,
+        // Admin/management teams should be public (visible to all)
+        // Regular user teams should be private (visible only to creator)
         isPrivate: !isAdmin,
-        eventId: widget.event?.id ?? '',
+        eventId: widget.event?.id ?? widget.team?.eventId ?? '',
       );
 
       // If editing an existing team, call onSave callback
@@ -1068,6 +1222,9 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         // Save the team directly for management users
         if (widget.onSave != null) {
           widget.onSave!(team);
+        } else {
+          // Persist via TeamService when no callback is provided
+          TeamService().addTeam(team);
         }
 
         // Show success message

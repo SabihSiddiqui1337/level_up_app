@@ -250,14 +250,15 @@ class _PlayoffScreenState extends State<PlayoffScreen>
 
   void _startScoring() {
     if (_selectedMatch != null) {
+      final matchToScore = _selectedMatch!; // capture before navigation/callbacks
       // Determine which round this match belongs to
       Map<String, Map<String, int>> currentScores = {};
 
-      if (_quarterFinals.contains(_selectedMatch!)) {
+      if (_quarterFinals.contains(matchToScore)) {
         currentScores = _quarterFinalsScores;
-      } else if (_semiFinals.contains(_selectedMatch!)) {
+      } else if (_semiFinals.contains(matchToScore)) {
         currentScores = _semiFinalsScores;
-      } else if (_finals.contains(_selectedMatch!)) {
+      } else if (_finals.contains(matchToScore)) {
         currentScores = _finalsScores;
       }
 
@@ -267,16 +268,16 @@ class _PlayoffScreenState extends State<PlayoffScreen>
         MaterialPageRoute(
           builder:
               (context) => MatchScoringScreen(
-                match: _selectedMatch!,
-                initialScores: currentScores[_selectedMatch!.id],
+                match: matchToScore,
+                initialScores: currentScores[matchToScore.id],
                 onScoresUpdated: (scores) async {
                   setState(() {
-                    if (_quarterFinals.contains(_selectedMatch!)) {
-                      _quarterFinalsScores[_selectedMatch!.id] = scores;
-                    } else if (_semiFinals.contains(_selectedMatch!)) {
-                      _semiFinalsScores[_selectedMatch!.id] = scores;
-                    } else if (_finals.contains(_selectedMatch!)) {
-                      _finalsScores[_selectedMatch!.id] = scores;
+                    if (_quarterFinals.contains(matchToScore)) {
+                      _quarterFinalsScores[matchToScore.id] = scores;
+                    } else if (_semiFinals.contains(matchToScore)) {
+                      _semiFinalsScores[matchToScore.id] = scores;
+                    } else if (_finals.contains(matchToScore)) {
+                      _finalsScores[matchToScore.id] = scores;
                     }
                     _selectedMatch = null; // Clear selection after scoring
 
@@ -286,15 +287,11 @@ class _PlayoffScreenState extends State<PlayoffScreen>
 
                   // Save scores to persistent storage
                   try {
-                    if (_quarterFinals.contains(_selectedMatch!)) {
-                      await _scoreService.saveQuarterFinalsScores(
-                        _quarterFinalsScores,
-                      );
-                    } else if (_semiFinals.contains(_selectedMatch!)) {
-                      await _scoreService.saveSemiFinalsScores(
-                        _semiFinalsScores,
-                      );
-                    } else if (_finals.contains(_selectedMatch!)) {
+                    if (_quarterFinals.contains(matchToScore)) {
+                      await _scoreService.saveQuarterFinalsScores(_quarterFinalsScores);
+                    } else if (_semiFinals.contains(matchToScore)) {
+                      await _scoreService.saveSemiFinalsScores(_semiFinalsScores);
+                    } else if (_finals.contains(matchToScore)) {
                       await _scoreService.saveFinalsScores(_finalsScores);
                     }
                     print('Playoff scores saved to storage successfully');

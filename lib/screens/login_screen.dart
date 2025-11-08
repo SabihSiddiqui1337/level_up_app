@@ -1,4 +1,4 @@
-// ignore_for_file: avoid_print
+// ignore_for_file: avoid_print, use_build_context_synchronously
 
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
@@ -67,10 +67,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (mounted) {
         if (success) {
-          NavigationUtils.pushReplacement(
-            context,
-            const MainNavigationScreen(initialIndex: 0),
-          );
+          final currentUser = _authService.currentUser;
+          // Check if user needs to set up password on first login
+          if (currentUser?.needsPasswordSetup == true) {
+            _showPasswordSetupDialog(context);
+          } else {
+            NavigationUtils.pushReplacement(
+              context,
+              const MainNavigationScreen(initialIndex: 0),
+            );
+          }
         } else {
           _showLoginFailedDialog(context);
         }
@@ -424,6 +430,132 @@ class _LoginScreenState extends State<LoginScreen> {
       context,
       title: LoginScreenKeys.loginFailedTitle,
       message: LoginScreenKeys.loginFailedMessage,
+    );
+  }
+
+  void _showPasswordSetupDialog(BuildContext context) {
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool obscureNewPassword = true;
+    bool obscureConfirmPassword = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Set Your Password'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Please create a new password for your account.',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: newPasswordController,
+                    obscureText: obscureNewPassword,
+                    decoration: InputDecoration(
+                      labelText: 'New Password',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscureNewPassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                        onPressed: () {
+                          setDialogState(() {
+                            obscureNewPassword = !obscureNewPassword;
+                          });
+                        },
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter a new password';
+                      }
+                      if (value.length < 6) {
+                        return 'Password must be at least 6 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: confirmPasswordController,
+                    obscureText: obscureConfirmPassword,
+                    decoration: InputDecoration(
+                      labelText: 'Confirm Password',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscureConfirmPassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                        onPressed: () {
+                          setDialogState(() {
+                            obscureConfirmPassword = !obscureConfirmPassword;
+                          });
+                        },
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please confirm your password';
+                      }
+                      if (value != newPasswordController.text) {
+                        return 'Passwords do not match';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  final currentUser = _authService.currentUser;
+                  if (currentUser != null) {
+                    // Update user password and clear needsPasswordSetup flag
+                    final updatedUser = currentUser.copyWith(
+                      password: newPasswordController.text,
+                      needsPasswordSetup: false,
+                    );
+                    await _authService.updateUser(updatedUser);
+                    
+                    if (mounted) {
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Password has been saved'),
+                          backgroundColor: Colors.green,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                      // Navigate to main screen
+                      NavigationUtils.pushReplacement(
+                        context,
+                        const MainNavigationScreen(initialIndex: 0),
+                      );
+                    }
+                  }
+                }
+              },
+              child: const Text('Save Password'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

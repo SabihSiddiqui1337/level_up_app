@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../widgets/custom_app_bar.dart';
 import 'login_screen.dart';
 import 'team_registration_screen.dart';
+import '../services/update_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback? onHomePressed;
@@ -62,11 +63,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 32),
 
-            // App Version
+            // App Version (auto from UpdateService)
             Center(
-              child: Text(
-                'v1.0.0 + 1',
-                style: TextStyle(color: Colors.grey[600], fontSize: 14),
+              child: FutureBuilder(
+                future: Future.wait([
+                  UpdateService.getCurrentVersion(),
+                  UpdateService.getBuildNumber(),
+                ]),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return Text(
+                      'v—',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    );
+                  }
+                  final data = snapshot.data as List<String>;
+                  final version = data[0];
+                  final build = data[1];
+                  return Text(
+                    'v$version + $build',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  );
+                },
               ),
             ),
 
@@ -998,13 +1016,34 @@ class AboutScreen extends StatelessWidget {
 
             // Version
             Center(
-              child: Text(
-                'Version: v1.0.0 + 1',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.black87,
-                ),
+              child: FutureBuilder(
+                future: Future.wait([
+                  UpdateService.getCurrentVersion(),
+                  UpdateService.getBuildNumber(),
+                ]),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return Text(
+                      'Version: v—',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
+                    );
+                  }
+                  final data = snapshot.data as List<String>;
+                  final version = data[0];
+                  final build = data[1];
+                  return Text(
+                    'Version: v$version + $build',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black87,
+                    ),
+                  );
+                },
               ),
             ),
             const SizedBox(height: 15),

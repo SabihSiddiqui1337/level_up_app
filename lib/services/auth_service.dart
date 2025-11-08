@@ -16,6 +16,9 @@ class AuthService {
     print('AuthService.initialize called');
     await _loadUsers();
     await _loadCurrentUser(); // Load current user session
+    
+    // Sync current user's role with users list (in case role was changed)
+    // This will be done after admin accounts are updated, so we do it after the admin accounts loop
 
     // Define admin accounts to ensure they exist
     final adminAccounts = [
@@ -67,7 +70,7 @@ class AuthService {
         name: 'Sabih User',
         username: 'sabih',
         phone: '555-123-4567',
-        role: 'scoring',
+        role: 'user',
         createdAt: DateTime.now(),
       ),
       User(
@@ -90,16 +93,44 @@ class AuthService {
         role: 'owner',
         createdAt: DateTime.now(),
       ),
+      User(
+        id: '8',
+        email: 'rehain-1337@live.com',
+        password: 'admin123',
+        name: 'Rehain Owner',
+        username: 'Rehain1337',
+        phone: '555-222-3333',
+        role: 'owner',
+        createdAt: DateTime.now(),
+      ),
+      User(
+        id: '9',
+        email: 'mustafa-1337@live.com',
+        password: 'admin123',
+        name: 'Mustafa Owner',
+        username: 'Mustafa1337',
+        phone: '555-333-4444',
+        role: 'owner',
+        createdAt: DateTime.now(),
+      ),
     ];
 
     // Add admin accounts only if they don't already exist (by ID)
+    // If they exist, update their role to match the hardcoded value
     bool hasChanges = false;
     for (final adminAccount in adminAccounts) {
-      final exists = _users.any((user) => user.id == adminAccount.id);
-      if (!exists) {
+      final existingIndex = _users.indexWhere((user) => user.id == adminAccount.id);
+      if (existingIndex == -1) {
         _users.add(adminAccount);
         hasChanges = true;
         print('Added admin account: ${adminAccount.username}');
+      } else {
+        // Update existing user to match hardcoded role (in case it was changed)
+        if (_users[existingIndex].role != adminAccount.role) {
+          print('Updating user ${adminAccount.username} role from ${_users[existingIndex].role} to ${adminAccount.role}');
+          _users[existingIndex] = adminAccount;
+          hasChanges = true;
+        }
       }
     }
 
@@ -108,8 +139,26 @@ class AuthService {
       await _saveUsers();
     }
     
+    // NOW sync current user's role with users list (after admin accounts are updated)
+    if (_currentUser != null) {
+      final userIndex = _users.indexWhere((u) => u.id == _currentUser!.id);
+      if (userIndex != -1) {
+        // Update current user with latest data from users list
+        final updatedUser = _users[userIndex];
+        if (updatedUser.role != _currentUser!.role) {
+          print('⚠️ Role mismatch detected! Current user role: ${_currentUser!.role}, Users list role: ${updatedUser.role}');
+          print('✅ Syncing current user role from "${_currentUser!.role}" to "${updatedUser.role}"');
+        }
+        _currentUser = updatedUser;
+        await _saveCurrentUser();
+        print('✅ Current user synced: ${_currentUser!.email} now has role: ${_currentUser!.role}');
+      } else {
+        print('⚠️ Current user ${_currentUser!.email} not found in users list, cannot sync role');
+      }
+    }
+    
     print('AuthService initialized with ${_users.length} total users');
-    print('User list: ${_users.map((u) => '${u.username}(${u.email})').toList()}');
+    print('User list: ${_users.map((u) => '${u.username}(${u.email})[${u.role}]').toList()}');
   }
 
   // Load users from SharedPreferences
@@ -229,9 +278,10 @@ class AuthService {
             user.password == password,
       );
 
-      print('User found: ${user.name} (${user.username})');
+      print('User found: ${user.name} (${user.username}) with role: ${user.role}');
       _currentUser = user;
       await _saveCurrentUser(); // Save current user session
+      print('canScore after login: ${canScore}');
       return true;
     } catch (e) {
       print('User not found: $e');
@@ -332,11 +382,17 @@ class AuthService {
   bool get isLoggedIn => _currentUser != null;
 
   // Check if user can score (has scoring, owner, or management role)
-  bool get canScore =>
-      _currentUser != null &&
-      (_currentUser!.role == 'scoring' ||
-          _currentUser!.role == 'owner' ||
-          _currentUser!.role == 'management');
+  bool get canScore {
+    if (_currentUser == null) {
+      print('canScore: No current user');
+      return false;
+    }
+    final canScore = _currentUser!.role == 'scoring' ||
+        _currentUser!.role == 'owner' ||
+        _currentUser!.role == 'management';
+    print('canScore check: User ${_currentUser!.email} has role "${_currentUser!.role}", canScore = $canScore');
+    return canScore;
+  }
 
   // Check if user has management or owner role
   bool get isManagement =>

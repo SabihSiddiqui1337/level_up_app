@@ -8,6 +8,7 @@ class User {
   final String role; // 'user', 'scoring', or 'owner'
   final DateTime createdAt;
   final String? teamId; // If user is a team manager
+  final bool needsPasswordSetup; // True if user needs to set password on first login
 
   User({
     required this.id,
@@ -19,6 +20,7 @@ class User {
     required this.role,
     required this.createdAt,
     this.teamId,
+    this.needsPasswordSetup = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -32,6 +34,7 @@ class User {
       'role': role,
       'createdAt': createdAt.toIso8601String(),
       'teamId': teamId,
+      'needsPasswordSetup': needsPasswordSetup,
     };
   }
 
@@ -46,6 +49,7 @@ class User {
       role: json['role'],
       createdAt: DateTime.parse(json['createdAt']),
       teamId: json['teamId'],
+      needsPasswordSetup: json['needsPasswordSetup'] ?? false,
     );
   }
 
@@ -59,6 +63,7 @@ class User {
     String? role,
     DateTime? createdAt,
     String? teamId,
+    bool? needsPasswordSetup,
   }) {
     return User(
       id: id ?? this.id,
@@ -70,6 +75,7 @@ class User {
       role: role ?? this.role,
       createdAt: createdAt ?? this.createdAt,
       teamId: teamId ?? this.teamId,
+      needsPasswordSetup: needsPasswordSetup ?? this.needsPasswordSetup,
     );
   }
 }

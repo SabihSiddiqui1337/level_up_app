@@ -1723,6 +1723,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     bool isFirstLoad = false,
     int currentTabIndex = 0,
   }) {
+    // Only allow scoring users (management, owner, scoring) to see settings dialog
+    if (!_authService.canScore) {
+      return;
+    }
+    
     showDialog(
       context: context,
       barrierDismissible: false, // Don't allow dismissing by tapping outside
@@ -2736,15 +2741,16 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
               if (!hasShownForDivision) {
                 // Check if there are no scores for this division - only show dialog if no scores exist
+                // Only show dialog for scoring users (management, owner, scoring)
                 final hasNoScores = _hasNoScoresForCurrentDivision();
-                if (hasNoScores) {
+                if (hasNoScores && _authService.canScore) {
                   _hasShownGamesPerTeamDialogByDivision[currentDivision] = true;
                   _showGamesPerTeamDialog(
                     isFirstLoad: _isFirstLoad,
                     currentTabIndex: _tabController.index,
                   );
                 } else {
-                  // Scores exist, mark as shown to prevent showing dialog
+                  // Scores exist or user can't score, mark as shown to prevent showing dialog
                   _hasShownGamesPerTeamDialogByDivision[currentDivision] = true;
                 }
               }
@@ -4947,29 +4953,28 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             ),
           ),
 
-        // Start/Restart Playoffs Buttons (only when playoffs have started)
-        if (_authService.canScore && _playoffsStarted)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Builder(
-              builder: (context) {
-                // Check if finals are completed for current division
-                final division = _selectedDivision ?? 'all';
-                final bool finalsCompleted = _finalsCompletedByDivision[division] ?? false;
-                
-                if (finalsCompleted) {
-                  // When finals are completed - only show "Check Playoffs score" button
-                  return Row(
+        // Show "View Playoffs" button to ALL users when playoffs have started or finals are completed
+        Builder(
+          builder: (context) {
+            if (_playoffsStarted) {
+              final division = _selectedDivision ?? 'all';
+              final bool finalsCompleted = _finalsCompletedByDivision[division] ?? false;
+              
+              // Show button to all users when finals are completed
+              if (finalsCompleted) {
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
@@ -4995,15 +5000,81 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         ),
                       ),
                     ],
-                  );
-                }
-                
-                // When finals are NOT completed - show both buttons
-                // Disable if QF has scores (normal case) OR SF has scores (8-team case)
-                final hasPlayoffScores =
-                    _hasQuarterFinalsScores ||
-                    (_teams.length == 8 && _hasSemiFinalsScores);
-                return Row(
+                  ),
+                );
+              }
+              
+              // Show "View Playoffs" button to all users when playoffs have started (even if not completed)
+              return Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          // Navigate to Playoffs tab
+                          setState(() {
+                            _bottomNavIndex = 1;
+                          });
+                        },
+                        icon: const Icon(Icons.sports_esports),
+                        label: const Text('View Playoffs'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2196F3),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+        ),
+        
+        // Start/Restart Playoffs Buttons (only for scoring users when playoffs have started)
+        if (_authService.canScore && _playoffsStarted)
+          Builder(
+            builder: (context) {
+              // Check if finals are completed for current division
+              final division = _selectedDivision ?? 'all';
+              final bool finalsCompleted = _finalsCompletedByDivision[division] ?? false;
+              
+              // Skip showing scoring buttons if finals are completed (view button already shown above)
+              if (finalsCompleted) {
+                return const SizedBox.shrink();
+              }
+              
+              // When finals are NOT completed - show both buttons
+              // Disable if QF has scores (normal case) OR SF has scores (8-team case)
+              final hasPlayoffScores =
+                  _hasQuarterFinalsScores ||
+                  (_teams.length == 8 && _hasSemiFinalsScores);
+              return Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: Row(
                   children: [
                     // Restart Playoffs button (left side)
                     Expanded(
@@ -5058,9 +5129,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       ),
                     ),
                   ],
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
       ],
     );
@@ -5790,7 +5861,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                                     _hasShownGamesPerTeamDialogByDivision[currentDivision] ?? false;
                                 if (!hasShownForDivision) {
                                   final hasNoScores = _hasNoScoresForCurrentDivision();
-                                  if (hasNoScores) {
+                                  // Only show dialog for scoring users (management, owner, scoring)
+                                  if (hasNoScores && _authService.canScore) {
                                     _hasShownGamesPerTeamDialogByDivision[currentDivision] = true;
                                     _showGamesPerTeamDialog(
                                       isFirstLoad: false,
@@ -5805,28 +5877,30 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           ),
                         ),
                       ),
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        child: IconButton(
-                          icon: Icon(
-                            Icons.settings,
-                            color: (_playoffsStartedByDivision[_selectedDivision ?? ''] ?? false)
-                                ? Colors.grey[400]
-                                : const Color(0xFF2196F3),
+                      // Settings button - only show for scoring users
+                      if (_authService.canScore)
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: IconButton(
+                            icon: Icon(
+                              Icons.settings,
+                              color: (_playoffsStartedByDivision[_selectedDivision ?? ''] ?? false)
+                                  ? Colors.grey[400]
+                                  : const Color(0xFF2196F3),
+                            ),
+                            iconSize: 18,
+                            onPressed: (_playoffsStartedByDivision[_selectedDivision ?? ''] ?? false)
+                                ? null
+                                : () {
+                                    _showGamesPerTeamDialog(
+                                      isFirstLoad: false,
+                                      currentTabIndex: _tabController.index,
+                                    );
+                                  },
                           ),
-                          iconSize: 18,
-                          onPressed: (_playoffsStartedByDivision[_selectedDivision ?? ''] ?? false)
-                              ? null
-                              : () {
-                                  _showGamesPerTeamDialog(
-                                    isFirstLoad: false,
-                                    currentTabIndex: _tabController.index,
-                                  );
-                                },
                         ),
-                      ),
                     ],
                   ),
                 ),

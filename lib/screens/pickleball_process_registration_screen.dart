@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/pickleball_team.dart';
 import '../models/event.dart';
+import '../services/pickleball_team_service.dart';
 import 'payment_screen.dart';
+import 'main_navigation_screen.dart';
 
 class PickleballProcessRegistrationScreen extends StatefulWidget {
   final PickleballTeam team;
@@ -23,8 +25,10 @@ class _PickleballProcessRegistrationScreenState
     extends State<PickleballProcessRegistrationScreen> {
   final _discountCodeController = TextEditingController();
 
-  // Registration fees
-  final double _registrationFee = 250.0; // Lower fee for pickleball
+  // Get registration fee from event, or default to 250.0
+  double get _registrationFee => widget.event.amount ?? 250.0;
+  bool get _isFreeEvent => widget.event.amount == null || widget.event.amount == 0;
+  
   bool _discountApplied = false;
   double _discountPercentage = 0.0;
   double _discountAmount = 0.0;
@@ -313,10 +317,7 @@ class _PickleballProcessRegistrationScreenState
                                   ),
                                 ),
                                 TextSpan(
-                                  text:
-                                      widget.event.date.toString().split(
-                                        ' ',
-                                      )[0],
+                                  text: _formatFullDate(widget.event.date),
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.normal,
@@ -398,8 +399,15 @@ class _PickleballProcessRegistrationScreenState
                           ),
                           const SizedBox(height: 20),
 
-                          // Discount Code Section
-                          Container(
+                          // Event and Team info
+                          _buildPaymentRow('Event', widget.event.title, false),
+                          const SizedBox(height: 4),
+                          _buildPaymentRow('Team', widget.team.name, false),
+                          const SizedBox(height: 16),
+
+                          // Discount Code Section (only show if not free event)
+                          if (!_isFreeEvent) ...[
+                            Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               color: Colors.grey[50],
@@ -508,29 +516,37 @@ class _PickleballProcessRegistrationScreenState
                                 ],
                               ],
                             ),
-                          ),
-
-                          const SizedBox(height: 20),
+                            ),
+                            const SizedBox(height: 20),
+                          ],
 
                           // Payment Breakdown
-                          _buildPaymentRow(
-                            'Registration Fee',
-                            '\$${_registrationFee.toStringAsFixed(2)}',
-                            false,
-                          ),
-                          if (_discountApplied) ...[
+                          if (_isFreeEvent) ...[
                             _buildPaymentRow(
-                              'Discount (${_discountPercentage.toInt()}%)',
-                              '-\$${_discountAmount.toStringAsFixed(2)}',
+                              'Total',
+                              'Free',
+                              true,
+                            ),
+                          ] else ...[
+                            _buildPaymentRow(
+                              'Registration Fee',
+                              '\$${_registrationFee.toStringAsFixed(2)}',
                               false,
                             ),
+                            if (_discountApplied) ...[
+                              _buildPaymentRow(
+                                'Discount (${_discountPercentage.toInt()}%)',
+                                '-\$${_discountAmount.toStringAsFixed(2)}',
+                                false,
+                              ),
+                            ],
+                            const Divider(),
+                            _buildPaymentRow(
+                              'Total',
+                              '\$${(_registrationFee - _discountAmount).toStringAsFixed(2)}',
+                              true,
+                            ),
                           ],
-                          const Divider(),
-                          _buildPaymentRow(
-                            'Total',
-                            '\$${(_registrationFee - _discountAmount).toStringAsFixed(2)}',
-                            true,
-                          ),
                         ],
                       ),
                     ),
@@ -545,7 +561,7 @@ class _PickleballProcessRegistrationScreenState
                   child: SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _completeRegistration,
+                      onPressed: _isFreeEvent ? _completeFreeRegistration : _completeRegistration,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF38A169),
                         foregroundColor: Colors.white,
@@ -554,9 +570,9 @@ class _PickleballProcessRegistrationScreenState
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
-                        'Next: Payment',
-                        style: TextStyle(
+                      child: Text(
+                        _isFreeEvent ? 'Complete Registration' : 'Next: Payment',
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
@@ -662,6 +678,19 @@ class _PickleballProcessRegistrationScreenState
     }
   }
 
+  String _formatFullDate(DateTime date) {
+    const weekdays = [
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+    ];
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    final weekday = weekdays[date.weekday - 1];
+    final month = months[date.month - 1];
+    return '$weekday $month ${date.day} ${date.year}';
+  }
+
   void _completeRegistration() {
     // Navigate to payment screen
     Navigator.push(
@@ -675,5 +704,29 @@ class _PickleballProcessRegistrationScreenState
             ),
       ),
     );
+  }
+  
+  void _completeFreeRegistration() async {
+    // For free events, skip payment and complete registration directly
+    // Save the team to the database
+    final teamService = PickleballTeamService();
+    await teamService.addTeam(widget.team);
+    
+    if (mounted) {
+      // Navigate to My Team tab after registering (index 2)
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const MainNavigationScreen(initialIndex: 2)),
+        (route) => false,
+      );
+      
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Registration completed successfully!'),
+          backgroundColor: Color(0xFF38A169),
+        ),
+      );
+    }
   }
 }

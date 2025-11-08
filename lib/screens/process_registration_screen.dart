@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/team.dart';
 import '../models/event.dart';
+import '../services/team_service.dart';
 import 'payment_screen.dart';
+import 'main_navigation_screen.dart';
 
 class ProcessRegistrationScreen extends StatefulWidget {
   final Team team;
@@ -22,8 +24,10 @@ class ProcessRegistrationScreen extends StatefulWidget {
 class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
   final _discountCodeController = TextEditingController();
 
-  // Registration fees
-  final double _registrationFee = 350.0;
+  // Get registration fee from event, or default to 350.0
+  double get _registrationFee => widget.event.amount ?? 350.0;
+  bool get _isFreeEvent => widget.event.amount == null || widget.event.amount == 0;
+  
   bool _discountApplied = false;
   double _discountPercentage = 0.0;
   double _discountAmount = 0.0;
@@ -300,7 +304,9 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                             ),
                           ),
                           child: Text(
-                            'Total: \$${_registrationFee.toStringAsFixed(2)}',
+                            _isFreeEvent 
+                                ? 'Total: Free'
+                                : 'Total: \$${_registrationFee.toStringAsFixed(2)}',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,
@@ -363,10 +369,7 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                                   ),
                                 ),
                                 TextSpan(
-                                  text:
-                                      widget.event.date.toString().split(
-                                        ' ',
-                                      )[0],
+                                  text: _formatFullDate(widget.event.date),
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.normal,
@@ -415,87 +418,88 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
 
                 const SizedBox(height: 16),
 
-                // Discount Code Section
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Card(
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Discount Code',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.black87,
+                // Discount Code Section (only show if not free event)
+                if (!_isFreeEvent) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Card(
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Discount Code',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.black87,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _discountCodeController,
-                                  autocorrect: false,
-                                  enableSuggestions: false,
-                                  decoration: const InputDecoration(
-                                    hintText: 'Enter discount code',
-                                    border: OutlineInputBorder(),
-                                    contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _discountCodeController,
+                                    autocorrect: false,
+                                    enableSuggestions: false,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Enter discount code',
+                                      border: OutlineInputBorder(),
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              ElevatedButton(
-                                onPressed:
-                                    (_discountApplied && !_isTypingDiscount) ||
-                                            _isProcessingDiscount
-                                        ? null
-                                        : _applyDiscount,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color.fromARGB(
-                                    255,
-                                    0,
-                                    0,
-                                    0,
+                                const SizedBox(width: 12),
+                                ElevatedButton(
+                                  onPressed:
+                                      (_discountApplied && !_isTypingDiscount) ||
+                                              _isProcessingDiscount
+                                          ? null
+                                          : _applyDiscount,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color.fromARGB(
+                                      255,
+                                      0,
+                                      0,
+                                      0,
+                                    ),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
                                   ),
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
+                                  child: Text(
+                                    (_discountApplied && !_isTypingDiscount)
+                                        ? 'Discount Applied'
+                                        : _cooldownSeconds > 0
+                                        ? 'Wait ${_cooldownSeconds}s'
+                                        : 'Apply',
+                                    style: TextStyle(
+                                      color:
+                                          _cooldownSeconds > 0
+                                              ? Colors.white
+                                              : Colors.white,
+                                    ),
                                   ),
                                 ),
-                                child: Text(
-                                  (_discountApplied && !_isTypingDiscount)
-                                      ? 'Discount Applied'
-                                      : _cooldownSeconds > 0
-                                      ? 'Wait ${_cooldownSeconds}s'
-                                      : 'Apply',
-                                  style: TextStyle(
-                                    color:
-                                        _cooldownSeconds > 0
-                                            ? Colors.white
-                                            : Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                ],
 
                 // Payment Summary Section
                 Padding(
@@ -509,30 +513,43 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
-                          _buildPaymentRow(
-                            'Total',
-                            '\$${_registrationFee.toStringAsFixed(2)}',
-                            true,
-                          ),
-                          if (_discountApplied) ...[
-                            const SizedBox(height: 8),
+                          // Event and Team info
+                          _buildPaymentRow('Event', widget.event.title, false),
+                          const SizedBox(height: 4),
+                          _buildPaymentRow('Team', widget.team.name, false),
+                          const SizedBox(height: 16),
+                          if (_isFreeEvent) ...[
                             _buildPaymentRow(
-                              'Discount: ${_discountPercentage.toStringAsFixed(0)}% ($_appliedDiscountCode)',
-                              '\$${_discountAmount.toStringAsFixed(2)}',
-                              false,
+                              'Total',
+                              'Free',
+                              true,
+                            ),
+                          ] else ...[
+                            _buildPaymentRow(
+                              'Total',
+                              '\$${_registrationFee.toStringAsFixed(2)}',
+                              true,
+                            ),
+                            if (_discountApplied) ...[
+                              const SizedBox(height: 8),
+                              _buildPaymentRow(
+                                'Discount: ${_discountPercentage.toStringAsFixed(0)}% ($_appliedDiscountCode)',
+                                '\$${_discountAmount.toStringAsFixed(2)}',
+                                false,
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            _buildPaymentRow(
+                              'Payable Amount',
+                              '\$${_getPayableAmount().toStringAsFixed(2)}',
+                              true,
                             ),
                           ],
-                          const SizedBox(height: 16),
-                          _buildPaymentRow(
-                            'Payable Amount',
-                            '\$${_getPayableAmount().toStringAsFixed(2)}',
-                            true,
-                          ),
                           const SizedBox(height: 20),
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
-                              onPressed: _processPayment,
+                              onPressed: _isFreeEvent ? _completeFreeRegistration : _processPayment,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFE67E22),
                                 foregroundColor: Colors.white,
@@ -543,9 +560,9 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                               ),
-                              child: const Text(
-                                'Next: Payment',
-                                style: TextStyle(
+                              child: Text(
+                                _isFreeEvent ? 'Complete Registration' : 'Proceed to Payment',
+                                style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -690,5 +707,42 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
             ),
       ),
     );
+  }
+  
+  void _completeFreeRegistration() async {
+    // For free events, skip payment and complete registration directly
+    // Save the team to the database
+    final teamService = TeamService();
+    await teamService.addTeam(widget.team);
+    
+    if (mounted) {
+      // Navigate to My Team tab after registering (index 2)
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const MainNavigationScreen(initialIndex: 2)),
+        (route) => false,
+      );
+      
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Registration completed successfully!'),
+          backgroundColor: Color(0xFF38A169),
+        ),
+      );
+    }
+  }
+
+  String _formatFullDate(DateTime date) {
+    const weekdays = [
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+    ];
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    final weekday = weekdays[date.weekday - 1];
+    final month = months[date.month - 1];
+    return '$weekday $month ${date.day} ${date.year}';
   }
 }

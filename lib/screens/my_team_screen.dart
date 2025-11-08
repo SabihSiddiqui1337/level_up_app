@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/team_service.dart';
 import '../services/pickleball_team_service.dart';
+import '../services/event_service.dart';
 import '../models/team.dart';
 import '../models/pickleball_team.dart';
+import '../models/event.dart';
 import '../widgets/custom_app_bar.dart';
 import 'team_detail_screen.dart';
 import 'pickleball_team_detail_screen.dart';
+import 'team_registration_screen.dart';
 
 class MyTeamScreen extends StatefulWidget {
   final TeamService teamService;
@@ -26,152 +29,234 @@ class MyTeamScreen extends StatefulWidget {
   State<MyTeamScreen> createState() => _MyTeamScreenState();
 }
 
-class _MyTeamScreenState extends State<MyTeamScreen>
-    with SingleTickerProviderStateMixin {
+class _MyTeamScreenState extends State<MyTeamScreen> {
   final _authService = AuthService();
-  late TabController _tabController;
-
-  // Filter states
-  String? _selectedBasketballDivision;
-  String? _selectedPickleballDivision;
-  String? _selectedDuprRating;
+  final _eventService = EventService();
+  
+  final Map<String, List<Team>> _teamsBySport = {};
+  final Map<String, List<PickleballTeam>> _pickleballTeamsBySport = {};
+  List<String> _availableSports = [];
+  final Map<String, Event> _eventsCache = {};
+  String? _selectedSport;
+  
+  // Editing states
+  final Map<String, TextEditingController> _editingControllers = {};
+  final Map<String, bool> _isEditing = {};
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    // Add listener to update counts when tab changes
-    _tabController.addListener(() {
-      setState(() {});
-    });
-    // Load teams when screen initializes
     _loadTeams();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    // Dispose all editing controllers
+    for (var controller in _editingControllers.values) {
+      controller.dispose();
+    }
+    _editingControllers.clear();
     super.dispose();
   }
 
   Future<void> _loadTeams() async {
     await widget.teamService.loadTeams();
     await widget.pickleballTeamService.loadTeams();
-    if (mounted) {
-      setState(() {
-        // Trigger rebuild to show updated teams
-      });
+    await _eventService.initialize();
+    
+    // Cache events
+    _eventsCache.clear();
+    for (var event in _eventService.events) {
+      _eventsCache[event.id] = event;
     }
-  }
-
-  List<Team> get _basketballTeams {
-    final teams = widget.teamService.teams;
-    print(
-      'My Team screen showing ${teams.length} basketball teams',
-    ); // Debug print
-    return teams;
-  }
-
-  List<PickleballTeam> get _pickleballTeams {
-    final teams = widget.pickleballTeamService.teams;
-    print(
-      'My Team screen showing ${teams.length} pickleball teams',
-    ); // Debug print
-    return teams;
-  }
-
-  // Get filtered basketball teams based on selected division
-  List<Team> get _filteredBasketballTeams {
-    final teams = widget.teamService.teams;
-    if (_selectedBasketballDivision == null) return teams;
-    return teams
-        .where((team) => team.division == _selectedBasketballDivision)
-        .toList();
-  }
-
-  // Get filtered pickleball teams based on selected division and DURP rating
-  List<PickleballTeam> get _filteredPickleballTeams {
-    final teams = widget.pickleballTeamService.teams;
-    var filteredTeams = teams;
-
-    // Filter by division
-    if (_selectedPickleballDivision != null) {
-      filteredTeams =
-          filteredTeams
-              .where((team) => team.division == _selectedPickleballDivision)
-              .toList();
-    }
-
-    // Filter by DURP rating
-    if (_selectedDuprRating != null) {
-      filteredTeams =
-          filteredTeams.where((team) {
-            return team.players.any(
-              (player) => player.duprRating == _selectedDuprRating,
-            );
-          }).toList();
-    }
-
-    return filteredTeams;
-  }
-
-  // Get available basketball divisions
-  List<String> get _availableBasketballDivisions {
-    final divisions =
-        widget.teamService.teams.map((team) => team.division).toSet().toList();
-    divisions.sort();
-    return divisions;
-  }
-
-  // Get available pickleball divisions
-  List<String> get _availablePickleballDivisions {
-    final divisions =
-        widget.pickleballTeamService.teams
-            .map((team) => team.division)
-            .toSet()
-            .toList();
-    divisions.sort();
-    return divisions;
-  }
-
-  // Get available DURP ratings
-  List<String> get _availableDuprRatings {
-    final ratings = <String>{};
-    for (final team in widget.pickleballTeamService.teams) {
-      for (final player in team.players) {
-        ratings.add(player.duprRating);
+    
+    // Group teams by sport
+    _teamsBySport.clear();
+    final currentUser = _authService.currentUser;
+    final userTeams = widget.teamService.getTeamsForUser(currentUser?.id);
+    
+    for (var team in userTeams) {
+      final event = _eventsCache[team.eventId];
+      if (event != null) {
+        final sportName = event.sportName;
+        if (!_teamsBySport.containsKey(sportName)) {
+          _teamsBySport[sportName] = [];
+        }
+        _teamsBySport[sportName]!.add(team);
       }
     }
-    final ratingsList = ratings.toList();
-    ratingsList.sort();
-    return ratingsList;
-  }
-
-  int get _totalTeams => _basketballTeams.length + _pickleballTeams.length;
-
-  // Get filtered teams count based on current tab
-  int get _filteredTeamsCount {
-    final tabIndex = _tabController.index;
-    if (tabIndex == 0) {
-      return _filteredBasketballTeams.length;
-    } else {
-      return _filteredPickleballTeams.length;
+    
+    // Group pickleball teams by sport
+    _pickleballTeamsBySport.clear();
+    final userPickleballTeams = widget.pickleballTeamService.getTeamsForUser(currentUser?.id);
+    
+    for (var team in userPickleballTeams) {
+      final event = _eventsCache[team.eventId];
+      if (event != null) {
+        final sportName = event.sportName;
+        if (!_pickleballTeamsBySport.containsKey(sportName)) {
+          _pickleballTeamsBySport[sportName] = [];
+        }
+        _pickleballTeamsBySport[sportName]!.add(team);
+      } else {
+        if (!_pickleballTeamsBySport.containsKey('Pickleball')) {
+          _pickleballTeamsBySport['Pickleball'] = [];
+        }
+        _pickleballTeamsBySport['Pickleball']!.add(team);
+      }
+    }
+    
+    // Combine all sports
+    final allSports = <String>{};
+    allSports.addAll(_teamsBySport.keys);
+    allSports.addAll(_pickleballTeamsBySport.keys);
+    _availableSports = allSports.toList()..sort();
+    
+    // Set selected sport to first one if available
+    if (_availableSports.isNotEmpty && _selectedSport == null) {
+      _selectedSport = _availableSports.first;
+    }
+    
+    if (mounted) {
+      setState(() {});
     }
   }
 
-  // Get filtered players count based on current tab
-  int get _filteredPlayersCount {
-    final tabIndex = _tabController.index;
-    if (tabIndex == 0) {
-      return _filteredBasketballTeams.fold(
-        0,
-        (sum, team) => sum + team.players.length + 1,
+  List<dynamic> _getTeamsForSport(String sportName) {
+    final teams = <dynamic>[];
+    
+    if (_teamsBySport.containsKey(sportName)) {
+      teams.addAll(_teamsBySport[sportName]!);
+    }
+    
+    if (_pickleballTeamsBySport.containsKey(sportName)) {
+      teams.addAll(_pickleballTeamsBySport[sportName]!);
+    }
+    
+    return teams;
+  }
+
+  IconData _getSportIcon(String sportName) {
+    final lowerSport = sportName.toLowerCase();
+    if (lowerSport.contains('basketball')) {
+      return Icons.sports_basketball;
+    } else if (lowerSport.contains('pickleball')) {
+      return Icons.sports_tennis;
+    } else if (lowerSport.contains('soccer')) {
+      return Icons.sports_soccer;
+    } else if (lowerSport.contains('volleyball')) {
+      return Icons.sports_volleyball;
+    }
+    return Icons.sports;
+  }
+
+  Color _getSportColor(String sportName) {
+    final lowerSport = sportName.toLowerCase();
+    if (lowerSport.contains('basketball')) {
+      return const Color(0xFF2196F3);
+    } else if (lowerSport.contains('pickleball')) {
+      return const Color(0xFF38A169);
+    } else if (lowerSport.contains('soccer')) {
+      return const Color(0xFF607D8B);
+    } else if (lowerSport.contains('volleyball')) {
+      return const Color(0xFF9B59B6);
+    }
+    return const Color(0xFF2196F3);
+  }
+
+  void _startEditingTeam(dynamic team) {
+    final teamId = team.id;
+    setState(() {
+      _isEditing[teamId] = true;
+      if (!_editingControllers.containsKey(teamId)) {
+        _editingControllers[teamId] = TextEditingController(text: team.name);
+      }
+    });
+  }
+
+  void _cancelEditing(String teamId) {
+    setState(() {
+      _isEditing[teamId] = false;
+    });
+  }
+
+  Future<void> _saveTeamName(dynamic team) async {
+    final teamId = team.id;
+    final newName = _editingControllers[teamId]?.text.trim() ?? '';
+    
+    if (newName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Team name cannot be empty'),
+          backgroundColor: Colors.red,
+        ),
       );
-    } else {
-      return _filteredPickleballTeams.fold(
-        0,
-        (sum, team) => sum + team.players.length + 1,
-      );
+      return;
+    }
+
+    if (newName == team.name) {
+      _cancelEditing(teamId);
+      return;
+    }
+
+    try {
+      if (team is Team) {
+        final updatedTeam = Team(
+          id: team.id,
+          name: newName,
+          coachName: team.coachName,
+          coachPhone: team.coachPhone,
+          coachEmail: team.coachEmail,
+          coachAge: team.coachAge,
+          players: team.players,
+          registrationDate: team.registrationDate,
+          division: team.division,
+          createdByUserId: team.createdByUserId,
+          isPrivate: team.isPrivate,
+          eventId: team.eventId,
+        );
+        await widget.teamService.updateTeam(updatedTeam);
+      } else if (team is PickleballTeam) {
+        final updatedTeam = PickleballTeam(
+          id: team.id,
+          name: newName,
+          coachName: team.coachName,
+          coachPhone: team.coachPhone,
+          coachEmail: team.coachEmail,
+          players: team.players,
+          registrationDate: team.registrationDate,
+          division: team.division,
+          createdByUserId: team.createdByUserId,
+          isPrivate: team.isPrivate,
+          eventId: team.eventId,
+        );
+        await widget.pickleballTeamService.updateTeam(updatedTeam);
+      }
+
+      setState(() {
+        _isEditing[teamId] = false;
+      });
+
+      await _loadTeams();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Team name updated to "$newName"'),
+            backgroundColor: const Color(0xFF38A169),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating team: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -179,543 +264,632 @@ class _MyTeamScreenState extends State<MyTeamScreen>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (context) => TeamDetailScreen(
-              team: team,
-              onUpdate: (updatedTeam) {
-                widget.teamService.updateTeam(updatedTeam);
-                setState(() {});
-
-                // Show success snackbar
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Team "${updatedTeam.name}" updated successfully',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    backgroundColor: const Color(0xFF38A169),
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    margin: const EdgeInsets.only(
-                      left: 16,
-                      right: 16,
-                      bottom: 100, // Position above bottom navigation
-                    ),
-                    elevation: 4,
-                  ),
-                );
-              },
-              onDelete: (teamId) {
-                widget.teamService.deleteTeam(teamId);
-                setState(() {});
-
-                // Show success snackbar
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Team deleted successfully',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    backgroundColor: Color(0xFF38A169),
-                    duration: Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    margin: EdgeInsets.only(
-                      left: 16,
-                      right: 16,
-                      bottom: 80, // Position above bottom navigation
-                    ),
-                    elevation: 4,
-                  ),
-                );
-              },
-            ),
+        builder: (context) => TeamDetailScreen(
+          team: team,
+          onUpdate: (updatedTeam) async {
+            await widget.teamService.updateTeam(updatedTeam);
+            // Refresh teams list after update
+            if (mounted) {
+              await _loadTeams();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Team "${updatedTeam.name}" updated successfully'),
+                  backgroundColor: const Color(0xFF38A169),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+          onDelete: (teamId) async {
+            await widget.teamService.deleteTeam(teamId);
+            // Refresh teams list after deletion
+            if (mounted) {
+              await _loadTeams();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Team deleted successfully'),
+                  backgroundColor: Color(0xFF38A169),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+        ),
       ),
-    );
+    ).then((_) {
+      // Refresh when returning from detail screen
+      if (mounted) {
+        _loadTeams();
+      }
+    });
   }
 
   void _navigateToPickleballTeamDetail(PickleballTeam team) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (context) => PickleballTeamDetailScreen(
-              team: team,
-              onUpdate: (updatedTeam) {
-                widget.pickleballTeamService.updateTeam(updatedTeam);
-                setState(() {});
-
-                // Show success snackbar
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Team "${updatedTeam.name}" updated successfully',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    backgroundColor: const Color(0xFF38A169),
-                    duration: const Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    margin: const EdgeInsets.only(
-                      left: 16,
-                      right: 16,
-                      bottom: 100, // Position above bottom navigation
-                    ),
-                    elevation: 4,
-                  ),
-                );
-              },
-              onDelete: (teamId) {
-                widget.pickleballTeamService.deleteTeam(teamId);
-                setState(() {});
-
-                // Show success snackbar
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Team deleted successfully',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    backgroundColor: Color(0xFF38A169),
-                    duration: Duration(seconds: 2),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    margin: EdgeInsets.only(
-                      left: 16,
-                      right: 16,
-                      bottom: 80, // Position above bottom navigation
-                    ),
-                    elevation: 4,
-                  ),
-                );
-              },
-            ),
+        builder: (context) => PickleballTeamDetailScreen(
+          team: team,
+          onUpdate: (updatedTeam) async {
+            await widget.pickleballTeamService.updateTeam(updatedTeam);
+            // Refresh teams list after update
+            if (mounted) {
+              await _loadTeams();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Team "${updatedTeam.name}" updated successfully'),
+                  backgroundColor: const Color(0xFF38A169),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+          onDelete: (teamId) async {
+            await widget.pickleballTeamService.deleteTeam(teamId);
+            // Refresh teams list after deletion
+            if (mounted) {
+              await _loadTeams();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Team deleted successfully'),
+                  backgroundColor: Color(0xFF38A169),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+        ),
       ),
-    );
+    ).then((_) {
+      // Refresh when returning from detail screen
+      if (mounted) {
+        _loadTeams();
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final user = _authService.currentUser;
+    final teams = _selectedSport != null ? _getTeamsForSport(_selectedSport!) : <dynamic>[];
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey[50],
       appBar: CustomAppBar(onHomePressed: widget.onHomePressed),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFE3F2FD), Colors.white],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Header
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2196F3),
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(15),
-                    bottomRight: Radius.circular(20),
-                  ),
+      body: Column(
+        children: [
+          // Modern Header
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF2196F3),
+                  const Color(0xFF1976D2),
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
+              ],
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        CircleAvatar(
-                          backgroundColor: Colors.white,
-                          radius: 15,
-                          child: Text(
-                            user?.name.substring(0, 1).toUpperCase() ?? 'U',
-                            style: TextStyle(
-                              color: const Color(0xFF2196F3),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.group,
+                            color: Colors.white,
+                            size: 24,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Welcome back,',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 15,
-                                ),
-                              ),
-                              Text(
-                                user?.name ?? 'User',
+                              const Text(
+                                'My Teams',
                                 style: TextStyle(
                                   color: Colors.white,
+                                  fontSize: 24,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 25,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${teams.length} team${teams.length != 1 ? 's' : ''} registered',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.9),
+                                  fontSize: 14,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            user?.role.toUpperCase() ?? 'USER',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildStatCard(
-                            'Teams',
-                            '$_filteredTeamsCount',
-                            Icons.sports,
-                            const Color(0xFF2196F3),
-                          ),
+                    if (_availableSports.length > 1) ...[
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Select Sport',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildStatCard(
-                            'Players',
-                            '$_filteredPlayersCount',
-                            Icons.people,
-                            const Color(0xFF42A5F5),
-                          ),
+                      ),
+                      const SizedBox(height: 12),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: _availableSports.map((sport) {
+                            final isSelected = _selectedSport == sport;
+                            final sportColor = _getSportColor(sport);
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _selectedSport = sport;
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? Colors.white
+                                        : Colors.white.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: isSelected
+                                        ? Border.all(
+                                            color: sportColor,
+                                            width: 2,
+                                          )
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _getSportIcon(sport),
+                                        color: isSelected
+                                            ? sportColor
+                                            : Colors.white,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        sport,
+                                        style: TextStyle(
+                                          color: isSelected
+                                              ? sportColor
+                                              : Colors.white,
+                                          fontWeight: isSelected
+                                              ? FontWeight.bold
+                                              : FontWeight.w500,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-
-              // Content
-              Expanded(
-                child:
-                    _totalTeams == 0
-                        ? _buildEmptyState()
-                        : Column(
-                          children: [
-                            // Tab Bar
-                            Container(
-                              color: Colors.white,
-                              child: TabBar(
-                                controller: _tabController,
-                                labelColor: const Color(0xFF2196F3),
-                                unselectedLabelColor: Colors.grey[600],
-                                indicatorColor: const Color(0xFF2196F3),
-                                indicatorWeight: 3,
-                                tabs: const [
-                                  Tab(
-                                    icon: Icon(Icons.sports_basketball),
-                                    text: 'Basketball',
-                                  ),
-                                  Tab(
-                                    icon: Icon(Icons.sports_tennis),
-                                    text: 'Pickleball',
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Tab Content
-                            Expanded(
-                              child: TabBarView(
-                                controller: _tabController,
-                                children: [
-                                  _buildBasketballTab(),
-                                  _buildPickleballTab(),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-              ),
-            ],
+            ),
           ),
-        ),
+
+          // Teams List
+          Expanded(
+            child: _availableSports.isEmpty
+                ? _buildEmptyState()
+                : _selectedSport == null
+                    ? const Center(child: Text('Select a sport'))
+                    : teams.isEmpty
+                        ? _buildEmptyStateForSport(_selectedSport!)
+                        : RefreshIndicator(
+                            onRefresh: _loadTeams,
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: teams.length,
+                              itemBuilder: (context, index) {
+                                final team = teams[index];
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: team is Team
+                                      ? _buildModernTeamCard(team, _selectedSport!)
+                                      : _buildModernPickleballTeamCard(
+                                          team as PickleballTeam, _selectedSport!),
+                                );
+                              },
+                            ),
+                          ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildStatCard(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _buildModernTeamCard(Team team, String sportName) {
+    final sportColor = _getSportColor(sportName);
+    final sportIcon = _getSportIcon(sportName);
+    final teamId = team.id;
+    final isEditing = _isEditing[teamId] ?? false;
+
     return Container(
-      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: Colors.white, size: 24),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-    );
-  }
-
-  // Build Basketball Tab
-  Widget _buildBasketballTab() {
-    return Column(
-      children: [
-        // Division Filter Dropdown
-        if (_availableBasketballDivisions.isNotEmpty) ...[
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey[300]!),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedBasketballDivision,
-                hint: const Text('Filter by Division'),
-                isExpanded: true,
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('All Divisions'),
-                  ),
-                  ..._availableBasketballDivisions.map(
-                    (division) => DropdownMenuItem<String>(
-                      value: division,
-                      child: Text(division),
-                    ),
-                  ),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _selectedBasketballDivision = value;
-                  });
-                },
-              ),
-            ),
-          ),
-        ],
-        // Teams List
-        Expanded(
-          child:
-              _filteredBasketballTeams.isEmpty
-                  ? _buildEmptyStateForSport('Basketball')
-                  : SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children:
-                          _filteredBasketballTeams
-                              .map(
-                                (team) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: _buildBasketballTeamCard(team),
-                                ),
-                              )
-                              .toList(),
-                    ),
-                  ),
-        ),
-      ],
-    );
-  }
-
-  // Build Pickleball Tab
-  Widget _buildPickleballTab() {
-    return Column(
-      children: [
-        // Filters Row
-        if (_availablePickleballDivisions.isNotEmpty ||
-            _availableDuprRatings.isNotEmpty) ...[
-          Container(
-            margin: const EdgeInsets.all(16),
-            child: Row(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isEditing ? null : () => _navigateToTeamDetail(team),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Division Filter
-                if (_availablePickleballDivisions.isNotEmpty) ...[
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: sportColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey[300]!),
                       ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedPickleballDivision,
-                          hint: const Text('Division'),
-                          isExpanded: true,
-                          items: [
-                            const DropdownMenuItem<String>(
-                              value: null,
-                              child: Text('All Divisions'),
-                            ),
-                            ..._availablePickleballDivisions.map(
-                              (division) => DropdownMenuItem<String>(
-                                value: division,
-                                child: Text(division),
+                      child: Icon(sportIcon, color: sportColor, size: 28),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (isEditing)
+                            TextField(
+                              controller: _editingControllers[teamId],
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                border: OutlineInputBorder(),
+                              ),
+                              autofocus: true,
+                            )
+                          else
+                            Text(
+                              team.name,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
                               ),
                             ),
-                          ],
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedPickleballDivision = value;
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                ],
-                // DURP Rating Filter
-                if (_availableDuprRatings.isNotEmpty) ...[
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey[300]!),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedDuprRating,
-                          hint: const Text('DURP Rating'),
-                          isExpanded: true,
-                          items: [
-                            const DropdownMenuItem<String>(
-                              value: null,
-                              child: Text('All Ratings'),
-                            ),
-                            ..._availableDuprRatings.map(
-                              (rating) => DropdownMenuItem<String>(
-                                value: rating,
-                                child: Text(rating),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.person,
+                                size: 14,
+                                color: Colors.grey[600],
                               ),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedDuprRating = value;
-                            });
-                          },
-                        ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  team.coachName,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                    if (isEditing)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.check, color: Colors.green),
+                            onPressed: () => _saveTeamName(team),
+                            tooltip: 'Save',
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.red),
+                            onPressed: () => _cancelEditing(teamId),
+                            tooltip: 'Cancel',
+                          ),
+                        ],
+                      )
+                    else
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert),
+                        onSelected: (value) {
+                          if (value == 'edit') {
+                            _startEditingTeam(team);
+                          } else if (value == 'view') {
+                            _navigateToTeamDetail(team);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'edit',
+                            child: Row(
+                              children: [
+                                Icon(Icons.edit, size: 20),
+                                SizedBox(width: 8),
+                                Text('Edit Name'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'view',
+                            child: Row(
+                              children: [
+                                Icon(Icons.visibility, size: 20),
+                                SizedBox(width: 8),
+                                Text('View Details'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    _buildInfoBadge(
+                      Icons.people,
+                      '${team.players.length + 1}',
+                      const Color(0xFF38A169),
+                    ),
+                    const SizedBox(width: 12),
+                    _buildInfoBadge(
+                      Icons.category,
+                      team.division,
+                      sportColor,
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-        ],
-        // Teams List
-        Expanded(
-          child:
-              _filteredPickleballTeams.isEmpty
-                  ? _buildEmptyStateForSport('Pickleball')
-                  : SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children:
-                          _filteredPickleballTeams
-                              .map(
-                                (team) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: _buildPickleballTeamCard(team),
-                                ),
-                              )
-                              .toList(),
-                    ),
-                  ),
         ),
-      ],
+      ),
     );
   }
 
-  // Build empty state for specific sport
-  Widget _buildEmptyStateForSport(String sport) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            sport == 'Basketball'
-                ? Icons.sports_basketball
-                : Icons.sports_tennis,
-            size: 64,
-            color: Colors.grey[400],
+  Widget _buildModernPickleballTeamCard(PickleballTeam team, String sportName) {
+    final sportColor = _getSportColor(sportName);
+    final sportIcon = _getSportIcon(sportName);
+    final teamId = team.id;
+    final isEditing = _isEditing[teamId] ?? false;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
-          const SizedBox(height: 16),
-          Text(
-            'No $sport teams found',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey[600],
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isEditing ? null : () => _navigateToPickleballTeamDetail(team),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: sportColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(sportIcon, color: sportColor, size: 28),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (isEditing)
+                            TextField(
+                              controller: _editingControllers[teamId],
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                border: OutlineInputBorder(),
+                              ),
+                              autofocus: true,
+                            )
+                          else
+                            Text(
+                              team.name,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.person,
+                                size: 14,
+                                color: Colors.grey[600],
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  team.coachName,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isEditing)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.check, color: Colors.green),
+                            onPressed: () => _saveTeamName(team),
+                            tooltip: 'Save',
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.red),
+                            onPressed: () => _cancelEditing(teamId),
+                            tooltip: 'Cancel',
+                          ),
+                        ],
+                      )
+                    else
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert),
+                        onSelected: (value) {
+                          if (value == 'edit') {
+                            _startEditingTeam(team);
+                          } else if (value == 'view') {
+                            _navigateToPickleballTeamDetail(team);
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'edit',
+                            child: Row(
+                              children: [
+                                Icon(Icons.edit, size: 20),
+                                SizedBox(width: 8),
+                                Text('Edit Name'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'view',
+                            child: Row(
+                              children: [
+                                Icon(Icons.visibility, size: 20),
+                                SizedBox(width: 8),
+                                Text('View Details'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    _buildInfoBadge(
+                      Icons.people,
+                      '${team.players.length + 1}',
+                      const Color(0xFF38A169),
+                    ),
+                    const SizedBox(width: 12),
+                    _buildInfoBadge(
+                      Icons.category,
+                      team.division,
+                      sportColor,
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoBadge(IconData icon, String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
           Text(
-            'Try adjusting your filters or register a new team',
-            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-            textAlign: TextAlign.center,
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
           ),
         ],
       ),
@@ -724,209 +898,88 @@ class _MyTeamScreenState extends State<MyTeamScreen>
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.sports_basketball, size: 80, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            'No teams yet',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[600],
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.sports_basketball,
+                size: 64,
+                color: Colors.grey[400],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Register your first team to get started',
-            style: TextStyle(fontSize: 16, color: Colors.grey[500]),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBasketballTeamCard(Team team) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: () => _navigateToTeamDetail(team),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2196F3).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.sports_basketball,
-                      color: Color(0xFF2196F3),
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          team.name,
-                          style: Theme.of(
-                            context,
-                          ).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Team Captain: ${team.coachName}',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    color: Colors.grey[400],
-                    size: 16,
-                  ),
-                ],
+            const SizedBox(height: 24),
+            Text(
+              'No Teams Yet',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  _buildInfoChip(
-                    Icons.people,
-                    '${team.players.length + 1} Players', // +1 for captain
-                    const Color(0xFF38A169),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildInfoChip(
-                    Icons.category,
-                    team.division,
-                    const Color(0xFF2196F3),
-                  ),
-                ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Register your first team to get started',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[500],
               ),
-            ],
-          ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildInfoChip(IconData icon, String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 12,
-              color: color,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildEmptyStateForSport(String sport) {
+    final sportIcon = _getSportIcon(sport);
+    final sportColor = _getSportColor(sport);
 
-  Widget _buildPickleballTeamCard(PickleballTeam team) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: () => _navigateToPickleballTeamDetail(team),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF4CAF50).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.sports_tennis,
-                      color: Color(0xFF4CAF50),
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          team.name,
-                          style: Theme.of(
-                            context,
-                          ).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Team Captain: ${team.coachName}',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    color: Colors.grey[400],
-                    size: 16,
-                  ),
-                ],
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: sportColor.withOpacity(0.1),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  _buildInfoChip(
-                    Icons.people,
-                    '${team.players.length + 1} Player${team.players.length + 1 != 1 ? 's' : ''}', // +1 for captain
-                    const Color(0xFF4CAF50),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildInfoChip(
-                    Icons.star,
-                    team.division,
-                    const Color(0xFF4CAF50),
-                  ),
-                ],
+              child: Icon(
+                sportIcon,
+                size: 64,
+                color: sportColor,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No $sport Teams',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'You haven\'t registered any teams for $sport yet',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[500],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );

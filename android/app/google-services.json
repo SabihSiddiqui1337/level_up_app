@@ -23,6 +23,26 @@
           "other_platform_oauth_client": []
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:779252114785:android:873e66ac2596da4d9c1120",
+        "android_client_info": {
+          "package_name": "com.levelupsports.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEudAwgmSYq6wsOyRCeqSSr53nRfsHEeo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
     }
   ],
   "configuration_version": "1"
+}

@@ -113,13 +113,13 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
       final team1Score = int.tryParse(_team1ScoreController.text) ?? 0;
       final team2Score = int.tryParse(_team2ScoreController.text) ?? 0;
 
-      // Determine if this is a Semi Finals or Finals match (15+ points with win by 2)
-      // or a preliminary match (11+ points with win by 2)
+      // Determine if this is a Semi Finals or Finals match (15 points win-by-2)
+      // or a preliminary match (11 points win-by-2)
       final isSemiFinalsOrFinals =
           widget.match.day == 'Semi Finals' || widget.match.day == 'Finals';
       final minScore = isSemiFinalsOrFinals ? 15 : 11;
 
-      // Validate scores using exact winning score rule
+      // Validate scores using win-by-2 rule (allow scores above minScore)
       String? validationError;
 
       // Allow resetting to 0-0 (no validation error)
@@ -128,28 +128,24 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
         // No validation needed - allow saving 0-0 to reset scores
         validationError = null;
       }
-      // Check if game has a winner using exact winning score rule
+      // Check if game has a winner using win-by-2 rule
       else {
         bool hasWinner = false;
 
-        // Team 1 wins if they have exactly minScore and win by 2
-        if (team1Score == minScore && team1Score >= team2Score + 2) {
+        // Team 1 wins if they have at least minScore and lead by 2
+        if (team1Score >= minScore && team1Score >= team2Score + 2) {
           hasWinner = true;
         }
-        // Team 2 wins if they have exactly minScore and win by 2
-        else if (team2Score == minScore && team2Score >= team1Score + 2) {
+        // Team 2 wins if they have at least minScore and lead by 2
+        else if (team2Score >= minScore && team2Score >= team1Score + 2) {
           hasWinner = true;
         }
 
         if (!hasWinner) {
           if (team1Score < minScore && team2Score < minScore) {
-            validationError =
-                'One team must reach exactly $minScore points to win';
-          } else if (team1Score > minScore || team2Score > minScore) {
-            validationError = 'Scores cannot exceed $minScore points';
+            validationError = 'One team must reach at least $minScore points';
           } else {
-            validationError =
-                'Must win by 2 points (current: $team1Score-$team2Score)';
+            validationError = 'Must win by 2 points (current: $team1Score-$team2Score)';
           }
         }
       }

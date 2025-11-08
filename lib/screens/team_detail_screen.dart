@@ -457,21 +457,29 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
         builder:
             (context) => TeamRegistrationScreen(
               team: _currentTeam,
-              onSave: (updatedTeam) {
+              onSave: (updatedTeam) async {
+                // Update the team in the service first
                 widget.onUpdate(updatedTeam);
-                setState(() {
-                  _currentTeam = updatedTeam; // Update the current team
-                });
-                // Navigate back to My Teams tab with snackbar cleanup
-                SnackBarUtils.navigateWithCleanup(
-                  context,
-                  const MainNavigationScreen(initialIndex: 2), // My Teams tab
-                  clearStack: true,
-                );
+                // Update local state
+                if (mounted) {
+                  setState(() {
+                    _currentTeam = updatedTeam; // Update the current team
+                  });
+                }
+                // Pop back to the detail screen
+                // The detail screen will show the updated team
+                if (mounted && Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                }
               },
             ),
       ),
-    );
+    ).then((_) {
+      // Refresh the screen when returning from edit
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   void _showDeleteDialog(BuildContext context) {

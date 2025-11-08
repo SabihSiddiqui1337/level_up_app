@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_collection_literals
+
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -16,8 +18,13 @@ class EventService {
   // Check if Firebase is initialized
   bool _isFirebaseInitialized() {
     try {
-      return Firebase.apps.isNotEmpty;
+      final isInitialized = Firebase.apps.isNotEmpty;
+      if (!isInitialized) {
+        print('⚠️ Firebase not initialized: ${Firebase.apps.length} apps found');
+      }
+      return isInitialized;
     } catch (e) {
+      print('⚠️ Error checking Firebase initialization: $e');
       return false;
     }
   }
@@ -38,11 +45,18 @@ class EventService {
   // Load events from Firebase Firestore (with fallback to SharedPreferences)
   Future<void> _loadEvents() async {
     try {
+      // Check Firebase initialization status
+      print('DEBUG: Checking Firebase initialization...');
+      print('DEBUG: Firebase.apps.length = ${Firebase.apps.length}');
+      
       // Try to load from Firestore first (only if Firebase is initialized)
       final firestore = _getFirestore();
       if (firestore != null) {
+        print('DEBUG: Firebase is initialized, loading from Firestore...');
         try {
           final snapshot = await firestore.collection(_eventsCollection).get();
+          print('DEBUG: Firestore query completed. Found ${snapshot.docs.length} documents');
+          
           if (snapshot.docs.isNotEmpty) {
             _events = snapshot.docs.map((doc) {
               final data = doc.data();
@@ -51,17 +65,22 @@ class EventService {
                 'id': doc.id, // Use Firestore document ID
               });
             }).toList();
-            print('Loaded ${_events.length} events from Firestore');
+            print('✅ Loaded ${_events.length} events from Firestore');
             
             // Also save to local storage as backup
             await _saveEventsToLocal();
             return;
+          } else {
+            print('DEBUG: Firestore is empty, will check local storage');
           }
-        } catch (e) {
-          print('Error loading from Firestore (will try local): $e');
+        } catch (e, stackTrace) {
+          print('❌ Error loading from Firestore (will try local): $e');
+          print('Stack trace: $stackTrace');
         }
       } else {
-        print('Firebase not initialized, using local storage only');
+        print('⚠️ Firebase not initialized, using local storage only');
+        print('⚠️ This means events will NOT sync across devices');
+        print('⚠️ To fix: Ensure google-services.json and GoogleService-Info.plist are properly configured');
       }
 
       // Fallback to local storage if Firestore fails or is empty
@@ -207,6 +226,7 @@ class EventService {
     required String sportName,
     String? description,
     String? division,
+    double? amount,
   }) async {
     try {
       final eventId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -219,6 +239,7 @@ class EventService {
         sportName: sportName,
         description: description,
         division: division,
+        amount: amount,
         createdAt: DateTime.now(),
       );
 
@@ -491,18 +512,34 @@ class EventService {
             final isCompleted = completedIds.contains(event.id);
             // Compare dates only (ignore time) - event is upcoming if date >= today
             final eventDateOnly = DateTime(event.date.year, event.date.month, event.date.day);
-            final isFuture = eventDateOnly.isAfter(nowDateOnly) || eventDateOnly.isAtSameMomentAs(nowDateOnly);
+            final isTodayOrFuture = eventDateOnly.isAfter(nowDateOnly) || eventDateOnly.isAtSameMomentAs(nowDateOnly);
             
             print('DEBUG: Event "${event.title}" (${event.id}): '
                   'completed=$isCompleted, '
                   'eventDate=${event.date.toIso8601String()}, '
                   'now=${now.toIso8601String()}, '
-                  'isFuture=$isFuture');
-            return !isCompleted && isFuture;
+                  'eventDateOnly=${eventDateOnly.toIso8601String()}, '
+                  'nowDateOnly=${nowDateOnly.toIso8601String()}, '
+                  'isTodayOrFuture=$isTodayOrFuture');
+            return !isCompleted && isTodayOrFuture;
           })
           .toList();
       upcoming.sort((a, b) => a.date.compareTo(b.date));
       print('DEBUG: Upcoming events (excluding completed): ${upcoming.length}');
+      
+      // Debug: If events exist but none are upcoming, show what we have
+      if (_events.isNotEmpty && upcoming.isEmpty) {
+        print('⚠️ DEBUG: You have ${_events.length} event(s) but 0 upcoming.');
+        print('⚠️ DEBUG: Checking why...');
+        for (var event in _events) {
+          final eventDateOnly = DateTime(event.date.year, event.date.month, event.date.day);
+          final isCompleted = completedIds.contains(event.id);
+          final isTodayOrFuture = eventDateOnly.isAfter(nowDateOnly) || eventDateOnly.isAtSameMomentAs(nowDateOnly);
+          print('   - "${event.title}": date=${event.date.toIso8601String()}, '
+                'completed=$isCompleted, isTodayOrFuture=$isTodayOrFuture');
+        }
+      }
+      
       return upcoming;
     } catch (e) {
       print('Error getting upcoming events: $e');

@@ -83,15 +83,52 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   ),
                   const SizedBox(height: 8),
 
-                  // Date
+                  // Date and Amount
                   Row(
                     children: [
                       const Icon(Icons.event, size: 18, color: Colors.black54),
                       const SizedBox(width: 6),
-                      Text(
-                        _formatDate(widget.event.date),
-                        style: const TextStyle(fontSize: 16, color: Colors.black87),
+                      Expanded(
+                        child: Text(
+                          _formatDate(widget.event.date),
+                          style: const TextStyle(fontSize: 16, color: Colors.black87),
+                        ),
                       ),
+                      if (widget.event.amount != null && widget.event.amount! > 0) ...[
+                        const SizedBox(width: 16),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2196F3).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '\$${widget.event.amount!.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF2196F3),
+                            ),
+                          ),
+                        ),
+                      ] else if (widget.event.amount == null || widget.event.amount == 0) ...[
+                        const SizedBox(width: 16),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'Free',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   // Division (if available)

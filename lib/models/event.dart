@@ -7,6 +7,7 @@ class Event {
   final String sportName;
   final String? description;
   final String? division; // Division for Basketball/Pickleball events
+  final double? amount; // Registration amount (null means free)
   final DateTime createdAt;
 
   Event({
@@ -19,6 +20,7 @@ class Event {
     required this.createdAt,
     this.description,
     this.division,
+    this.amount,
   });
 
   // Convert Event to JSON
@@ -32,6 +34,7 @@ class Event {
       'sportName': sportName,
       'description': description,
       'division': division,
+      'amount': amount,
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -47,6 +50,7 @@ class Event {
       sportName: json['sportName'] ?? '',
       description: json['description'],
       division: json['division'],
+      amount: json['amount'] != null ? (json['amount'] is double ? json['amount'] : (json['amount'] as num).toDouble()) : null,
       createdAt: DateTime.parse(json['createdAt']),
     );
   }
@@ -61,6 +65,7 @@ class Event {
     String? sportName,
     String? description,
     String? division,
+    double? amount,
     DateTime? createdAt,
   }) {
     return Event(
@@ -72,6 +77,7 @@ class Event {
       sportName: sportName ?? this.sportName,
       description: description ?? this.description,
       division: division ?? this.division,
+      amount: amount ?? this.amount,
       createdAt: createdAt ?? this.createdAt,
     );
   }
