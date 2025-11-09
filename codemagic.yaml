@@ -4,16 +4,16 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     integrations:
-      app_store_connect: SabihKey  # replace with your actual integration name from Codemagic
+      app_store_connect: SabihKey
     environment:
       ios_signing:
-        distribution_type: app_store          # or ad_hoc / development / enterprise
+        distribution_type: app_store
         bundle_identifier: com.example.levelUpSport
       xcode: latest
       cocoapods: default
       vars:
         BUNDLE_ID: "com.example.levelUpSport"
-        XCODE_WORKSPACE: "Runner.xcworkspace"   # or remove if you only have .xcodeproj
+        XCODE_WORKSPACE: "Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
         APP_STORE_APPLE_ID: 6754937234
     scripts:
@@ -28,7 +28,7 @@ workflows:
       - name: Build ipa for distribution
         script: |
           xcode-project build-ipa \
-            --workspace "$CM_BUILD_DIR/ios/$XCODE_WORKSPACE"
+            --workspace "$CM_BUILD_DIR/ios/$XCODE_WORKSPACE" \
             --scheme "$XCODE_SCHEME"
     artifacts:
       - build/ios/ipa/*.ipa
@@ -47,5 +47,3 @@ publishing:
     submit_to_app_store: false
     beta_groups:
       - "Internal Testers"
-
-
