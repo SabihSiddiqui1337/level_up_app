@@ -1,4 +1,4 @@
-// ignore_for_file: avoid_print
+// ignore_for_file: avoid_print, unused_local_variable, use_build_context_synchronously
 
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
@@ -11,7 +11,6 @@ import '../models/event.dart';
 import '../widgets/custom_app_bar.dart';
 import 'team_detail_screen.dart';
 import 'pickleball_team_detail_screen.dart';
-import 'team_registration_screen.dart';
 
 class MyTeamScreen extends StatefulWidget {
   final TeamService teamService;
