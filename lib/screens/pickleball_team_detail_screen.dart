@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/pickleball_team.dart';
 import 'pickleball_team_registration_screen.dart';
-import 'main_navigation_screen.dart';
-import '../utils/snackbar_utils.dart';
 
 class PickleballTeamDetailScreen extends StatefulWidget {
   final PickleballTeam team;

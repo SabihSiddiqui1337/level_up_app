@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/team.dart';
 import 'team_registration_screen.dart';
-import 'main_navigation_screen.dart';
-import '../utils/snackbar_utils.dart';
 
 class TeamDetailScreen extends StatefulWidget {
   final Team team;
