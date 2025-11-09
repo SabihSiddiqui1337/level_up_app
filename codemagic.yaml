@@ -22,8 +22,9 @@ workflows:
           cd ios
           pod install
           cd ..
-      - name: Set up provisioning profiles settings on Xcode project
-        script: xcode-project use-profiles
+      - name: Set up provisioning profiles for iOS project only
+        script: |
+          xcode-project use-profiles --project ios/Runner.xcodeproj
       - name: Build ipa for distribution
         script: |
           xcode-project build-ipa \
