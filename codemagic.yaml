@@ -40,6 +40,12 @@ workflows:
           pod install
           cd ..
 
+      - name: Regenerate Flutter iOS plugin registrant
+        script: |
+          flutter pub get
+          flutter clean
+          flutter build ios --no-codesign
+
       - name: Set up provisioning profiles for iOS project only
         script: |
           xcode-project use-profiles --project ios/Runner.xcodeproj
