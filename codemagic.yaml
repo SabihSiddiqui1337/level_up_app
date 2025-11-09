@@ -4,7 +4,7 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     integrations:
-      app_store_connect: Sabih Dev Key  # replace with your actual integration name from Codemagic
+      app_store_connect: SabihKey  # replace with your actual integration name from Codemagic
     environment:
       ios_signing:
         distribution_type: app_store          # or ad_hoc / development / enterprise
