@@ -1,0 +1,48 @@
+workflows:
+  ios-native-workflow:
+    name: iOS Native
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: Sabih Dev Key  # replace with your actual integration name from Codemagic
+    environment:
+      ios_signing:
+        distribution_type: app_store          # or ad_hoc / development / enterprise
+        bundle_identifier: com.example.levleUpSport
+      xcode: latest
+      cocoapods: default
+      vars:
+        BUNDLE_ID: "com.example.levleUpSport"
+        XCODE_WORKSPACE: "Runner.xcworkspace"   # or remove if you only have .xcodeproj
+        XCODE_SCHEME: "Runner"
+        APP_STORE_APPLE_ID: 6754937234
+    scripts:
+      - name: Install CocoaPods dependencies
+        script: |
+          pod install
+      - name: Set up provisioning profiles settings on Xcode project
+        script: xcode-project use-profiles
+      - name: Build ipa for distribution
+        script: |
+          xcode-project build-ipa \
+            --workspace "$CM_BUILD_DIR/$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+publishing:
+  email:
+    recipients:
+      - levelupsports96@gmail.com
+    notify:
+      success: true
+      failure: true
+  app_store_connect:
+    auth: integration
+    submit_to_testflight: true
+    submit_to_app_store: false
+    beta_groups:
+      - "Internal Testers"
+
+
