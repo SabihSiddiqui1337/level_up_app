@@ -16,61 +16,43 @@ workflows:
         XCODE_WORKSPACE: "Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
         APP_STORE_APPLE_ID: 6754937234
-
     scripts:
       - name: Clean Flutter and iOS build folders
         script: |
           flutter clean
-          rm -rf ios/Pods ios/Podfile.lock ios/Flutter/Flutter.framework ios/Flutter/Flutter.podspec
+          rm -rf ios/Pods
+          rm -rf ios/Podfile.lock
+          rm -rf ios/Flutter/Flutter.framework
+          rm -rf ios/Flutter/Flutter.podspec
           flutter pub get
 
-      - name: Regenerate iOS Pods properly
+      - name: Install CocoaPods dependencies
         script: |
           cd ios
-          pod deintegrate
-          pod repo update
           pod install
           cd ..
-
-      - name: Fix Xcode Pods file references
-        script: |
-          cd ios
-          rm -rf "Target Support Files/Pods-Runner/Pods-Runner-frameworks-Release-input-files.xcfilelist"
-          rm -rf "Target Support Files/Pods-Runner/Pods-Runner-frameworks-Release-output-files.xcfilelist"
-          pod install
-          cd ..
-
-      - name: Regenerate Flutter iOS plugin registrant
-        script: |
-          flutter pub get
-          flutter clean
-          flutter build ios --no-codesign
-
-      - name: Set up provisioning profiles for iOS project only
-        script: |
-          xcode-project use-profiles --project ios/Runner.xcodeproj
 
       - name: Build ipa for distribution
         script: |
           xcode-project build-ipa \
             --workspace "$CM_BUILD_DIR/ios/$XCODE_WORKSPACE" \
-            --scheme "$XCODE_SCHEME"
+            --scheme "$XCODE_SCHEME" \
+            --archive-flags "-destination 'generic/platform=iOS'"
 
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
 
-publishing:
-  email:
-    recipients:
-      - levelupsports96@gmail.com
-    notify:
-      success: true
-      failure: true
-
-  app_store_connect:
-    auth: integration
-    submit_to_testflight: true
-    submit_to_app_store: false
-    beta_groups:
-      - "Internal Testers"
+    publishing:
+      email:
+        recipients:
+          - levelupsports96@gmail.com
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
+        beta_groups:
+          - "Internal Testers"
