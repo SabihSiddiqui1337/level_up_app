@@ -647,16 +647,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                 ),
                               ),
                               IconButton(
-                                    icon: Icon(
+                                icon: Icon(
                                   Icons.delete,
-                                      color: isCompleted ? Colors.grey[400] : Colors.red,
+                                  color: isCompleted ? Colors.grey[400] : Colors.red,
                                 ),
-                                    onPressed: isCompleted
-                                        ? null
-                                        : () {
-                                  Navigator.pop(context);
-                                  _confirmDeleteEvent(event);
-                                },
+                                onPressed: isCompleted
+                                    ? null
+                                    : () async {
+                                        // Show confirmation dialog directly without popping
+                                        // The confirmation will handle closing all dialogs
+                                        _confirmDeleteEvent(event, context);
+                                      },
                               ),
                             ],
                           ),
@@ -2554,54 +2555,119 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
-  void _confirmDeleteEvent(Event event) {
-      showDialog(
-        context: context,
-      builder: (context) => AlertDialog(
+  void _confirmDeleteEvent(Event event, BuildContext dialogContext) {
+    // Get the admin panel context before showing nested dialogs
+    // This context is from the AdminPanelScreen state
+    final adminContext = context;
+    
+    showDialog(
+      context: dialogContext,
+      builder: (confirmContext) => AlertDialog(
         title: const Text('Delete Event'),
         content: Text('Are you sure you want to delete "${event.title}"?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(confirmContext),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () async {
-              // Delete all teams linked to this event
-              await TeamService().deleteTeamsByEventId(event.id);
-              await PickleballTeamService().deleteTeamsByEventId(event.id);
-              // Now delete the event
-              final ok = await _eventService.deleteEvent(event.id);
-              if (ok) {
-                // Reload events to ensure deletion is reflected
-                await _eventService.initialize();
-                if (mounted) {
-                  setState(() {});
-                  // Show success message
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Event "${event.title}" deleted successfully'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
+              // Close the confirmation dialog first
+              if (confirmContext.mounted) {
+                Navigator.pop(confirmContext);
+              }
+              
+              // Small delay to ensure dialog closes
+              await Future.delayed(const Duration(milliseconds: 100));
+              
+              try {
+                // Delete all teams linked to this event
+                await TeamService().deleteTeamsByEventId(event.id);
+                await PickleballTeamService().deleteTeamsByEventId(event.id);
+                // Now delete the event
+                final ok = await _eventService.deleteEvent(event.id);
+                
+                if (ok) {
+                  // Reload events to ensure deletion is reflected
+                  await _eventService.initialize();
                 }
-              } else {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Error deleting event'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
+                
+                // Close all dialogs in sequence: "Delete Event" dialog, then "Manage Events" dialog
+                if (adminContext.mounted) {
+                  // Close "Delete Event" dialog
+                  if (dialogContext.mounted) {
+                    final navigator = Navigator.of(dialogContext, rootNavigator: false);
+                    if (navigator.canPop()) {
+                      navigator.pop();
+                      // Wait for dialog to close
+                      await Future.delayed(const Duration(milliseconds: 100));
+                    }
+                  }
+                  
+                  // Close "Manage Events" dialog to return to admin panel
+                  final adminNavigator = Navigator.of(adminContext, rootNavigator: false);
+                  if (adminNavigator.canPop()) {
+                    adminNavigator.pop();
+                    // Wait for dialog to close
+                    await Future.delayed(const Duration(milliseconds: 100));
+                  }
+                  
+                  // Refresh the admin panel state
+                  if (mounted) {
+                    setState(() {});
+                  }
+                  
+                  // Show message on the admin panel screen
+                  if (adminContext.mounted) {
+                    ScaffoldMessenger.of(adminContext).showSnackBar(
+                      SnackBar(
+                        content: Text(ok 
+                          ? 'Event "${event.title}" deleted successfully'
+                          : 'Error deleting event'),
+                        backgroundColor: ok ? Colors.green : Colors.red,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                }
+              } catch (e) {
+                // Close all dialogs and show error
+                if (adminContext.mounted) {
+                  // Close "Delete Event" dialog
+                  if (dialogContext.mounted) {
+                    final navigator = Navigator.of(dialogContext, rootNavigator: false);
+                    if (navigator.canPop()) {
+                      navigator.pop();
+                      await Future.delayed(const Duration(milliseconds: 100));
+                    }
+                  }
+                  
+                  // Close "Manage Events" dialog
+                  final adminNavigator = Navigator.of(adminContext, rootNavigator: false);
+                  if (adminNavigator.canPop()) {
+                    adminNavigator.pop();
+                  }
+                  
+                  if (adminContext.mounted) {
+                    ScaffoldMessenger.of(adminContext).showSnackBar(
+                      SnackBar(
+                        content: Text('Error deleting event: $e'),
+                        backgroundColor: Colors.red,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
                 }
               }
-              if (mounted) Navigator.pop(context);
             },
             child: const Text('Delete'),
-              ),
-            ],
           ),
+        ],
+      ),
     );
   }
 }
