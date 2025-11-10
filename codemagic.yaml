@@ -39,12 +39,11 @@ workflows:
           pod install
           cd ..
 
-      - name: 🔢 Increment iOS version and build number safely
+      - name: 🔢 Update Info.plist version safely
         script: |
           INFO_PLIST=$INFO_PLIST_PATH
-
           if [ ! -f "$INFO_PLIST" ]; then
-            echo "❌ Error: Info.plist not found at $INFO_PLIST"
+            echo "❌ Info.plist not found at $INFO_PLIST"
             exit 1
           fi
 
@@ -56,13 +55,11 @@ workflows:
           NEW_VERSION="${major}.${minor}.${NEW_PATCH}"
           NEW_BUILD=$((CURRENT_BUILD + 1))
 
-          echo "Updating Info.plist → Version: $NEW_VERSION | Build: $NEW_BUILD"
-
+          echo "🔧 Updating Info.plist → Version: $NEW_VERSION | Build: $NEW_BUILD"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
-
-          echo "✅ Updated CFBundleShortVersionString and CFBundleVersion successfully."
-          cat "$INFO_PLIST" | grep -A 1 CFBundleVersion || true
+          /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST"
 
       - name: 🧾 Use provisioning profiles
         script: |
@@ -74,7 +71,21 @@ workflows:
           xcode-project build-ipa \
             --workspace ios/Runner.xcworkspace \
             --scheme Runner
-          echo "✅ Build completed successfully."
+          echo "✅ IPA build completed."
+
+      - name: 🩺 Verify Info.plist in built IPA
+        script: |
+          echo "🔍 Checking CFBundleVersion inside built archive..."
+          unzip -q build/ios/ipa/Level_Up_Sports.ipa -d extracted_ipa
+          APP_PLIST=$(find extracted_ipa/Payload -name "Info.plist" | head -1)
+          if [ -f "$APP_PLIST" ]; then
+            echo "✅ Found embedded Info.plist: $APP_PLIST"
+            /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP_PLIST" || echo "⚠️ No version found"
+            /usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP_PLIST" || echo "⚠️ No build number found"
+          else
+            echo "❌ No Info.plist found inside .ipa!"
+            exit 1
+          fi
 
       - name: 🚀 Upload to App Store Connect (TestFlight)
         script: |
@@ -82,7 +93,14 @@ workflows:
           app-store-connect upload \
             --path "build/ios/ipa/Level_Up_Sports.ipa" \
             --use-latest-version \
-            --submit-for-testflight true
+            --submit-for-testflight true || {
+              echo "⚠️ Upload failed, retrying in 30s..."
+              sleep 30
+              app-store-connect upload \
+                --path "build/ios/ipa/Level_Up_Sports.ipa" \
+                --use-latest-version \
+                --submit-for-testflight true
+            }
 
           echo "✅ Upload complete! Check App Store Connect → TestFlight."
 
