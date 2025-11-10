@@ -23,7 +23,6 @@ workflows:
       vars:
         XCODE_WORKSPACE: "Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
-        APP_STORE_ID: "6754937234"
         BUNDLE_ID: "com.example.levelUpSport"
 
     scripts:
@@ -45,12 +44,15 @@ workflows:
           INFO_PLIST="Runner/Info.plist"
           CURRENT_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST" || echo "1.0.0")
           CURRENT_BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST" || echo "0")
+
           IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
           NEW_PATCH=$((patch + 1))
           NEW_VERSION="${major}.${minor}.${NEW_PATCH}"
           NEW_BUILD=$((CURRENT_BUILD + 1))
+
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
+
           echo "✅ Updated Version: $NEW_VERSION ($NEW_BUILD)"
           cd ..
 
@@ -79,8 +81,6 @@ workflows:
 
       app_store_connect:
         auth: integration
-        apple_id: "sabih-1337@live.com"
-        app_store_id: "6754937234"
         submit_to_testflight: true
         submit_to_app_store: false
         beta_groups:
