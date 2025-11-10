@@ -58,8 +58,6 @@ workflows:
           echo "🔧 Updating Info.plist → Version: $NEW_VERSION | Build: $NEW_BUILD"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
-          /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST"
-          /usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST"
 
       - name: 🧾 Use provisioning profiles
         script: |
@@ -73,15 +71,25 @@ workflows:
             --scheme Runner
           echo "✅ IPA build completed."
 
-      - name: 🩺 Verify Info.plist in built IPA
+      - name: 🔍 Verify Info.plist in built IPA (auto-detect file)
         script: |
           echo "🔍 Checking CFBundleVersion inside built archive..."
-          unzip -q build/ios/ipa/Level_Up_Sports.ipa -d extracted_ipa
+          IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
+          if [ -z "$IPA_PATH" ]; then
+            echo "❌ No IPA found under build/ios/ipa/"
+            exit 1
+          fi
+
+          echo "✅ Found IPA at: $IPA_PATH"
+          mkdir -p extracted_ipa
+          unzip -q "$IPA_PATH" -d extracted_ipa
           APP_PLIST=$(find extracted_ipa/Payload -name "Info.plist" | head -1)
           if [ -f "$APP_PLIST" ]; then
             echo "✅ Found embedded Info.plist: $APP_PLIST"
-            /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP_PLIST" || echo "⚠️ No version found"
-            /usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP_PLIST" || echo "⚠️ No build number found"
+            echo "CFBundleShortVersionString:"
+            /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP_PLIST" || echo "⚠️ Not found"
+            echo "CFBundleVersion:"
+            /usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP_PLIST" || echo "⚠️ Not found"
           else
             echo "❌ No Info.plist found inside .ipa!"
             exit 1
@@ -89,15 +97,20 @@ workflows:
 
       - name: 🚀 Upload to App Store Connect (TestFlight)
         script: |
-          echo "📤 Uploading to App Store Connect..."
+          IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
+          if [ -z "$IPA_PATH" ]; then
+            echo "❌ No IPA found for upload!"
+            exit 1
+          fi
+          echo "📤 Uploading $IPA_PATH to App Store Connect..."
           app-store-connect upload \
-            --path "build/ios/ipa/Level_Up_Sports.ipa" \
+            --path "$IPA_PATH" \
             --use-latest-version \
             --submit-for-testflight true || {
               echo "⚠️ Upload failed, retrying in 30s..."
               sleep 30
               app-store-connect upload \
-                --path "build/ios/ipa/Level_Up_Sports.ipa" \
+                --path "$IPA_PATH" \
                 --use-latest-version \
                 --submit-for-testflight true
             }
