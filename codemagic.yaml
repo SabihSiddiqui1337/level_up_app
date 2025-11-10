@@ -3,6 +3,7 @@ workflows:
     name: iOS Auto Build & Upload
     max_build_duration: 120
     instance_type: mac_mini_m2
+
     integrations:
       app_store_connect: SabihKey
 
@@ -15,6 +16,8 @@ workflows:
           source: true
 
     environment:
+      groups:
+        - app_store_connect   # Loads your key + team ID
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.example.levelUpSport
@@ -23,6 +26,7 @@ workflows:
       vars:
         INFO_PLIST_PATH: "ios/Runner/Info.plist"
         BUNDLE_ID: "com.example.levelUpSport"
+        APP_STORE_CONNECT_TEAM_ID: $APP_STORE_CONNECT_TEAM_ID
 
     scripts:
       - name: 🧹 Clean Flutter and iOS folders
@@ -57,11 +61,6 @@ workflows:
           echo "Checking APP_STORE_CONNECT_TEAM_ID..."
           if [ -z "$APP_STORE_CONNECT_TEAM_ID" ]; then
             echo "❌ APP_STORE_CONNECT_TEAM_ID is missing!"
-            echo "➡️  Add it in Codemagic UI under Environment variables."
-            echo "➡️  Go to: Codemagic → Your App → Environment variables → Add new"
-            echo "   Name: APP_STORE_CONNECT_TEAM_ID"
-            echo "   Value: (Your 10-character Apple Team ID, e.g. A1B2C3D4E5)"
-            echo "   Secure: ✅ Enabled"
             exit 1
           else
             echo "✅ Detected APP_STORE_CONNECT_TEAM_ID: $APP_STORE_CONNECT_TEAM_ID"
