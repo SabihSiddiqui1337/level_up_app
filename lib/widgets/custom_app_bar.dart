@@ -60,25 +60,6 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ],
                 ),
                 const Spacer(),
-                // Right Icons
-                Row(
-                  children: [
-                    Icon(
-                      Icons.notifications,
-                      color: const Color(0xFF2196F3),
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    GestureDetector(
-                      onTap: onHomePressed,
-                      child: Icon(
-                        Icons.home,
-                        color: const Color(0xFFE67E22),
-                        size: 24,
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),

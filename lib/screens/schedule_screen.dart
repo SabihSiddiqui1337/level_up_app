@@ -5,8 +5,6 @@ import '../services/pickleball_team_service.dart';
 import 'sport_schedule_screen.dart';
 import '../services/event_service.dart';
 import '../models/event.dart';
-import '../services/auth_service.dart';
-import '../utils/role_utils.dart';
 
 class ScheduleScreen extends StatefulWidget {
   final VoidCallback? onHomePressed;
@@ -23,7 +21,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   List<Event> _resultsEvents = [];
   final TeamService _teamService = TeamService();
   final PickleballTeamService _pickleballTeamService = PickleballTeamService();
-  final AuthService _authService = AuthService();
   bool _isLoading = true;
   bool _isScheduleExpanded = true;
   bool _isResultsExpanded = true;
@@ -101,8 +98,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   ) {
     final teamCount = _teamCountForEvent(event);
     final hasEnoughTeams = teamCount >= 8;
-    final currentUser = _authService.currentUser;
-    final isAdmin = currentUser != null && RoleUtils.isOwner(currentUser.role);
 
     // Determine which image to use based on sport name
     String? imagePath;
@@ -332,8 +327,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ),
             ),
           ),
-          // Show error message for non-admin users if not enough teams
-          if (!hasEnoughTeams && !isAdmin) ...[
+          // Show error message if not enough teams (for all users including owners)
+          if (!hasEnoughTeams) ...[
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(12),
@@ -348,7 +343,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Not enough teams registered. Waiting for ${8 - teamCount} more team${8 - teamCount == 1 ? '' : 's'} to start the game.',
+                      'Please register at least 8 teams before starting. Currently have $teamCount team${teamCount == 1 ? '' : 's'}. Waiting for ${8 - teamCount} more team${8 - teamCount == 1 ? '' : 's'}.',
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.red[700],

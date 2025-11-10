@@ -80,9 +80,11 @@ class _PickleballTeamRegistrationScreenState
   @override
   void initState() {
     super.initState();
-    // Set division from event if available
-    if (widget.event?.division != null) {
-      _selectedDuprRating = widget.event!.division!;
+    // Set division from event if available and not empty
+    if (widget.event != null && 
+        widget.event!.division != null && 
+        widget.event!.division!.trim().isNotEmpty) {
+      _selectedDuprRating = widget.event!.division!.trim();
     } else if (widget.team != null) {
       _selectedDuprRating = widget.team!.division;
     }
@@ -420,7 +422,10 @@ class _PickleballTeamRegistrationScreenState
             const SizedBox(height: 24),
 
             // DUPR Rating Field - Show as read-only text if event has division, otherwise dropdown
-            widget.event?.division != null
+            // For pickleball events, if event exists and has a division set, it should always be read-only
+            (widget.event != null && 
+             widget.event!.division != null && 
+             widget.event!.division!.trim().isNotEmpty)
                 ? TextFormField(
                     initialValue: widget.event!.division,
                     style: const TextStyle(color: Colors.black87),
@@ -437,8 +442,10 @@ class _PickleballTeamRegistrationScreenState
                       filled: true,
                       fillColor: Colors.grey[200],
                       suffixIcon: Icon(Icons.info_outline, color: Colors.grey[500], size: 20),
+                      hintText: 'Set by event organizer',
                     ),
                     readOnly: true,
+                    enabled: false,
                   )
                 : DropdownButtonFormField<String>(
                     value: _selectedDuprRating,
@@ -605,7 +612,10 @@ class _PickleballTeamRegistrationScreenState
                 ),
                 const SizedBox(height: 16),
                 // DUPR Rating Field - Show as read-only text if event has division, otherwise dropdown
-                widget.event?.division != null
+                // For pickleball events, if event exists and has a division set, it should always be read-only
+                (widget.event != null && 
+                 widget.event!.division != null && 
+                 widget.event!.division!.trim().isNotEmpty)
                     ? TextFormField(
                         initialValue: widget.event!.division,
                         style: const TextStyle(color: Colors.black87),
@@ -622,8 +632,10 @@ class _PickleballTeamRegistrationScreenState
                           filled: true,
                           fillColor: Colors.grey[200],
                           suffixIcon: Icon(Icons.info_outline, color: Colors.grey[500], size: 20),
+                          hintText: 'Set by event organizer',
                         ),
                         readOnly: true,
+                        enabled: false,
                       )
                     : DropdownButtonFormField<String>(
                         value: _selectedDuprRating,
