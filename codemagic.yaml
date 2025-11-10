@@ -21,8 +21,6 @@ workflows:
       xcode: latest
       cocoapods: default
       vars:
-        XCODE_WORKSPACE: "Runner.xcworkspace"
-        XCODE_SCHEME: "Runner"
         INFO_PLIST_PATH: "ios/Runner/Info.plist"
         BUNDLE_ID: "com.example.levelUpSport"
 
@@ -39,23 +37,18 @@ workflows:
           pod install
           cd ..
 
-      - name: 🔢 Update Info.plist version safely
+      - name: 🔢 Update version in Info.plist
         script: |
           INFO_PLIST=$INFO_PLIST_PATH
-          if [ ! -f "$INFO_PLIST" ]; then
-            echo "❌ Info.plist not found at $INFO_PLIST"
-            exit 1
-          fi
 
           CURRENT_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST" || echo "1.0.0")
           CURRENT_BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST" || echo "0")
-
           IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
           NEW_PATCH=$((patch + 1))
           NEW_VERSION="${major}.${minor}.${NEW_PATCH}"
           NEW_BUILD=$((CURRENT_BUILD + 1))
 
-          echo "🔧 Updating Info.plist → Version: $NEW_VERSION | Build: $NEW_BUILD"
+          echo "Updating to Version=$NEW_VERSION Build=$NEW_BUILD"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
 
@@ -63,67 +56,66 @@ workflows:
         script: |
           xcode-project use-profiles --project ios/Runner.xcodeproj
 
-      - name: 🏗️ Build IPA for App Store Connect
+      - name: 🏗️ Build and export IPA manually (App Store)
         script: |
-          echo "🚀 Building IPA..."
-          xcode-project build-ipa \
-            --workspace ios/Runner.xcworkspace \
-            --scheme Runner
-          echo "✅ IPA build completed."
+          echo "🚀 Building archive..."
+          xcodebuild -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            clean archive \
+            DEVELOPMENT_TEAM="$CM_DEVELOPER_TEAM" \
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID"
 
-      - name: 🩹 Fix Info.plist inside built IPA before upload
-        script: |
+          echo "📦 Exporting IPA..."
+          cat > exportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store</string>
+            <key>uploadBitcode</key><false/>
+            <key>uploadSymbols</key><true/>
+            <key>signingStyle</key><string>automatic</string>
+            <key>compileBitcode</key><false/>
+            <key>teamID</key><string>$CM_DEVELOPER_TEAM</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>$BUNDLE_ID</key><string>AppStore</string>
+            </dict>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -exportPath build/ios/ipa \
+            -exportOptionsPlist exportOptions.plist
+
           IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
           if [ -z "$IPA_PATH" ]; then
-            echo "❌ No IPA found for upload!"
+            echo "❌ No IPA produced."
             exit 1
           fi
+          echo "✅ IPA built at: $IPA_PATH"
 
-          echo "🔧 Patching Info.plist inside $IPA_PATH ..."
+      - name: 🩹 Verify Info.plist inside built IPA
+        script: |
+          IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
           mkdir -p extracted_ipa
           unzip -q "$IPA_PATH" -d extracted_ipa
-
           APP_PLIST=$(find extracted_ipa/Payload -name "Info.plist" | head -1)
-          if [ ! -f "$APP_PLIST" ]; then
-            echo "❌ Info.plist not found in archive!"
-            exit 1
-          fi
+          /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP_PLIST"
+          /usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP_PLIST"
 
-          # Ensure both keys exist
-          /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 1" "$APP_PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.0.0" "$APP_PLIST" 2>/dev/null || true
-
-          # Copy values from source Info.plist
-          SRC_PLIST=$INFO_PLIST_PATH
-          SRC_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$SRC_PLIST")
-          SRC_BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$SRC_PLIST")
-
-          echo "Setting archive Info.plist to Version=$SRC_VERSION Build=$SRC_BUILD"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $SRC_VERSION" "$APP_PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $SRC_BUILD" "$APP_PLIST"
-
-          # Re-zip the IPA
-          cd extracted_ipa
-          zip -qry "../fixed.ipa" .
-          cd ..
-          mv fixed.ipa "$IPA_PATH"
-          echo "✅ Fixed Info.plist inside archive."
-
-      - name: 🚀 Upload to App Store Connect (TestFlight)
+      - name: 🚀 Upload to App Store Connect
         script: |
           IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
           echo "📤 Uploading $IPA_PATH to App Store Connect..."
           app-store-connect upload \
             --path "$IPA_PATH" \
             --use-latest-version \
-            --submit-for-testflight true || {
-              echo "⚠️ Upload failed, retrying in 30s..."
-              sleep 30
-              app-store-connect upload \
-                --path "$IPA_PATH" \
-                --use-latest-version \
-                --submit-for-testflight true
-            }
+            --submit-for-testflight true
           echo "✅ Upload complete! Check App Store Connect → TestFlight."
 
     artifacts:
@@ -142,5 +134,3 @@ workflows:
         auth: integration
         submit_to_testflight: true
         submit_to_app_store: false
-        beta_groups:
-          - "Internal Testers"
