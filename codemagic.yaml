@@ -1,3 +1,12 @@
+# ✅ Automatically trigger build on every push to main
+triggering:
+  events:
+    - push
+  branch_patterns:
+    - pattern: main
+      include: true
+      source: true
+
 workflows:
   ios-native-workflow:
     name: iOS Native Build
@@ -5,15 +14,6 @@ workflows:
     instance_type: mac_mini_m2
     integrations:
       app_store_connect: SabihKey
-
-    # ✅ Automatically trigger build on every push to main
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-          source: true
 
     environment:
       ios_signing:
@@ -28,18 +28,21 @@ workflows:
         APP_STORE_APPLE_ID: 6754937234
 
     scripts:
+      # 🧹 Clean Flutter and iOS build folders
       - name: Clean Flutter and iOS folders
         script: |
           flutter clean
           rm -rf ios/Pods ios/Podfile.lock
           flutter pub get
 
+      # 🍎 Install CocoaPods dependencies
       - name: Install CocoaPods
         script: |
           cd ios
           pod install
           cd ..
 
+      # 🔢 Automatically bump version and build number
       - name: Increment iOS version and build number automatically
         script: |
           cd ios
@@ -55,34 +58,37 @@ workflows:
           echo "✅ Updated Version: $NEW_VERSION ($NEW_BUILD)"
           cd ..
 
+      # 🧾 Apply provisioning profiles
       - name: Use provisioning profiles
         script: |
           xcode-project use-profiles --project ios/Runner.xcodeproj
 
+      # 🏗️ Build the IPA for App Store / TestFlight
       - name: Build IPA for App Store
         script: |
           xcode-project build-ipa \
             --workspace ios/Runner.xcworkspace \
-            --scheme Runner
+            --scheme Runner \
+            --export-method app-store
 
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
 
-publishing:
-  email:
-    recipients:
-      - levelupsports96@gmail.com
-    notify:
-      success: true
-      failure: true
+    publishing:
+      email:
+        recipients:
+          - levelupsports96@gmail.com
+        notify:
+          success: true
+          failure: true
 
-  app_store_connect:
-    auth: integration
-    apple_id: 6754937234
-    bundle_identifier: com.example.levelUpSport
-    ipa_path: "build/ios/ipa/Level_Up_Sports.ipa"
-    submit_to_testflight: true
-    submit_to_app_store: false
-    beta_groups:
-      - "Internal Testers"
+      app_store_connect:
+        auth: integration
+        apple_id: 6754937234
+        bundle_identifier: com.example.levelUpSport
+        ipa_path: "build/ios/ipa/Level Up Sports.ipa"
+        submit_to_testflight: true
+        submit_to_app_store: false
+        beta_groups:
+          - "Internal Testers"
