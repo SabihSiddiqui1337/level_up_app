@@ -23,6 +23,7 @@ workflows:
       vars:
         XCODE_WORKSPACE: "Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
+        INFO_PLIST_PATH: "ios/Runner/Info.plist"
         BUNDLE_ID: "com.example.levelUpSport"
 
     scripts:
@@ -38,10 +39,15 @@ workflows:
           pod install
           cd ..
 
-      - name: 🔢 Increment iOS version and build number automatically
+      - name: 🔢 Increment iOS version and build number safely
         script: |
-          cd ios
-          INFO_PLIST="Runner/Info.plist"
+          INFO_PLIST=$INFO_PLIST_PATH
+
+          if [ ! -f "$INFO_PLIST" ]; then
+            echo "❌ Error: Info.plist not found at $INFO_PLIST"
+            exit 1
+          fi
+
           CURRENT_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST" || echo "1.0.0")
           CURRENT_BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST" || echo "0")
 
@@ -50,11 +56,13 @@ workflows:
           NEW_VERSION="${major}.${minor}.${NEW_PATCH}"
           NEW_BUILD=$((CURRENT_BUILD + 1))
 
+          echo "Updating Info.plist → Version: $NEW_VERSION | Build: $NEW_BUILD"
+
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
 
-          echo "✅ Updated Version: $NEW_VERSION ($NEW_BUILD)"
-          cd ..
+          echo "✅ Updated CFBundleShortVersionString and CFBundleVersion successfully."
+          cat "$INFO_PLIST" | grep -A 1 CFBundleVersion || true
 
       - name: 🧾 Use provisioning profiles
         script: |
@@ -62,21 +70,20 @@ workflows:
 
       - name: 🏗️ Build IPA for App Store Connect
         script: |
-          echo "🚀 Starting IPA build..."
+          echo "🚀 Building IPA..."
           xcode-project build-ipa \
             --workspace ios/Runner.xcworkspace \
             --scheme Runner
+          echo "✅ Build completed successfully."
 
-          echo "✅ IPA build finished successfully."
-
-      - name: 🚀 Upload build to App Store Connect (TestFlight)
+      - name: 🚀 Upload to App Store Connect (TestFlight)
         script: |
           echo "📤 Uploading to App Store Connect..."
           app-store-connect upload \
             --path "build/ios/ipa/Level_Up_Sports.ipa" \
             --use-latest-version \
             --submit-for-testflight true
-          
+
           echo "✅ Upload complete! Check App Store Connect → TestFlight."
 
     artifacts:
