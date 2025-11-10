@@ -126,7 +126,7 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
     }
 
     return SizedBox(
-      height: (_sportNames.length / 2).ceil() * 200.0, // Approximate height based on itemsd
+      height: (_sportNames.length / 2).ceil() * 200.0, // Approximate height based on items
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
