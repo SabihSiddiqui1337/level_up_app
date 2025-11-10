@@ -1,15 +1,12 @@
 workflows:
   ios-native-workflow:
-    name: iOS App Store Build
+    name: iOS Native Build
     max_build_duration: 120
     instance_type: mac_mini_m2
-
     integrations:
-      app_store_connect: SabihKey   # ✅ your Codemagic Apple API integration key
+      app_store_connect: SabihKey
 
     environment:
-      groups:
-        - app_store_connect          # ✅ this links to the environment variable group you set
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.example.levelUpSport
@@ -19,7 +16,7 @@ workflows:
         XCODE_WORKSPACE: "Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
         BUNDLE_ID: "com.example.levelUpSport"
-        APP_STORE_APPLE_ID: 6754937234  # your app's Apple ID
+        APP_STORE_APPLE_ID: 6754937234
 
     scripts:
       - name: Clean Flutter and iOS folders
@@ -38,6 +35,35 @@ workflows:
         script: |
           xcode-project use-profiles --project ios/Runner.xcodeproj
 
+      - name: Increment build and version number
+        script: |
+          cd ios
+          INFO_PLIST="Runner/Info.plist"
+
+          # Extract current version and build numbers
+          CURRENT_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST")
+          CURRENT_BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST")
+
+          echo "Current version: $CURRENT_VERSION"
+          echo "Current build: $CURRENT_BUILD"
+
+          # Increment build number
+          NEW_BUILD=$((CURRENT_BUILD + 1))
+
+          # Increment patch version (e.g. 1.0.3 -> 1.0.4)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+          echo "New version: $NEW_VERSION"
+          echo "New build: $NEW_BUILD"
+
+          # Apply the new version and build
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
+
+          cd ..
+
       - name: Build IPA for App Store
         script: |
           xcode-project build-ipa \
@@ -48,17 +74,17 @@ workflows:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
 
-    publishing:
-      email:
-        recipients:
-          - levelupsports96@gmail.com
-        notify:
-          success: true
-          failure: true
+publishing:
+  email:
+    recipients:
+      - levelupsports96@gmail.com
+    notify:
+      success: true
+      failure: true
 
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
-        submit_to_app_store: false
-        beta_groups:
-          - "Internal Testers"
+  app_store_connect:
+    auth: integration
+    submit_to_testflight: true
+    submit_to_app_store: false
+    beta_groups:
+      - "Internal Testers"
