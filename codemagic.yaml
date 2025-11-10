@@ -1,6 +1,6 @@
 workflows:
   ios-native-workflow:
-    name: iOS Native Build
+    name: iOS Auto Build & Upload
     max_build_duration: 120
     instance_type: mac_mini_m2
     integrations:
@@ -26,19 +26,19 @@ workflows:
         BUNDLE_ID: "com.example.levelUpSport"
 
     scripts:
-      - name: Clean Flutter and iOS folders
+      - name: 🧹 Clean Flutter and iOS folders
         script: |
           flutter clean
           rm -rf ios/Pods ios/Podfile.lock
           flutter pub get
 
-      - name: Install CocoaPods
+      - name: 🍎 Install CocoaPods
         script: |
           cd ios
           pod install
           cd ..
 
-      - name: Increment iOS version and build number automatically
+      - name: 🔢 Increment iOS version and build number automatically
         script: |
           cd ios
           INFO_PLIST="Runner/Info.plist"
@@ -56,16 +56,28 @@ workflows:
           echo "✅ Updated Version: $NEW_VERSION ($NEW_BUILD)"
           cd ..
 
-      - name: Use provisioning profiles
+      - name: 🧾 Use provisioning profiles
         script: |
           xcode-project use-profiles --project ios/Runner.xcodeproj
 
-      - name: Build IPA for App Store
+      - name: 🏗️ Build IPA for App Store Connect
         script: |
+          echo "🚀 Starting IPA build..."
           xcode-project build-ipa \
             --workspace ios/Runner.xcworkspace \
-            --scheme Runner \
-            --export-method app-store
+            --scheme Runner
+
+          echo "✅ IPA build finished successfully."
+
+      - name: 🚀 Upload build to App Store Connect (TestFlight)
+        script: |
+          echo "📤 Uploading to App Store Connect..."
+          app-store-connect upload \
+            --path "build/ios/ipa/Level_Up_Sports.ipa" \
+            --use-latest-version \
+            --submit-for-testflight true
+          
+          echo "✅ Upload complete! Check App Store Connect → TestFlight."
 
     artifacts:
       - build/ios/ipa/*.ipa
