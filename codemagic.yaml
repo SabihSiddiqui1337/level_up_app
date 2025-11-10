@@ -23,8 +23,8 @@ workflows:
       vars:
         XCODE_WORKSPACE: "Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
+        APP_STORE_ID: "6754937234"
         BUNDLE_ID: "com.example.levelUpSport"
-        APP_STORE_APPLE_ID: 6754937234
 
     scripts:
       - name: Clean Flutter and iOS folders
@@ -79,9 +79,8 @@ workflows:
 
       app_store_connect:
         auth: integration
-        apple_id: 6754937234
-        bundle_identifier: com.example.levelUpSport
-        ipa_path: "build/ios/ipa/Level Up Sports.ipa"
+        apple_id: "sabih-1337@live.com"
+        app_store_id: "6754937234"
         submit_to_testflight: true
         submit_to_app_store: false
         beta_groups:
