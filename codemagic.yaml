@@ -96,7 +96,11 @@ publishing:
 
   app_store_connect:
     auth: integration
+    apple_id: 6754937234
+    bundle_identifier: com.example.levelUpSport
+    ipa_path: build/ios/ipa/Level_Up_Sports.ipa
     submit_to_testflight: true
     submit_to_app_store: false
     beta_groups:
       - "Internal Testers"
+

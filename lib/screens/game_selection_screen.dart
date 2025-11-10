@@ -141,41 +141,48 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
         final icon = _getSportIcon(sportName);
         final color = _getSportColor(index);
 
-        return _buildGameCard(context, sportName, icon, color, () async {
-          // Find the first upcoming event for this sport
-          final eventsForSport = _events
-              .where((e) => e.sportName.toLowerCase() == sportName.toLowerCase())
-              .toList();
-          if (eventsForSport.isEmpty) {
-            // Fallback: go directly to registration if no event found
-            if (sportName.toLowerCase().contains('pickleball')) {
-              _navigateToPickleballRegistration(context);
-            } else {
-              _navigateToTeamRegistration(context, sportName);
+        // Find the first upcoming event for this sport
+        final eventsForSport = _events
+            .where((e) => e.sportName.toLowerCase() == sportName.toLowerCase())
+            .toList();
+        final event = eventsForSport.isNotEmpty ? eventsForSport.first : null;
+        
+        return _buildGameCard(
+          context, 
+          sportName, 
+          icon, 
+          color, 
+          event?.title ?? sportName, // Show event title if available, otherwise sport name
+          () async {
+            if (event == null) {
+              // Fallback: go directly to registration if no event found
+              if (sportName.toLowerCase().contains('pickleball')) {
+                _navigateToPickleballRegistration(context);
+              } else {
+                _navigateToTeamRegistration(context, sportName);
+              }
+              return;
             }
-            return;
-          }
 
-          final event = eventsForSport.first;
-
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => EventDetailScreen(
-                event: event,
-                onHomePressed: widget.onHomePressed,
-                onSignUp: () {
-                  // Navigate to appropriate registration form
-                  if (sportName.toLowerCase().contains('pickleball')) {
-                    _navigateToPickleballRegistration(context);
-                  } else {
-                    _navigateToTeamRegistration(context, sportName, event: event);
-                  }
-                },
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EventDetailScreen(
+                  event: event,
+                  onHomePressed: widget.onHomePressed,
+                  onSignUp: () {
+                    // Navigate to appropriate registration form
+                    if (sportName.toLowerCase().contains('pickleball')) {
+                      _navigateToPickleballRegistration(context, event: event);
+                    } else {
+                      _navigateToTeamRegistration(context, sportName, event: event);
+                    }
+                  },
+                ),
               ),
-            ),
-          );
-        });
+            );
+          },
+        );
       },
       ),
     );
@@ -215,6 +222,7 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
     String gameName,
     IconData icon,
     Color color,
+    String displayTitle, // Event title or sport name
     VoidCallback onTap,
   ) {
     // Determine which image to use based on sport name
@@ -301,16 +309,18 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
             ),
           ),
         ),
-        // Text below the card
+        // Text below the card - show event title if available, otherwise sport name
         const SizedBox(height: 12),
         Text(
-          gameName,
+          displayTitle,
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
             color: Colors.grey[800],
           ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );
@@ -348,12 +358,13 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
     );
   }
 
-  void _navigateToPickleballRegistration(BuildContext context) {
+  void _navigateToPickleballRegistration(BuildContext context, {Event? event}) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder:
             (context) => PickleballTeamRegistrationScreen(
+              event: event,
               onSave: (team) {
                 if (widget.onSavePickleball != null) {
                   widget.onSavePickleball!(team);

@@ -61,7 +61,7 @@ class _PickleballProcessRegistrationScreenState
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          'Process Pickleball Registration',
+          'Process Registration',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: const Color(0xFF38A169),

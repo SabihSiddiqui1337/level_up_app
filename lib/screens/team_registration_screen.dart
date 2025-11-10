@@ -380,7 +380,13 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
             25, // Default to 25 if invalid
         players: List.from(_players), // Create a copy of the players list
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
-        division: widget.event?.division ?? _selectedDivision ?? 'Adult 18+',
+        // Always use event division if set, otherwise use selected division
+        // This ensures division is locked when event has it set
+        division: (widget.event != null && 
+                   widget.event!.division != null && 
+                   widget.event!.division!.trim().isNotEmpty)
+                  ? widget.event!.division!
+                  : (_selectedDivision ?? 'Adult 18+'),
         createdByUserId: currentUser?.id,
         isPrivate:
             !isAdmin, // Regular users create private teams, admins create public teams
@@ -469,7 +475,9 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(
-            widget.team == null ? 'Register Team' : 'Edit Team',
+            widget.event != null && widget.event!.title.isNotEmpty
+                ? '${widget.event!.title} Registration'
+                : (widget.team == null ? 'Register Team' : 'Edit Team'),
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
@@ -667,24 +675,37 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Division Field - Show as read-only text if event has division, otherwise dropdown
-                widget.event?.division != null
+                // Division Field - Always locked when event has division set (for ALL users)
+                // If event exists and has a division set, it MUST be locked and read-only
+                (widget.event != null && 
+                 widget.event!.division != null && 
+                 widget.event!.division!.trim().isNotEmpty)
                     ? TextFormField(
                         initialValue: widget.event!.division,
                         style: const TextStyle(color: Colors.black87),
                         decoration: InputDecoration(
                           labelText: 'Division (Preset)',
                           labelStyle: TextStyle(color: Colors.grey[600]),
+                          prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
                           border: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                          ),
+                          disabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
                           ),
                           filled: true,
                           fillColor: Colors.grey[200],
+                          suffixIcon: Icon(Icons.info_outline, color: Colors.grey[500], size: 20),
+                          hintText: 'Set by event organizer',
                         ),
                         readOnly: true,
+                        enabled: false,
                       )
                     : DropdownButtonFormField<String>(
                         value: _selectedDivision,
@@ -835,24 +856,37 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                // Division Field - Show as read-only text if event has division, otherwise dropdown
-                widget.event?.division != null
+                // Division Field - Always locked when event has division set (for ALL users)
+                // If event exists and has a division set, it MUST be locked and read-only
+                (widget.event != null && 
+                 widget.event!.division != null && 
+                 widget.event!.division!.trim().isNotEmpty)
                     ? TextFormField(
                         initialValue: widget.event!.division,
                         style: const TextStyle(color: Colors.black87),
                         decoration: InputDecoration(
                           labelText: 'Division (Preset)',
                           labelStyle: TextStyle(color: Colors.grey[600]),
+                          prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
                           border: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                          ),
+                          disabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
                           ),
                           filled: true,
                           fillColor: Colors.grey[200],
+                          suffixIcon: Icon(Icons.info_outline, color: Colors.grey[500], size: 20),
+                          hintText: 'Set by event organizer',
                         ),
                         readOnly: true,
+                        enabled: false,
                       )
                     : DropdownButtonFormField<String>(
                         value: _selectedDivision,
@@ -1197,7 +1231,13 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         coachAge: 25, // Default age
         players: [], // Empty players list for management
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
-        division: widget.event?.division ?? _selectedDivision ?? 'Adult 18+',
+        // Always use event division if set, otherwise use selected division
+        // This ensures division is locked when event has it set
+        division: (widget.event != null && 
+                   widget.event!.division != null && 
+                   widget.event!.division!.trim().isNotEmpty)
+                  ? widget.event!.division!
+                  : (_selectedDivision ?? 'Adult 18+'),
         createdByUserId: currentUser?.id,
         // Admin/management teams should be public (visible to all)
         // Regular user teams should be private (visible only to creator)

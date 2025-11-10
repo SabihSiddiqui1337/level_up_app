@@ -67,24 +67,35 @@ class _PickleballTeamRegistrationScreenState
   final _coachPhoneController = TextEditingController();
   final _coachEmailController = TextEditingController();
   final AuthService _authService = AuthService();
+  final EventService _eventService = EventService();
 
   final List<PickleballPlayer> _players = [];
   String _selectedDuprRating = PickleballScreenKeys.duprRatingUnder35;
   bool _isSaving = false;
+  Event? _loadedEvent; // Event loaded from service if not provided
 
   final List<String> _duprRatings = [
     PickleballScreenKeys.duprRatingUnder35,
     PickleballScreenKeys.duprRatingOver4,
   ];
 
+  // Get the current event (either from widget or loaded from service)
+  Event? get _currentEvent => widget.event ?? _loadedEvent;
+
+  // Helper method to check if event has a division set
+  bool get _eventHasDivision {
+    return _currentEvent != null && 
+           _currentEvent!.division != null && 
+           _currentEvent!.division!.trim().isNotEmpty;
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadEventIfNeeded();
     // Set division from event if available and not empty
-    if (widget.event != null && 
-        widget.event!.division != null && 
-        widget.event!.division!.trim().isNotEmpty) {
-      _selectedDuprRating = widget.event!.division!.trim();
+    if (_eventHasDivision) {
+      _selectedDuprRating = _currentEvent!.division!.trim();
     } else if (widget.team != null) {
       _selectedDuprRating = widget.team!.division;
     }
@@ -95,6 +106,48 @@ class _PickleballTeamRegistrationScreenState
       _coachPhoneController.text = widget.team!.coachPhone;
       _coachEmailController.text = widget.team!.coachEmail;
       _players.addAll(widget.team!.players);
+    }
+  }
+
+  // Load event from service if not provided
+  Future<void> _loadEventIfNeeded() async {
+    // If event is already provided, no need to load
+    if (widget.event != null) return;
+    
+    // If team has an eventId, try to load that specific event
+    if (widget.team != null && widget.team!.eventId.isNotEmpty) {
+      await _eventService.initialize();
+      final event = _eventService.events.firstWhere(
+        (e) => e.id == widget.team!.eventId,
+        orElse: () => _eventService.events.firstWhere(
+          (e) => e.sportName.toLowerCase().contains('pickleball'),
+          orElse: () => _eventService.events.first,
+        ),
+      );
+      if (mounted) {
+        setState(() {
+          _loadedEvent = event;
+        });
+      }
+      return;
+    }
+    
+    // Otherwise, load the first upcoming Pickleball event
+    await _eventService.initialize();
+    final upcomingEvents = await _eventService.getUpcomingEventsExcludingCompleted();
+    final pickleballEvents = upcomingEvents.where(
+      (e) => e.sportName.toLowerCase().contains('pickleball') || 
+             e.sportName.toLowerCase().contains('pickelball')
+    ).toList();
+    
+    if (pickleballEvents.isNotEmpty && mounted) {
+      setState(() {
+        _loadedEvent = pickleballEvents.first;
+        // Update division if event has one
+        if (_eventHasDivision) {
+          _selectedDuprRating = _currentEvent!.division!.trim();
+        }
+      });
     }
   }
 
@@ -139,7 +192,9 @@ class _PickleballTeamRegistrationScreenState
       context: context,
       builder:
           (context) => _PickleballPlayerDialog(
-            fixedDuprRating: widget.event?.division ?? _selectedDuprRating,
+            fixedDuprRating: _eventHasDivision 
+                ? _currentEvent!.division! 
+                : _selectedDuprRating,
             onSave: (player) {
               setState(() {
                 _players.add(player);
@@ -155,7 +210,9 @@ class _PickleballTeamRegistrationScreenState
       builder:
           (context) => _PickleballPlayerDialog(
             player: _players[index],
-            fixedDuprRating: widget.event?.division ?? _selectedDuprRating,
+            fixedDuprRating: _eventHasDivision 
+                ? _currentEvent!.division! 
+                : _selectedDuprRating,
             onSave: (updatedPlayer) {
               setState(() {
                 _players[index] = updatedPlayer;
@@ -175,10 +232,10 @@ class _PickleballTeamRegistrationScreenState
     if (_isSaving) return; // Prevent rapid clicking
 
     // Check if event still exists (if registering for an event)
-    if (widget.event != null) {
+    if (_currentEvent != null) {
       final eventService = EventService();
       await eventService.initialize();
-      final existingEvent = eventService.getEventById(widget.event!.id);
+      final existingEvent = eventService.getEventById(_currentEvent!.id);
       if (existingEvent == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -223,15 +280,20 @@ class _PickleballTeamRegistrationScreenState
         coachEmail: isManagement ? 'management@levelupsports.com' : _coachEmailController.text,
         players: List.from(_players), // Create a copy of the players list
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
-        division: widget.event?.division ?? _selectedDuprRating,
+        // Always use event division if set, otherwise use selected rating
+        // This ensures division is locked when event has it set
+        division: _eventHasDivision
+                  ? _currentEvent!.division!
+                  : _selectedDuprRating,
         createdByUserId: currentUser?.id,
         isPrivate:
             !isAdmin && !isManagement,
-        eventId: widget.event?.id ?? widget.team?.eventId ?? '',
+        eventId: _currentEvent?.id ?? widget.team?.eventId ?? '',
       );
 
-      // Create default event for pickleball tournament
-      final event = Event(
+      // Use the actual event if provided, otherwise create a default event
+      // This ensures we show the correct event details from the Schedule tab
+      final event = _currentEvent ?? Event(
         id: 'pickleball_tournament_2025',
         title: PickleballScreenKeys.tournamentTitle,
         date: DateTime(2025, 11, 8), // Convert string date to DateTime
@@ -305,12 +367,16 @@ class _PickleballTeamRegistrationScreenState
         coachEmail: 'management@levelupsports.com',
         players: [], // Empty players list for management
         registrationDate: widget.team?.registrationDate ?? DateTime.now(),
-        division: widget.event?.division ?? _selectedDuprRating,
+        // Always use event division if set, otherwise use selected rating
+        // This ensures division is locked when event has it set
+        division: _eventHasDivision
+                  ? _currentEvent!.division!
+                  : _selectedDuprRating,
         createdByUserId: currentUser?.id,
         // Admin/management teams should be public (visible to all)
         // Regular user teams should be private (visible only to creator)
         isPrivate: !isAdmin,
-        eventId: widget.event?.id ?? widget.team?.eventId ?? '',
+        eventId: _currentEvent?.id ?? widget.team?.eventId ?? '',
       );
 
       // Save the team
@@ -358,7 +424,11 @@ class _PickleballTeamRegistrationScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(PickleballScreenKeys.screenTitle),
+        title: Text(
+          _currentEvent != null && _currentEvent!.title.isNotEmpty
+              ? '${_currentEvent!.title} Registration'
+              : PickleballScreenKeys.screenTitle,
+        ),
         backgroundColor: const Color(0xFF38A169),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -387,7 +457,7 @@ class _PickleballTeamRegistrationScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.event?.title ?? 'Register Team',
+              _currentEvent?.title ?? 'Register Team',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: const Color(0xFF38A169),
@@ -421,27 +491,30 @@ class _PickleballTeamRegistrationScreenState
             ),
             const SizedBox(height: 24),
 
-            // DUPR Rating Field - Show as read-only text if event has division, otherwise dropdown
-            // For pickleball events, if event exists and has a division set, it should always be read-only
-            (widget.event != null && 
-             widget.event!.division != null && 
-             widget.event!.division!.trim().isNotEmpty)
-                ? TextFormField(
-                    initialValue: widget.event!.division,
+            // DUPR Rating Field - Always locked when event has division set (for ALL users)
+            // If event exists and has a division set, it MUST be locked and read-only
+            _eventHasDivision
+                    ? TextFormField(
+                        initialValue: _currentEvent!.division,
                     style: const TextStyle(color: Colors.black87),
                     decoration: InputDecoration(
                       labelText: 'DUPR Rating (Preset)',
                       labelStyle: TextStyle(color: Colors.grey[600]),
                       prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
                       border: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                        borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                        borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                      ),
+                      disabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
                       ),
                       filled: true,
                       fillColor: Colors.grey[200],
-                      suffixIcon: Icon(Icons.info_outline, color: Colors.grey[500], size: 20),
                       hintText: 'Set by event organizer',
                     ),
                     readOnly: true,
@@ -461,11 +534,13 @@ class _PickleballTeamRegistrationScreenState
                             child: Text(rating),
                           );
                         }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedDuprRating = value!;
-                      });
-                    },
+                    onChanged: _eventHasDivision 
+                        ? null  // Disable dropdown if event has division
+                        : (value) {
+                            setState(() {
+                              _selectedDuprRating = value!;
+                            });
+                          },
                   ),
             const SizedBox(height: 32),
 
@@ -611,27 +686,30 @@ class _PickleballTeamRegistrationScreenState
                   },
                 ),
                 const SizedBox(height: 16),
-                // DUPR Rating Field - Show as read-only text if event has division, otherwise dropdown
-                // For pickleball events, if event exists and has a division set, it should always be read-only
-                (widget.event != null && 
-                 widget.event!.division != null && 
-                 widget.event!.division!.trim().isNotEmpty)
+                // DUPR Rating Field - Always locked when event has division set (for ALL users)
+                // If event exists and has a division set, it MUST be locked and read-only
+                _eventHasDivision
                     ? TextFormField(
-                        initialValue: widget.event!.division,
+                        initialValue: _currentEvent!.division,
                         style: const TextStyle(color: Colors.black87),
                         decoration: InputDecoration(
                           labelText: 'DUPR Rating (Preset)',
                           labelStyle: TextStyle(color: Colors.grey[600]),
                           prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
                           border: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                          ),
+                          disabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
                           ),
                           filled: true,
                           fillColor: Colors.grey[200],
-                          suffixIcon: Icon(Icons.info_outline, color: Colors.grey[500], size: 20),
                           hintText: 'Set by event organizer',
                         ),
                         readOnly: true,
@@ -651,11 +729,13 @@ class _PickleballTeamRegistrationScreenState
                                 child: Text(rating),
                               );
                             }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedDuprRating = value!;
-                          });
-                        },
+                        onChanged: _eventHasDivision 
+                            ? null  // Disable dropdown if event has division
+                            : (value) {
+                                setState(() {
+                                  _selectedDuprRating = value!;
+                                });
+                              },
                       ),
               ],
             ),
@@ -853,7 +933,7 @@ class _PickleballPlayerDialogState extends State<_PickleballPlayerDialog> {
                 },
               ),
               const SizedBox(height: 16),
-              // Show locked DUPR rating (read-only)
+              // Show locked DUPR rating (read-only) - always locked when fixed rating is provided
               TextFormField(
                 initialValue: _selectedDuprRating,
                 style: const TextStyle(color: Colors.black87),
@@ -862,16 +942,22 @@ class _PickleballPlayerDialogState extends State<_PickleballPlayerDialog> {
                   labelStyle: TextStyle(color: Colors.grey[600]),
                   prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
                   border: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                    borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
                   ),
                   enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                    borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                  ),
+                  disabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
                   ),
                   filled: true,
                   fillColor: Colors.grey[200],
-                  suffixIcon: Icon(Icons.info_outline, color: Colors.grey[500], size: 20),
                 ),
                 readOnly: true,
+                enabled: false,
               ),
             ],
           ),
