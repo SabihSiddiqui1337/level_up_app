@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m2
 
     integrations:
-      app_store_connect: SabihKey
+      app_store_connect: AppStoreUploadKey
 
     triggering:
       events:
@@ -97,4 +97,3 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        submit_to_app_store: false
