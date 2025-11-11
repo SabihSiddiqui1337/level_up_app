@@ -24,6 +24,7 @@ workflows:
       vars:
         INFO_PLIST_PATH: "ios/Runner/Info.plist"
         BUNDLE_ID: "com.example.levelUpSport"
+        DEVELOPMENT_TEAM: "B6Z4CUVQVP"
 
     scripts:
       - name: 🧹 Clean & install dependencies
