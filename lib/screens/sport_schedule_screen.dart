@@ -1137,6 +1137,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       _lastStandingsCacheKey = null;
                       // Don't clear matches cache as it interferes with score persistence
                     });
+                    // Refresh standings after scores are saved
+                    _refreshStandings();
                   }
                 },
               ),
@@ -2665,6 +2667,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   }
 
   Future<void> _loadTeams() async {
+    // Reload teams to ensure we have the latest count from SharedPreferences (shared across accounts)
     await _teamService.loadTeams();
     await _pickleballTeamService.loadTeams();
     if (mounted) {
@@ -3136,14 +3139,12 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         onBackPressed: () async {
           // Save scores before navigating away
           await _saveScores();
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder:
-                  (context) => MainNavigationScreen(
-                    initialIndex: 3,
-                  ), // Go to Schedule tab
-            ),
-          );
+          // Navigate back to Standings tab (Games tab) in sport_schedule_screen
+          // Switch to Standings tab (index 1) and Preliminary Rounds tab (index 0)
+          setState(() {
+            _bottomNavIndex = 0; // Go to Preliminary Rounds/Standings tab
+            _tabController.animateTo(1); // Switch to Standings tab
+          });
         },
       ),
       bottomNavigationBar:
@@ -5028,7 +5029,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           });
                         },
                         icon: const Icon(Icons.sports_esports),
-                        label: const Text('View Playoffs'),
+                        label: const Text('Go to Playoffs'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2196F3),
                           foregroundColor: Colors.white,
@@ -5045,6 +5046,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         ),
         
         // Start/Restart Playoffs Buttons (only for scoring users when playoffs have started)
+        // Hide these buttons when playoffs have started - only show "Go to Playoffs" button
+        // Commented out: When playoffs start, only "Go to Playoffs" button should be shown
+        /*
         if (_authService.canScore && _playoffsStarted)
           Builder(
             builder: (context) {
@@ -5133,6 +5137,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               );
             },
           ),
+        */
       ],
     );
   }

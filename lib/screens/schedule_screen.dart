@@ -43,6 +43,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     });
 
     await _eventService.initialize();
+    // Reload teams to ensure we have the latest count from SharedPreferences (shared across accounts)
     await _teamService.loadTeams();
     await _pickleballTeamService.loadTeams();
 
