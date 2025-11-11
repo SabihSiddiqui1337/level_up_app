@@ -1,19 +1,10 @@
 workflows:
-  ios-auto-testflight:
-    name: iOS Auto Build & Upload to TestFlight
+  ios-native-workflow:
+    name: iOS Native Build
     max_build_duration: 120
     instance_type: mac_mini_m2
-
     integrations:
-      app_store_connect: CodemagicUploadKey
-
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-          source: true
+      app_store_connect: SabihKey
 
     environment:
       ios_signing:
@@ -22,78 +13,48 @@ workflows:
       xcode: latest
       cocoapods: default
       vars:
-        INFO_PLIST_PATH: "ios/Runner/Info.plist"
+        XCODE_WORKSPACE: "Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+        BUNDLE_ID: "com.example.levelUpSport"
+        APP_STORE_APPLE_ID: 6754937234
 
     scripts:
-      - name: 🧹 Clean & install dependencies
+      - name: Clean Flutter and iOS folders
         script: |
           flutter clean
           rm -rf ios/Pods ios/Podfile.lock
           flutter pub get
-          cd ios && pod install && cd ..
 
-      - name: 🔢 Auto increment version & build number
+      - name: Install CocoaPods
         script: |
-          INFO_PLIST=$INFO_PLIST_PATH
-          CURRENT_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST" || echo "1.0.0")
-          CURRENT_BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST" || echo "0")
+          cd ios
+          pod install
+          cd ..
 
-          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
-          NEW_PATCH=$((patch + 1))
-          NEW_VERSION="${major}.${minor}.${NEW_PATCH}"
-          NEW_BUILD=$((CURRENT_BUILD + 1))
-
-          echo "🔧 Updating Info.plist → Version: $NEW_VERSION | Build: $NEW_BUILD"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
-          echo "✅ Updated to Version=$NEW_VERSION Build=$NEW_BUILD"
-
-      - name: 🏗️ Build Flutter IPA (NO codesign)
+      - name: Use provisioning profiles
         script: |
-          echo "🚀 Building Flutter IPA (no codesign)..."
-          flutter build ipa --release --no-codesign
-
-      - name: 🔐 Apply provisioning profiles
-        script: |
-          echo "🔐 Applying provisioning profiles from Codemagic..."
           xcode-project use-profiles --project ios/Runner.xcodeproj
 
-      - name: 📦 Build signed IPA for App Store Connect
+      - name: Build IPA for App Store
         script: |
-          echo "📦 Building signed IPA with xcode-project..."
           xcode-project build-ipa \
             --workspace ios/Runner.xcworkspace \
             --scheme Runner
-          echo "✅ Signed IPA built."
-
-      - name: 🚀 Upload to TestFlight
-        script: |
-          echo "🔍 Looking for IPA in build/ios/ipa..."
-          IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
-          if [ -z "$IPA_PATH" ]; then
-            echo "❌ No IPA found to upload!"
-            exit 1
-          fi
-
-          echo "📤 Uploading $IPA_PATH to TestFlight..."
-          app-store-connect upload \
-            --path "$IPA_PATH" \
-            --use-latest-version \
-            --submit-for-testflight true
-          echo "✅ Upload complete!"
 
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
 
-    publishing:
-      email:
-        recipients:
-          - levelupsports96@gmail.com
-        notify:
-          success: true
-          failure: true
-
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
+publishing:
+  email:
+    recipients:
+      - levelupsports96@gmail.com
+    notify:
+      success: true
+      failure: true
+  app_store_connect:
+    auth: integration
+    submit_to_testflight: true
+    submit_to_app_store: false
+    beta_groups:
+      - "Internal Testers"
