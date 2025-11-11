@@ -23,8 +23,6 @@ workflows:
       cocoapods: default
       vars:
         INFO_PLIST_PATH: "ios/Runner/Info.plist"
-        BUNDLE_ID: "com.example.levelUpSport"
-        DEVELOPMENT_TEAM: "B6Z4CUVQVP"
 
     scripts:
       - name: 🧹 Clean & install dependencies
@@ -50,39 +48,42 @@ workflows:
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
           echo "✅ Updated to Version=$NEW_VERSION Build=$NEW_BUILD"
 
-      - name: 🏗️ Build and export IPA
+      - name: 🏗️ Build Flutter IPA (NO codesign)
         script: |
-          echo "🚀 Building Flutter IPA..."
-          flutter build ipa --release || {
-            echo "❌ Flutter build failed!"
-            exit 1
-          }
+          echo "🚀 Building Flutter IPA (no codesign)..."
+          flutter build ipa --release --no-codesign
 
-          echo "📦 Searching for IPA..."
-          IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
-          if [ -z "$IPA_PATH" ]; then
-            echo "❌ No IPA found in build output."
-            exit 1
-          fi
-          echo "✅ IPA ready at: $IPA_PATH"
+      - name: 🔐 Apply provisioning profiles
+        script: |
+          echo "🔐 Applying provisioning profiles from Codemagic..."
+          xcode-project use-profiles --project ios/Runner.xcodeproj
+
+      - name: 📦 Build signed IPA for App Store Connect
+        script: |
+          echo "📦 Building signed IPA with xcode-project..."
+          xcode-project build-ipa \
+            --workspace ios/Runner.xcworkspace \
+            --scheme Runner
+          echo "✅ Signed IPA built."
 
       - name: 🚀 Upload to TestFlight
         script: |
+          echo "🔍 Looking for IPA in build/ios/ipa..."
           IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
           if [ -z "$IPA_PATH" ]; then
             echo "❌ No IPA found to upload!"
             exit 1
           fi
+
           echo "📤 Uploading $IPA_PATH to TestFlight..."
           app-store-connect upload \
             --path "$IPA_PATH" \
             --use-latest-version \
-            --submit-for-testflight true \
-            --groups "LevelUpSports"
+            --submit-for-testflight true
           echo "✅ Upload complete!"
 
     artifacts:
-      - build/ios/**/*.ipa
+      - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
 
     publishing:
