@@ -68,20 +68,20 @@ workflows:
             mkdir -p build/ios/ipa
             echo "📤 Exporting IPA from archive..."
 
-            cat <<'EOF' > exportOptions.plist
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>method</key><string>app-store</string>
-  <key>uploadBitcode</key><false/>
-  <key>uploadSymbols</key><true/>
-  <key>signingStyle</key><string>manual</string>
-  <key>stripSwiftSymbols</key><true/>
-  <key>teamID</key><string>${APP_STORE_CONNECT_TEAM_ID}</string>
-</dict>
-</plist>
-EOF
+            cat > exportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store</string>
+            <key>uploadBitcode</key><false/>
+            <key>uploadSymbols</key><true/>
+            <key>signingStyle</key><string>manual</string>
+            <key>stripSwiftSymbols</key><true/>
+            <key>teamID</key><string>${APP_STORE_CONNECT_TEAM_ID}</string>
+          </dict>
+          </plist>
+          EOF
 
             xcodebuild -exportArchive \
               -archivePath "$ARCHIVE_PATH" \
@@ -96,6 +96,7 @@ EOF
             exit 1
           fi
           echo "✅ IPA ready at: $IPA_PATH"
+
 
 
 
