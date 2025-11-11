@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m2
 
     integrations:
-      developer_portal: SabihKey
+      app_store_connect: SabihKey
 
     triggering:
       events:
@@ -19,14 +19,11 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.example.levelUpSport
-        provisioning_profile: Sabih_levelUpSport
-        certificate: SabihSiddiqui
       xcode: latest
       cocoapods: default
       vars:
         INFO_PLIST_PATH: "ios/Runner/Info.plist"
         BUNDLE_ID: "com.example.levelUpSport"
-        APP_STORE_CONNECT_TEAM_ID: $APP_STORE_CONNECT_TEAM_ID
 
     scripts:
       - name: 🧹 Clean & install dependencies
@@ -55,7 +52,7 @@ workflows:
       - name: 🏗️ Build and export IPA
         script: |
           echo "🚀 Building Flutter IPA..."
-          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist || {
+          flutter build ipa --release || {
             echo "❌ Flutter build failed!"
             exit 1
           }
