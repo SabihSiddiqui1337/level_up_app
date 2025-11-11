@@ -49,33 +49,37 @@ workflows:
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
 
-      - name: 🏗️ Build iOS IPA for App Store Connect
-        script: |
-          echo "🚀 Building iOS IPA..."
-          flutter build ipa --release
-          echo "✅ IPA built successfully!"
-
       - name: 🚀 Upload to TestFlight (App Store Connect)
         script: |
-          IPA_PATH=$(find build/ios/iphoneos -name "*.ipa" | head -1)
+          echo "🔍 Searching for IPA in all possible locations..."
+          IPA_PATH=$(find /Users/builder/clone/build/ios/ipa -name "*.ipa" 2>/dev/null | head -1)
+
           if [ -z "$IPA_PATH" ]; then
-            echo "❌ No IPA found! Build may have failed."
-            echo "Searching again in default Flutter export path..."
-            IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
+            echo "⚠️ IPA not found in /Users/builder/clone/build/ios/ipa. Searching Flutter paths..."
+            IPA_PATH=$(find build/ios/iphoneos -name "*.ipa" 2>/dev/null | head -1)
           fi
 
           if [ -z "$IPA_PATH" ]; then
-            echo "❌ Still no IPA found. Exiting."
+            echo "⚠️ Still no IPA found. Checking for Flutter's default export folder..."
+            IPA_PATH=$(find /tmp -name "*.ipa" 2>/dev/null | head -1)
+          fi
+
+          if [ -z "$IPA_PATH" ]; then
+            echo "❌ No IPA file found anywhere. Build likely succeeded but export path changed."
+            echo "🧠 Tip: Check the 'Artifacts' tab in Codemagic for the IPA file path."
             exit 1
           fi
 
-          echo "📦 Found IPA at: $IPA_PATH"
-          echo "📤 Uploading $IPA_PATH to TestFlight..."
+          echo "✅ Found IPA: $IPA_PATH"
+          echo "📤 Uploading to TestFlight..."
           app-store-connect upload \
             --path "$IPA_PATH" \
             --use-latest-version \
-            --submit-for-testflight true
-          echo "✅ Upload complete! Check TestFlight for new build."
+            --submit-for-testflight true \
+            --groups "LevelUpSports"
+
+          echo "✅ Successfully uploaded and submitted to TestFlight group: LevelUpSports"
+
 
 
     artifacts:
