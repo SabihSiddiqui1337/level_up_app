@@ -58,38 +58,42 @@ workflows:
             exit 1
           }
 
-          echo "📦 Checking for archive..."
+          echo "📦 Searching for archive..."
           ARCHIVE_PATH=$(find build/ios/archive -name "*.xcarchive" | head -1)
           if [ -z "$ARCHIVE_PATH" ]; then
-            echo "⚠️ No .xcarchive found, trying to locate IPA directly..."
+            echo "⚠️ No .xcarchive found, trying to locate existing IPA..."
             IPA_PATH=$(find build/ios -name "*.ipa" | head -1)
           else
             echo "📦 Found archive: $ARCHIVE_PATH"
             mkdir -p build/ios/ipa
             echo "📤 Exporting IPA from archive..."
+            cat > exportOptions.plist <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key><string>app-store</string>
+  <key>uploadBitcode</key><false/>
+  <key>uploadSymbols</key><true/>
+  <key>signingStyle</key><string>manual</string>
+  <key>stripSwiftSymbols</key><true/>
+  <key>teamID</key><string>${APP_STORE_CONNECT_TEAM_ID}</string>
+</dict>
+</plist>
+EOF
+
             xcodebuild -exportArchive \
               -archivePath "$ARCHIVE_PATH" \
               -exportPath build/ios/ipa \
-              -allowProvisioningUpdates \
-              -exportOptionsPlist <(cat <<EOF
-              {
-                "method": "app-store",
-                "uploadBitcode": false,
-                "uploadSymbols": true,
-                "signingStyle": "manual",
-                "stripSwiftSymbols": true,
-                "teamID": "$APP_STORE_CONNECT_TEAM_ID"
-              }
-EOF
-              )
+              -exportOptionsPlist exportOptions.plist \
+              -allowProvisioningUpdates
           fi
 
           IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
           if [ -z "$IPA_PATH" ]; then
-            echo "❌ IPA export failed. Please check xcode logs."
+            echo "❌ IPA export failed. Please check logs."
             exit 1
           fi
-
           echo "✅ IPA ready at: $IPA_PATH"
 
       - name: 🚀 Upload to TestFlight
