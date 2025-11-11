@@ -16,8 +16,6 @@ workflows:
           source: true
 
     environment:
-      groups:
-        - app_store_connect
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.example.levelUpSport
@@ -50,30 +48,22 @@ workflows:
           echo "🔧 Updating Info.plist → Version: $NEW_VERSION | Build: $NEW_BUILD"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
-
           echo "✅ Updated to Version=$NEW_VERSION Build=$NEW_BUILD"
+
+      - name: 🏗️ Build IPA for App Store Connect
+        script: |
+          echo "🚀 Building IPA..."
+          flutter build ipa --release
+          echo "✅ IPA build completed successfully."
 
       - name: 🚀 Upload to TestFlight (App Store Connect)
         script: |
-          echo "🔍 Searching for IPA in all possible locations..."
-
-          # Check the most common export folder first
-          IPA_PATH=$(find /Users/builder/clone/build/ios/ipa -name "*.ipa" 2>/dev/null | head -1)
-
-          # Fallback: check Flutter output folders
-          if [ -z "$IPA_PATH" ]; then
-            echo "⚠️ Not found in /Users/builder/clone/build/ios/ipa, checking local Flutter paths..."
-            IPA_PATH=$(find build/ios/iphoneos -name "*.ipa" 2>/dev/null | head -1)
-          fi
-
-          # Fallback: Codemagic tmp
-          if [ -z "$IPA_PATH" ]; then
-            IPA_PATH=$(find /tmp -name "*.ipa" 2>/dev/null | head -1)
-          fi
+          echo "🔍 Searching for IPA file..."
+          IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -1)
 
           if [ -z "$IPA_PATH" ]; then
-            echo "❌ No IPA found! Please verify build step output or artifacts."
-            echo "Tip: check 'Artifacts' tab to confirm the path."
+            echo "❌ No IPA file found under build/ios/ipa/"
+            echo "🔎 Checking Artifacts tab in Codemagic is recommended."
             exit 1
           fi
 
@@ -85,9 +75,7 @@ workflows:
             --submit-for-testflight true \
             --groups "LevelUpSports"
 
-          echo "✅ Successfully uploaded to TestFlight and submitted to 'LevelUpSports' testers."
-
-
+          echo "✅ Successfully uploaded to TestFlight group 'LevelUpSports'."
 
     artifacts:
       - build/ios/ipa/*.ipa
