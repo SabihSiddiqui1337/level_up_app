@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/custom_app_bar.dart';
 import '../services/team_service.dart';
 import '../services/pickleball_team_service.dart';
+import '../services/score_service.dart';
 import 'sport_schedule_screen.dart';
 import '../services/event_service.dart';
 import '../models/event.dart';
@@ -25,15 +26,39 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   bool _isScheduleExpanded = true;
   bool _isResultsExpanded = true;
 
+  final ScoreService _scoreService = ScoreService();
+
   @override
   void initState() {
     super.initState();
+    _loadExpansionState();
     _loadEvents();
+  }
+
+  // Load expansion state for sections
+  Future<void> _loadExpansionState() async {
+    final expansionState = await _scoreService.loadScheduleExpansionState();
+    if (mounted) {
+      setState(() {
+        _isScheduleExpanded = expansionState['scheduleExpanded'] ?? true;
+        _isResultsExpanded = expansionState['resultsExpanded'] ?? true;
+      });
+    }
+  }
+
+  // Save expansion state for sections
+  Future<void> _saveExpansionState() async {
+    await _scoreService.saveScheduleExpansionState(
+      _isScheduleExpanded,
+      _isResultsExpanded,
+    );
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Reload expansion state when screen becomes visible
+    _loadExpansionState();
     _loadEvents();
   }
 
@@ -452,6 +477,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             onTap: () {
                               setState(() {
                                 _isScheduleExpanded = !_isScheduleExpanded;
+                                // Save expansion state when changed
+                                _saveExpansionState();
                               });
                             },
                             child: Row(
@@ -526,6 +553,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             onTap: () {
                               setState(() {
                                 _isResultsExpanded = !_isResultsExpanded;
+                                // Save expansion state when changed
+                                _saveExpansionState();
                               });
                             },
                             child: Row(

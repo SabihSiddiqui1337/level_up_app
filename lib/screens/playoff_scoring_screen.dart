@@ -53,7 +53,9 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
         title: Text(
           widget.selectedGameNumber != null
               ? 'Game ${widget.selectedGameNumber} Score'
-              : 'Game Score',
+              : widget.matchFormat == 'bestof3'
+                  ? 'Game best of 3, ${widget.gameWinningScore} points'
+                  : 'Game Score',
         ),
         backgroundColor: Colors.grey[900],
         foregroundColor: Colors.white,
@@ -125,14 +127,17 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
   }
 
   Widget _buildGameCard(int gameNumber) {
-    final team1Key = '${widget.match.team1Id}_game$gameNumber';
-    final team2Key = '${widget.match.team2Id}_game$gameNumber';
-
-    final team1Score = _scores[team1Key] ?? 0;
-    final team2Score = _scores[team2Key] ?? 0;
-
     return StatefulBuilder(
       builder: (context, setBuilderState) {
+        // Generate keys INSIDE the builder to ensure they're always fresh
+        final team1Key = '${widget.match.team1Id}_game$gameNumber';
+        final team2Key = '${widget.match.team2Id}_game$gameNumber';
+        
+        // Debug: Verify keys are different
+        if (team1Key == team2Key) {
+          print('ERROR: team1Key and team2Key are the same! team1Id: ${widget.match.team1Id}, team2Id: ${widget.match.team2Id}');
+        }
+        
         bool currentIsGameDisabled = false;
 
         if (gameNumber == 1) {
@@ -225,11 +230,11 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
                   Expanded(
                     child: _buildTeamScoreRow(
                       widget.match.team1,
-                      team1Score,
-                      team2Score,
                       team1Key,
+                      team2Key,
                       displayIsDisabled,
                       setBuilderState,
+                      gameNumber,
                     ),
                   ),
                   // VS
@@ -248,11 +253,11 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
                   Expanded(
                     child: _buildTeamScoreRow(
                       widget.match.team2,
-                      team2Score,
-                      team1Score,
                       team2Key,
+                      team1Key,
                       displayIsDisabled,
                       setBuilderState,
+                      gameNumber,
                     ),
                   ),
                 ],
@@ -266,12 +271,21 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
 
   Widget _buildTeamScoreRow(
     String teamName,
-    int teamScore,
-    int opponentScore,
     String teamKey,
+    String opponentKey,
     bool displayIsDisabled,
     StateSetter setBuilderState,
+    int gameNumber,
   ) {
+    // Read scores directly from _scores map to get the latest values
+    // This ensures we always get the current score, not a stale value
+    final teamScore = _scores[teamKey] ?? 0;
+    final opponentScore = _scores[opponentKey] ?? 0;
+    final minScore = widget.gameWinningScore;
+    
+    // Check if this team has won (reached minScore and leading by 2+)
+    final hasWon = teamScore >= minScore && teamScore >= opponentScore + 2;
+    
     return Column(
       children: [
         Text(
@@ -313,7 +327,7 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
                                     (context) => AlertDialog(
                                       title: const Text('Confirm Score Change'),
                                       content: const Text(
-                                        'Are you sure you want to change the score for GAME 1? That will reset the score for Game 2.',
+                                        'Are you sure you want to change the score for GAME 1? That will reset the score for Game 2 and make it disabled until the score limit is reached again.',
                                       ),
                                       actions: [
                                         TextButton(
@@ -357,7 +371,7 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
                                     (context) => AlertDialog(
                                       title: const Text('Confirm Score Change'),
                                       content: const Text(
-                                        'Are you sure you want to change the score for GAME 2? That will reset the score for Game 3.',
+                                        'Are you sure you want to change the score for GAME 2? That will reset the score for Game 3 and make it disabled until the score limit is reached again.',
                                       ),
                                       actions: [
                                         TextButton(
@@ -387,7 +401,14 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
                           }
                         }
 
-                        _updateScore(teamKey, teamScore - 1, opponentScore);
+                        // Get the current score directly from _scores to ensure we have the latest value
+                        final currentTeamScore = _scores[teamKey] ?? 0;
+                        final newScore = currentTeamScore - 1;
+                        // Update score using the method to handle opponent score adjustment when decreasing
+                        // _updateScore already calls _checkAndResetDisabledGames() internally
+                        _updateScore(teamKey, newScore);
+                        // Trigger rebuild of ALL StatefulBuilders (all game cards) to update enabled/disabled states
+                        setState(() {});
                       },
               icon: Icon(Icons.remove_circle_outline),
               color:
@@ -395,44 +416,74 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
                       ? Colors.grey[400]
                       : Colors.red[400],
             ),
-            Container(
-              width: 60,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[300]!),
-              ),
-              child: Center(
-                child: Text(
-                  '$teamScore',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[800],
+            Column(
+              children: [
+                Container(
+                  width: 60,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$teamScore',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                // Only show "Winner" for individual games in 1game format
+                // For bestof3, don't show winner for individual games - only show match winner
+                if (hasWon && widget.matchFormat == '1game') ...[
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Winner',
+                    style: TextStyle(
+                      color: Color.fromARGB(255, 105, 196, 2),
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ],
             ),
-            IconButton(
-              onPressed: () {
-                final hasReachedWinningScore =
-                    teamScore >= widget.gameWinningScore &&
-                    teamScore >= opponentScore + 2;
-                if (displayIsDisabled || hasReachedWinningScore) {
-                  return;
-                }
-                _updateScore(teamKey, teamScore + 1, opponentScore);
+            Builder(
+              builder: (context) {
+                final currentScore = _scores[teamKey] ?? 0;
+                final currentOpponentScore = _scores[opponentKey] ?? 0;
+                final minScore = widget.gameWinningScore;
+                
+                // Only disable increment if team has definitively won (reached minScore and leading by 2+)
+                // Allow incrementing when tied at minScore (e.g., 11-11, 15-15) to continue until win-by-2
+                final hasWon = currentScore >= minScore && currentScore >= currentOpponentScore + 2;
+                final isDisabled = displayIsDisabled || hasWon;
+                
+                return IconButton(
+                  onPressed: isDisabled ? null : () {
+                    // Update the score in the map
+                    final newScore = currentScore + 1;
+                    
+                    // Update ONLY this team's score
+                    _scores[teamKey] = newScore;
+                    
+                    // Check if Game 2 or Game 3 should be enabled/disabled
+                    _checkAndResetDisabledGames();
+                    
+                    // Trigger rebuild of ALL StatefulBuilders (all game cards) to update enabled/disabled states
+                    // This ensures Game 2 becomes enabled when Game 1 is completed
+                    setState(() {});
+                  },
+                  icon: Icon(Icons.add_circle_outline),
+                  color: isDisabled
+                      ? Colors.grey[400]
+                      : Colors.green[400],
+                );
               },
-              icon: Icon(Icons.add_circle_outline),
-              color: () {
-                final hasReachedWinningScore =
-                    teamScore >= widget.gameWinningScore &&
-                    teamScore >= opponentScore + 2;
-                return displayIsDisabled || hasReachedWinningScore
-                    ? Colors.grey[400]
-                    : Colors.green[400];
-              }(),
             ),
           ],
         ),
@@ -629,43 +680,55 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
     }
   }
 
-  void _updateScore(String key, int newScore, int opponentScore) {
+  void _updateScore(String key, int newScore) {
+    // Get current score directly from _scores map
+    final currentScore = _scores[key] ?? 0;
+    final minScore = widget.gameWinningScore;
+    
     // Get the game number from the key (e.g., "team1_game2" -> 2)
     final gameMatch = RegExp(r'_game(\d+)').firstMatch(key);
-    if (gameMatch != null) {
-      final gameNum = gameMatch.group(1)!;
-
-      // Determine the other team's key
-      final otherTeamKey =
-          key.contains(widget.match.team1Id ?? '')
-              ? '${widget.match.team2Id}_game$gameNum'
-              : '${widget.match.team1Id}_game$gameNum';
-      final otherTeamCurrentScore = _scores[otherTeamKey] ?? 0;
-
-      // Get current and new scores
-      final currentScore = _scores[key] ?? 0;
-      final minScore = widget.gameWinningScore;
-
-      // If score is being decreased and opponent already has a winning score (>= minScore),
-      // adjust the opponent's score to maintain exactly 2-point difference
-      if (newScore < currentScore) {
-        // Check if opponent has reached the winning threshold
-        if (otherTeamCurrentScore >= minScore) {
-          // Always maintain exactly 2-point difference, but never below minimum winning score
-          // Opponent's new score = newScore + 2, but not less than minScore
-          final newOpponentScore =
-              (newScore + 2).clamp(minScore, double.infinity).toInt();
-          _scores[otherTeamKey] = newOpponentScore;
+    if (gameMatch == null) {
+      // If no game number found, just update the score
+      _scores[key] = newScore;
+      _checkAndResetDisabledGames();
+      return;
+    }
+    
+    final gameNum = gameMatch.group(1)!;
+    
+    // Determine the other team's key
+    final otherTeamKey =
+        key.contains(widget.match.team1Id ?? '')
+            ? '${widget.match.team2Id}_game$gameNum'
+            : '${widget.match.team1Id}_game$gameNum';
+    final otherTeamCurrentScore = _scores[otherTeamKey] ?? 0;
+    
+    // Update the current team's score first
+    _scores[key] = newScore;
+    
+    // Only adjust opponent's score when DECREASING (not when increasing)
+    if (newScore < currentScore) {
+      // ALWAYS maintain exactly 2-point difference when opponent is at/above minScore
+      if (otherTeamCurrentScore >= minScore) {
+        // Calculate what opponent's score should be to maintain exactly 2-point lead
+        final requiredOpponentScore = newScore + 2;
+        
+        // If required score is >= minScore, use it (maintain exactly 2-point difference)
+        // Example: 18-16, decrease 16 to 15 → opponent 18 becomes 17 (maintain 17-15 = 2 point lead)
+        // Example: 15-15, decrease to 13 → opponent becomes 15 (13+2=15, maintain 15-13 = 2 point lead)
+        // Example: 15-15, decrease to 10 → opponent stays at 15 (10+2=12 < 15, can't go below minScore)
+        if (requiredOpponentScore >= minScore) {
+          _scores[otherTeamKey] = requiredOpponentScore;
+        } else {
+          // Can't go below minScore, keep opponent at minScore
+          _scores[otherTeamKey] = minScore;
         }
       }
     }
-
-    _scores[key] = newScore;
+    // When INCREASING, never adjust the opponent's score
 
     // Check if Game 2 or Game 3 should be reset after this score change
     _checkAndResetDisabledGames();
-
-    setState(() {});
   }
 
   void _checkAndResetDisabledGames() {
@@ -771,6 +834,50 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
       return;
     }
 
+    // For 1game format, validate the single game
+    if (widget.matchFormat == '1game') {
+      final t1 = _scores['${widget.match.team1Id}_game1'] ?? 0;
+      final t2 = _scores['${widget.match.team2Id}_game1'] ?? 0;
+      
+      if (t1 == 0 && t2 == 0) {
+        // Allow 0-0 to reset
+        setState(() { _isLoading = true; });
+        try {
+          final scoresToSave = _convertScoresForPreliminaries(_scores);
+          await widget.onScoresUpdated(scoresToSave);
+          if (mounted) Navigator.of(context).pop();
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error saving scores: $e'), backgroundColor: Colors.red)
+            );
+          }
+        } finally {
+          if (mounted) setState(() { _isLoading = false; });
+        }
+        return;
+      }
+      
+      // Validate: if any score is entered, one team must reach winning score and win by 2
+      // Allow scores above minScore as long as win-by-2 is maintained
+      bool hasWinner = false;
+      if (t1 >= minScore && t1 >= t2 + 2) {
+        hasWinner = true;
+      }
+      else if (t2 >= minScore && t2 >= t1 + 2) {
+        hasWinner = true;
+      }
+      
+      if (!hasWinner) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Score must be $minScore (minimum score to win) or 0-0. One team must reach $minScore and win by 2. Current: $t1-$t2'))
+          );
+        }
+        return;
+      }
+    }
+    
     // ENFORCE: for best of 3, every enabled game must have a valid winner
     if (widget.matchFormat == 'bestof3') {
       // figure out which games are enabled
@@ -799,6 +906,7 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
       for (final gameNum in enabledGames) {
         final t1 = _scores['$team1Key$gameNum'] ?? 0;
         final t2 = _scores['$team2Key$gameNum'] ?? 0;
+        
         if (t1 == 0 && t2 == 0) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -807,13 +915,21 @@ class _PlayoffScoringScreenState extends State<PlayoffScoringScreen> {
           }
           return;
         }
-        bool validWinner = false;
-        if (t1 >= minScore && t1 >= t2 + 2) validWinner = true;
-        if (t2 >= minScore && t2 >= t1 + 2) validWinner = true;
-        if (!validWinner) {
+        
+        // Validate: if any score is entered, one team must reach winning score and win by 2
+        // Allow scores above minScore as long as win-by-2 is maintained
+        bool hasWinner = false;
+        if (t1 >= minScore && t1 >= t2 + 2) {
+          hasWinner = true;
+        }
+        else if (t2 >= minScore && t2 >= t1 + 2) {
+          hasWinner = true;
+        }
+        
+        if (!hasWinner) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Each enabled Game must have a valid winner. ($minScore points, win by 2)'))
+              SnackBar(content: Text('Score must be $minScore (minimum score to win) or 0-0. One team must reach $minScore and win by 2. Game $gameNum: $t1-$t2'))
             );
           }
           return;

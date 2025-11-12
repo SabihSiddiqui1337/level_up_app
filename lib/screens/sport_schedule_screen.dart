@@ -57,6 +57,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   // Cache for standings to prevent stack overflow
   List<Standing>? _cachedStandings;
   String? _lastStandingsCacheKey;
+  int _standingsUpdateCounter = 0; // Counter to force UI rebuild when standings change
 
   // Scoring state
   Match? _selectedMatch;
@@ -532,14 +533,25 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     return 'QF'; // Default
   }
   void _startScoring() {
+    print('DEBUG: _startScoring called - _selectedMatch: ${_selectedMatch?.id}, day: ${_selectedMatch?.day}');
+    
     // Check if user has scoring permissions
     if (!_authService.canScore) {
+      print('DEBUG: _startScoring - User does not have scoring permissions');
       _showScoringPermissionDialog();
       return;
     }
 
     // Prevent cross-tab scoring
-    if (_selectedMatch == null || !_isSelectedMatchInCurrentTab()) {
+    if (_selectedMatch == null) {
+      print('DEBUG: _startScoring - No match selected');
+      return;
+    }
+    
+    final isInCurrentTab = _isSelectedMatchInCurrentTab();
+    print('DEBUG: _startScoring - isInCurrentTab: $isInCurrentTab');
+    if (!isInCurrentTab) {
+      print('DEBUG: _startScoring - Match is not in current tab, returning');
       return;
     }
 
@@ -585,11 +597,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder:
-                  (context) => SemiFinalsScoringScreen(
-                    match: _selectedMatch!,
-                    initialScores:
-                        _playoffScores[_getPlayoffMatchKey(_selectedMatch!.id)],
+                    builder:
+                    (context) => SemiFinalsScoringScreen(
+                      match: _selectedMatch!,
+                      initialScores:
+                          _playoffScores[_getPlayoffMatchKey(_selectedMatch!.id)],
                     matchFormat: existingFormat,
                     gameWinningScore: existingScore,
                     canAdjustSettings:
@@ -597,13 +609,17 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     isFirstCard:
                         !hasAnyQFScores, // This is first card only if no QF scores exist yet
                     onScoresUpdated: (scores) async {
-                      // Save scores and clear selection
-                      setState(() {
-                        _playoffScores[_getPlayoffMatchKey(_selectedMatch!.id)] = Map<String, int>.from(scores);
-                        _selectedMatch = null;
-                        _cachedStandings = null;
-                        _lastStandingsCacheKey = null;
-                      });
+                    // Clear standings cache BEFORE updating scores
+                    _cachedStandings = null;
+                    _lastStandingsCacheKey = null;
+                    
+                    // Save scores and clear selection
+                    setState(() {
+                      _playoffScores[_getPlayoffMatchKey(_selectedMatch!.id)] = Map<String, int>.from(scores);
+                      _selectedMatch = null;
+                      // Increment counter to force UI rebuild of standings
+                      _standingsUpdateCounter++;
+                    });
                       try {
                         await _scoreService.savePlayoffScores(_playoffScores);
                         await _scoreService.saveQuarterFinalsScoresForDivision(
@@ -906,8 +922,73 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           return;
         }
 
-        // Show Game Settings dialog if settings not already saved
-        // _showGameSettingsDialog(isFinals: false); // <-- delete this line
+        // If settings are NOT saved yet, use defaults and navigate directly to scoring screen
+        // SF and Finals use bestof3 format with 15 points by default
+        final defaultFormat = 'bestof3';
+        final defaultScore = 15;
+        
+        print('DEBUG: _startScoring - SF/Finals: No settings saved, using defaults (format: $defaultFormat, score: $defaultScore)');
+        
+        // Save default settings for this round
+        setState(() {
+          _matchFormats[currentTab] = defaultFormat;
+          _gameWinningScores[currentTab] = defaultScore;
+        });
+        _saveMatchFormats();
+
+        print('DEBUG: _startScoring - Navigating to SemiFinalsScoringScreen for match: ${_selectedMatch!.id}');
+        // Navigate directly to scoring screen with default settings
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (context) => SemiFinalsScoringScreen(
+                  match: _selectedMatch!,
+                  initialScores:
+                      _playoffScores[_getPlayoffMatchKey(_selectedMatch!.id)] ?? {},
+                  matchFormat: defaultFormat,
+                  gameWinningScore: defaultScore,
+                  canAdjustSettings: false, // Don't allow settings adjustment for SF/Finals
+                  isFirstCard: true, // This is the first card since no scores exist yet
+                  onScoresUpdated: (scores) async {
+                    // Store the match day before clearing _selectedMatch
+                    final matchDay = _selectedMatch!.day;
+
+                    setState(() {
+                      _playoffScores[_getPlayoffMatchKey(
+                        _selectedMatch!.id,
+                      )] = Map<String, int>.from(scores);
+                      _selectedMatch = null;
+                      _cachedStandings = null;
+                      _lastStandingsCacheKey = null;
+                    });
+
+                    try {
+                      await _scoreService.savePlayoffScores(_playoffScores);
+                      if (matchDay == 'Quarter Finals') {
+                        await _scoreService
+                            .saveQuarterFinalsScoresForDivision(
+                              _selectedDivision ?? 'all',
+                              _getCurrentDivisionPlayoffScores(),
+                            );
+                      } else if (matchDay == 'Semi Finals') {
+                        await _scoreService.saveSemiFinalsScoresForDivision(
+                          _selectedDivision ?? 'all',
+                          _getCurrentDivisionPlayoffScores(),
+                        );
+                      } else if (matchDay == 'Finals') {
+                        await _scoreService.saveFinalsScoresForDivision(
+                          _selectedDivision ?? 'all',
+                          _getCurrentDivisionPlayoffScores(),
+                        );
+                      }
+                    } catch (e) {
+                      print('Error saving scores to storage: $e');
+                    }
+                  },
+                ),
+          ),
+        );
         return;
       }
 
@@ -993,15 +1074,16 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     // Store the match day before clearing _selectedMatch
                     final matchDay = _selectedMatch!.day;
 
+                    // Clear standings cache BEFORE updating scores
+                    _cachedStandings = null;
+                    _lastStandingsCacheKey = null;
+                    
                     setState(() {
                       _playoffScores[_getPlayoffMatchKey(
                         _selectedMatch!.id,
                       )] = Map<String, int>.from(scores);
                       // Clear selection after saving scores
                       _selectedMatch = null;
-                      // Clear standings cache to force recalculation
-                      _cachedStandings = null;
-                      _lastStandingsCacheKey = null;
                     });
 
                     // Save scores to persistent storage
@@ -1027,6 +1109,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       }
                     } catch (e) {
                       print('Error saving scores to storage: $e');
+                    }
+                    
+                    // Force standings recalculation if this affects preliminary standings
+                    if (mounted && !isPlayoffMatch) {
+                      final _ = _standings;
                     }
                   },
                 ),
@@ -1073,6 +1160,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                   print('DEBUG: Scores being saved: $scores');
                   print('DEBUG: Scores keys: ${scores.keys.toList()}');
 
+                  // Clear standings cache BEFORE updating scores to ensure recalculation
+                  _cachedStandings = null;
+                  _lastStandingsCacheKey = null;
+                  
                   setState(() {
                     if (isPlayoffMatch) {
                       _playoffScores[_getPlayoffMatchKey(
@@ -1083,9 +1174,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         scores,
                       );
                     }
-                    // Clear standings cache to force recalculation
-                    _cachedStandings = null;
-                    _lastStandingsCacheKey = null;
+                    // Increment counter to force UI rebuild of standings
+                    _standingsUpdateCounter++;
                   });
 
                   print('DEBUG: After save, checking _matchScores');
@@ -1128,17 +1218,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     print('Error saving scores to storage: $e');
                   }
 
-                  // Clear selection and cache after saving
+                  // Clear selection after saving
+                  // Standings cache was already cleared before updating scores, and counter was incremented
                   if (mounted) {
                     setState(() {
                       _selectedMatch = null;
-                      // Clear standings cache to force recalculation
-                      _cachedStandings = null;
-                      _lastStandingsCacheKey = null;
                       // Don't clear matches cache as it interferes with score persistence
+                      // Counter was already incremented above to force UI rebuild
                     });
-                    // Refresh standings after scores are saved
-                    _refreshStandings();
                   }
                 },
               ),
@@ -1460,6 +1547,29 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     return false;
   }
 
+  // Check if all Quarter Finals scores are 0-0 (no scores entered or all zero)
+  bool get _areAllQuarterFinalsScoresZero {
+    final quarterFinals = _getQuarterFinals();
+    if (quarterFinals.isEmpty) return true; // No QF matches means all are "zero"
+
+    for (var match in quarterFinals) {
+      if (match.team1Id != null && match.team2Id != null) {
+        // Check all possible game scores (1, 2, 3)
+        for (int game = 1; game <= 3; game++) {
+          final team1Score = _getGameScore(match.id, match.team1Id!, game);
+          final team2Score = _getGameScore(match.id, match.team2Id!, game);
+          
+          // If any score exists and is greater than 0, return false
+          if ((team1Score != null && team1Score > 0) ||
+              (team2Score != null && team2Score > 0)) {
+            return false; // Found a non-zero score
+          }
+        }
+      }
+    }
+    return true; // All scores are 0 or null
+  }
+
   // Check if any Semi Finals scores have been entered
   bool get _hasSemiFinalsScores {
     final semiFinals = _getSemiFinals();
@@ -1616,17 +1726,31 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     return hasActualTeams;
   }
 
-  // Check if all preliminary games are completed
+  // Check if all preliminary games are completed (have winners)
   bool get _allPreliminaryGamesCompleted {
-    for (var match in _preliminaryMatches) {
+    final preliminaryMatches = _preliminaryMatches;
+    final minScore = _preliminaryGameWinningScore;
+    
+    for (var match in preliminaryMatches) {
       if (match.team2 == 'TBA') {
         continue; // Skip waiting matches
       }
-      final scores = _matchScores[match.id];
-      if (scores == null || scores.length < 2) return false;
-      final team1Score = scores[match.team1Id] ?? 0;
-      final team2Score = scores[match.team2Id] ?? 0;
-      if (team1Score == 0 && team2Score == 0) return false; // No scores entered
+      
+      final team1Id = match.team1Id ?? '';
+      final team2Id = match.team2Id ?? '';
+      
+      // Check game-level format scores
+      final team1Score = _getGameScore(match.id, team1Id, 1) ?? 0;
+      final team2Score = _getGameScore(match.id, team2Id, 1) ?? 0;
+      
+      // Check if match has a winner (reached minScore and won by 2)
+      final hasWinner = (team1Score >= minScore && team1Score >= team2Score + 2) ||
+          (team2Score >= minScore && team2Score >= team1Score + 2);
+      
+      if (!hasWinner) {
+        // No winner yet - match is not completed
+        return false;
+      }
     }
     return true;
   }
@@ -1707,6 +1831,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 // Switch to Playoffs bottom navigation
                 setState(() {
                   _bottomNavIndex = 1;
+                  // Save navigation state
+                  _saveNavigationState();
                 });
                 // Save playoff state for current division
                 await _scoreService.savePlayoffsStartedForDivision(
@@ -2214,11 +2340,21 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     if (filteredTeams.isEmpty) return [];
 
     // Create cache key based on teams, match scores, and current division
+    // Include both match IDs and score values to ensure cache invalidates when scores change
     final teamsKey = filteredTeams.map((t) => t.id).join('_');
     // Only include scores for the current division in the cache key
     final divisionScores = _getCurrentDivisionScores();
-    final scoresKey = divisionScores.keys.join('_');
-    final cacheKey = '${teamsKey}_${currentDivision}_$scoresKey';
+    // Create a hash of all scores (keys + values) to detect any score changes
+    // Sort entries to ensure consistent cache key regardless of map iteration order
+    final sortedScores = divisionScores.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final scoresHash = sortedScores.map((e) {
+      // Sort score entries within each match for consistency
+      final sortedScoreEntries = e.value.entries.toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
+      return '${e.key}:${sortedScoreEntries.map((v) => '${v.key}=${v.value}').join(',')}';
+    }).join('|');
+    final cacheKey = '${teamsKey}_${currentDivision}_$scoresHash';
 
     // Return cached standings if available and still valid
     if (_cachedStandings != null && _lastStandingsCacheKey == cacheKey) {
@@ -2258,29 +2394,47 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       if (match.team1Id != null && match.team2Id != null) {
         final scores = _matchScores[match.id];
         if (scores != null && scores.isNotEmpty) {
-          // Extract team-level scores from game-level format
-          final teamLevelScores = <String, int>{};
-          scores.forEach((key, value) {
-            // Handle both team-level format (teamId: score) and game-level format (teamId_game1: score)
-            if (key.endsWith('_game1')) {
-              final teamId = key.replaceAll('_game1', '');
-              teamLevelScores[teamId] = value;
-            } else {
-              teamLevelScores[key] = value;
+          // Check if this is game-level format (teamId_game1, teamId_game2, etc.) or team-level format
+          bool isGameLevelFormat = scores.keys.any((key) => key.contains('_game'));
+          
+          if (isGameLevelFormat) {
+            // For game-level format, check if any game has been played
+            bool hasAnyGamePlayed = false;
+            for (int gameNum = 1; gameNum <= 3; gameNum++) {
+              final team1GameKey = '${match.team1Id!}_game$gameNum';
+              final team2GameKey = '${match.team2Id!}_game$gameNum';
+              final team1GameScore = scores[team1GameKey] ?? 0;
+              final team2GameScore = scores[team2GameKey] ?? 0;
+              if (team1GameScore > 0 || team2GameScore > 0) {
+                hasAnyGamePlayed = true;
+                break;
+              }
             }
-          });
-
-          final team1Score = teamLevelScores[match.team1Id!] ?? 0;
-          final team2Score = teamLevelScores[match.team2Id!] ?? 0;
-
-          // Only count if at least one team has scored (game has been played)
-          if (team1Score > 0 || team2Score > 0) {
-            if (teamStats.containsKey(match.team1Id!) &&
-                teamStats.containsKey(match.team2Id!)) {
-              teamStats[match.team1Id!]!['games'] =
-                  (teamStats[match.team1Id!]!['games']! + 1);
-              teamStats[match.team2Id!]!['games'] =
-                  (teamStats[match.team2Id!]!['games']! + 1);
+            
+            // Only count if at least one game has been played
+            if (hasAnyGamePlayed) {
+              if (teamStats.containsKey(match.team1Id!) &&
+                  teamStats.containsKey(match.team2Id!)) {
+                teamStats[match.team1Id!]!['games'] =
+                    (teamStats[match.team1Id!]!['games']! + 1);
+                teamStats[match.team2Id!]!['games'] =
+                    (teamStats[match.team2Id!]!['games']! + 1);
+              }
+            }
+          } else {
+            // Team-level format - check if scores exist
+            final team1Score = scores[match.team1Id!] ?? 0;
+            final team2Score = scores[match.team2Id!] ?? 0;
+            
+            // Only count if at least one team has scored (game has been played)
+            if (team1Score > 0 || team2Score > 0) {
+              if (teamStats.containsKey(match.team1Id!) &&
+                  teamStats.containsKey(match.team2Id!)) {
+                teamStats[match.team1Id!]!['games'] =
+                    (teamStats[match.team1Id!]!['games']! + 1);
+                teamStats[match.team2Id!]!['games'] =
+                    (teamStats[match.team2Id!]!['games']! + 1);
+              }
             }
           }
         }
@@ -2603,14 +2757,16 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     _tabController = TabController(length: 2, vsync: this);
     _playoffTabController = TabController(length: 3, vsync: this);
 
-    // Reset bottom navigation to Games tab when entering the screen
-    _bottomNavIndex = 0;
+    // Load navigation state for this event
+    _loadNavigationState();
 
-    // Add listeners to clear selected match when switching tabs
+    // Add listeners to clear selected match and save navigation state when switching tabs
     _tabController.addListener(() async {
       if (_tabController.indexIsChanging) {
         // Save scores before switching tabs
         await _saveScores();
+        // Save navigation state
+        _saveNavigationState();
         // Refresh standings to show latest data
         _refreshStandings();
         setState(() {
@@ -2623,6 +2779,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       if (_playoffTabController.indexIsChanging) {
         // Save scores before switching playoff tabs
         await _saveScores();
+        // Save navigation state
+        _saveNavigationState();
         // Refresh standings to show latest data
         _refreshStandings();
         setState(() {
@@ -2631,21 +2789,84 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       }
     });
 
-    _loadTeams().then((_) {
-      _loadScores();
+    _loadTeams().then((_) async {
+      await _loadScores();
+      // After loading teams and scores, restore navigation state
+      // Use a delay to ensure tab controllers are ready
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadNavigationState();
+      });
     });
+  }
+
+  // Save navigation state for this event
+  Future<void> _saveNavigationState() async {
+    try {
+      await _scoreService.saveNavigationState(
+        widget.sportName,
+        widget.tournamentTitle,
+        _bottomNavIndex,
+        _tabController.index,
+        _playoffTabController.index,
+      );
+    } catch (e) {
+      print('Error saving navigation state: $e');
+    }
+  }
+
+  // Load navigation state for this event
+  Future<void> _loadNavigationState() async {
+    try {
+      final navState = await _scoreService.loadNavigationState(
+        widget.sportName,
+        widget.tournamentTitle,
+      );
+      
+      if (navState != null && mounted) {
+        final savedBottomNavIndex = navState['bottomNavIndex'] ?? 0;
+        final savedTabIndex = navState['tabIndex'] ?? 0;
+        final savedPlayoffTabIndex = navState['playoffTabIndex'] ?? 0;
+        
+        // Validate indices before restoring
+        final validTabIndex = savedTabIndex >= 0 && savedTabIndex < _tabController.length 
+            ? savedTabIndex 
+            : 0;
+        final validPlayoffTabIndex = savedPlayoffTabIndex >= 0 && savedPlayoffTabIndex < _playoffTabController.length 
+            ? savedPlayoffTabIndex 
+            : 0;
+        final validBottomNavIndex = savedBottomNavIndex >= 0 && savedBottomNavIndex <= 1 
+            ? savedBottomNavIndex 
+            : 0;
+        
+        if (mounted) {
+          setState(() {
+            _bottomNavIndex = validBottomNavIndex;
+          });
+          
+          // Restore tab indices after a small delay to ensure controllers are ready
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted) {
+              if (_tabController.index != validTabIndex) {
+                _tabController.animateTo(validTabIndex);
+              }
+              if (_playoffTabController.index != validPlayoffTabIndex) {
+                _playoffTabController.animateTo(validPlayoffTabIndex);
+              }
+              print('Restored navigation state: bottomNavIndex=$_bottomNavIndex, tabIndex=$validTabIndex, playoffTabIndex=$validPlayoffTabIndex');
+            }
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading navigation state: $e');
+    }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reset bottom navigation to Games tab when screen is rebuilt
-    // This ensures playoffs nav is hidden until user explicitly presses "Go to Playoffs"
-    if (_bottomNavIndex == 1) {
-      setState(() {
-        _bottomNavIndex = 0;
-      });
-    }
+    // Load navigation state when dependencies change (but only once, after initial load)
+    // This restores the user's last viewed tab/position for this event
     // Step 1: Ensure divisions and _selectedDivision are initialized
     _updateDivisions().then((_) async {
       print('DEBUG: didChangeDependencies - _selectedDivision after updateDivisions: $_selectedDivision');
@@ -2997,16 +3218,12 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         print('Error saving scores on app lifecycle change: $e');
       });
     } else if (state == AppLifecycleState.resumed) {
-      // Reset bottom navigation to Games tab when app resumes
-      // This ensures playoffs nav is hidden until user explicitly presses "Go to Playoffs"
-      if (_bottomNavIndex == 1) {
-        setState(() {
-          _bottomNavIndex = 0;
-        });
-      }
-      // Save scores when app resumes to ensure data is persisted
+      // Save scores and navigation state when app resumes to ensure data is persisted
       _saveScores().catchError((e) {
         print('Error saving scores on app resume: $e');
+      });
+      _saveNavigationState().catchError((e) {
+        print('Error saving navigation state on app resume: $e');
       });
     }
   }
@@ -3139,12 +3356,29 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         onBackPressed: () async {
           // Save scores before navigating away
           await _saveScores();
-          // Navigate back to Standings tab (Games tab) in sport_schedule_screen
-          // Switch to Standings tab (index 1) and Preliminary Rounds tab (index 0)
-          setState(() {
-            _bottomNavIndex = 0; // Go to Preliminary Rounds/Standings tab
-            _tabController.animateTo(1); // Switch to Standings tab
-          });
+          
+          // If in Playoffs tab (_bottomNavIndex == 1), navigate to Standings tab
+          if (_bottomNavIndex == 1) {
+            // In Playoffs tab, navigate back to Standings tab (Games tab)
+            setState(() {
+              _bottomNavIndex = 0; // Go to Preliminary Rounds/Standings tab
+              _tabController.animateTo(1); // Switch to Standings tab
+              // Save navigation state
+              _saveNavigationState();
+            });
+          } else if (_bottomNavIndex == 0 && _tabController.index == 1) {
+            // In Standings tab, navigate back to Preliminary tab
+            setState(() {
+              _tabController.animateTo(0); // Switch to Preliminary tab
+              // Save navigation state
+              _saveNavigationState();
+            });
+          } else {
+            // In Preliminary tab, navigate back to main screen
+            // Save navigation state before navigating away
+            _saveNavigationState();
+            Navigator.of(context).pop();
+          }
         },
       ),
       bottomNavigationBar:
@@ -4170,7 +4404,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     );
   }
 
-  // Build preliminary match card (single match against one opponent)
+  // Build preliminary match card (original format)
   Widget _buildPreliminaryMatchCard(Match match) {
     final team1Score = _getGameScore(match.id, match.team1Id ?? '', 1) ?? 0;
     final team2Score = _getGameScore(match.id, match.team2Id ?? '', 1) ?? 0;
@@ -4187,16 +4421,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     return GestureDetector(
       onTap: () {
         if (!isLocked && hasOpponent && _authService.canScore) {
-          setState(() {
-            // Toggle selection: tap to select, tap again to unselect
-            if (_selectedMatch?.id == match.id) {
-              _selectedMatch = null;
-              _selectedGameNumber = null;
-            } else {
-              _selectedMatch = match;
-              _selectedGameNumber = 1; // Always game 1 for preliminary matches
-            }
-          });
+          _showPreliminaryScoringDialog(match);
         }
       },
       child: Container(
@@ -4820,14 +5045,17 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   }
 
   Widget _buildStandingsTab() {
+    // Get fresh standings - this will recalculate if cache is cleared
+    final currentStandings = _standings;
+    
     return Column(
       children: [
-        // Standings Table
+        // Standings Table - scrollable only inside
         Expanded(
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child:
-                _standings.isEmpty
+                currentStandings.isEmpty
                     ? _buildEmptyStandingsState()
                     : Container(
                       decoration: BoxDecoration(
@@ -4836,7 +5064,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                       ),
                       child: Column(
                         children: [
-                          // Header Row
+                          // Header Row - fixed at top
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -4872,17 +5100,23 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                             ),
                           ),
 
-                          // Data Rows
+                          // Data Rows - scrollable
                           Expanded(
                             child: ListView.builder(
-                              itemCount: _standings.length,
+                              shrinkWrap: false,
+                              // Use update counter as key to force rebuild when standings change
+                              key: ValueKey('standings_$_standingsUpdateCounter'),
+                              itemCount: currentStandings.length,
                               itemBuilder: (context, index) {
-                                return _buildStandingRow(_standings[index]);
+                                if (index >= currentStandings.length) {
+                                  return const SizedBox.shrink();
+                                }
+                                return _buildStandingRow(currentStandings[index]);
                               },
                             ),
                           ),
 
-                          // Legend for playoff qualification
+                          // Legend for playoff qualification - fixed at bottom of table
                           if (_playoffsStarted)
                             Container(
                               padding: const EdgeInsets.all(8),
@@ -4983,13 +5217,29 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                             // Navigate to Playoffs tab
                             setState(() {
                               _bottomNavIndex = 1;
-                              // Navigate directly to Finals tab
+                              // Navigate to the latest playoff round (QF or SF), not directly to Finals
+                              int targetPlayoffIndex;
                               if (_teams.length == 8) {
-                                _playoffTabController.animateTo(1); // Finals tab in 8-team case
+                                // 8-team case: tabs are [SF, Finals]
+                                // If SF has scores, go to SF (index 0), otherwise go to Finals (index 1)
+                                targetPlayoffIndex = _hasSemiFinalsScores ? 0 : 1;
                               } else {
-                                _playoffTabController.animateTo(2); // Finals tab in normal case
+                                // Normal case: tabs are [QF, SF, Finals]
+                                // If QF has scores, go to QF (index 0)
+                                // Else if SF has scores, go to SF (index 1)
+                                // Otherwise go to Finals (index 2)
+                                if (_hasQuarterFinalsScores) {
+                                  targetPlayoffIndex = 0; // QF
+                                } else if (_hasSemiFinalsScores) {
+                                  targetPlayoffIndex = 1; // SF
+                                } else {
+                                  targetPlayoffIndex = 2; // Finals
+                                }
                               }
+                              _playoffTabController.animateTo(targetPlayoffIndex);
                             });
+                            // Save navigation state after navigating
+                            _saveNavigationState();
                           },
                           icon: const Icon(Icons.sports_esports),
                           label: const Text('Check Playoffs score'),
@@ -5006,6 +5256,107 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               }
               
               // Show "View Playoffs" button to all users when playoffs have started (even if not completed)
+              // If user can score, show both "Restart Playoffs" and "Go to Playoffs" buttons side by side
+              if (_authService.canScore) {
+                final division = _selectedDivision ?? 'all';
+                final bool finalsCompleted = _finalsCompletedByDivision[division] ?? false;
+                
+                // Hide restart button if finals are completed
+                if (finalsCompleted) {
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, -2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              // Navigate to Playoffs tab
+                              setState(() {
+                                _bottomNavIndex = 1;
+                              });
+                            },
+                            icon: const Icon(Icons.sports_esports),
+                            label: const Text('Go to Playoffs'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2196F3),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                
+                // Show both buttons side by side for scoring users
+                final allQFZero = _areAllQuarterFinalsScoresZero;
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      // Restart Playoffs button (left side)
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: allQFZero ? _restartPlayoffs : null,
+                          icon: Icon(allQFZero ? Icons.refresh : Icons.lock),
+                          label: const Text('Restart Playoffs'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: allQFZero
+                                ? const Color.fromARGB(225, 243, 51, 33)
+                                : Colors.grey[400],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Go to Playoffs button (right side)
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            // Navigate to Playoffs tab
+                            setState(() {
+                              _bottomNavIndex = 1;
+                            });
+                            // Save navigation state after navigating
+                            _saveNavigationState();
+                          },
+                          icon: const Icon(Icons.sports_esports),
+                          label: const Text('Go to Playoffs'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2196F3),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              
+              // For non-scoring users, show only "Go to Playoffs" button
               return Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -5122,6 +5473,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                               }
                             }
                           });
+                          // Save navigation state after navigating
+                          _saveNavigationState();
                         },
                         icon: const Icon(Icons.sports_esports),
                         label: const Text('Go to Playoffs'),
@@ -5180,11 +5533,13 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     );
   }
   Widget _buildStandingRow(Standing standing) {
+    // Get fresh standings for qualification calculation
+    final currentStandings = _standings;
     // Calculate how many teams qualify for playoffs
-    int qualifyingTeams = (_standings.length / 2).ceil();
+    int qualifyingTeams = (currentStandings.length / 2).ceil();
     if (qualifyingTeams < 2) qualifyingTeams = 2;
-    if (qualifyingTeams > _standings.length) {
-      qualifyingTeams = _standings.length;
+    if (qualifyingTeams > currentStandings.length) {
+      qualifyingTeams = currentStandings.length;
     }
 
     // Check if this team qualifies for playoffs
@@ -5445,10 +5800,22 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         // 8-team case: tabs are [SF, Finals]
         if (playoffSubTabIndex == 0) {
           final semiFinals = _getSemiFinals();
-          return semiFinals.any((m) => m.id == _selectedMatch!.id);
+          final isInSemiFinals = semiFinals.any((m) => m.id == _selectedMatch!.id);
+          print('DEBUG: _isSelectedMatchInCurrentTab - 8-team SF view, playoffSubTabIndex: $playoffSubTabIndex, semiFinals.length: ${semiFinals.length}, selectedMatch.id: ${_selectedMatch!.id}, selectedMatch.day: ${_selectedMatch!.day}, isInSemiFinals: $isInSemiFinals');
+          print('DEBUG: 8-team SF match IDs: ${semiFinals.map((m) => '${m.id} (${m.team1} vs ${m.team2})').toList()}');
+          // Also check by day property as a fallback
+          if (!isInSemiFinals && _selectedMatch!.day == 'Semi Finals') {
+            print('DEBUG: Match day is Semi Finals, allowing selection');
+            return true;
+          }
+          return isInSemiFinals;
         } else if (playoffSubTabIndex == 1) {
           final finals = _getFinals();
-          return finals.any((m) => m.id == _selectedMatch!.id);
+          final isInFinals = finals.any((m) => m.id == _selectedMatch!.id);
+          if (!isInFinals && _selectedMatch!.day == 'Finals') {
+            return true;
+          }
+          return isInFinals;
         }
       } else {
         // Normal case: tabs are [QF, SF, Finals]
@@ -5456,13 +5823,28 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           final quarterFinals = _getQuarterFinals();
           final isInQuarterFinals = quarterFinals.any((m) => m.id == _selectedMatch!.id);
           print('DEBUG: _isSelectedMatchInCurrentTab - QF view, isInQuarterFinals: $isInQuarterFinals');
+          if (!isInQuarterFinals && _selectedMatch!.day == 'Quarter Finals') {
+            return true;
+          }
           return isInQuarterFinals;
         } else if (playoffSubTabIndex == 1) {
           final semiFinals = _getSemiFinals();
-          return semiFinals.any((m) => m.id == _selectedMatch!.id);
+          final isInSemiFinals = semiFinals.any((m) => m.id == _selectedMatch!.id);
+          print('DEBUG: _isSelectedMatchInCurrentTab - SF view, playoffSubTabIndex: $playoffSubTabIndex, semiFinals.length: ${semiFinals.length}, selectedMatch.id: ${_selectedMatch!.id}, selectedMatch.day: ${_selectedMatch!.day}, isInSemiFinals: $isInSemiFinals');
+          print('DEBUG: SF match IDs: ${semiFinals.map((m) => '${m.id} (${m.team1} vs ${m.team2})').toList()}');
+          // Also check by day property as a fallback
+          if (!isInSemiFinals && _selectedMatch!.day == 'Semi Finals') {
+            print('DEBUG: Match day is Semi Finals, allowing selection');
+            return true;
+          }
+          return isInSemiFinals;
         } else if (playoffSubTabIndex == 2) {
           final finals = _getFinals();
-          return finals.any((m) => m.id == _selectedMatch!.id);
+          final isInFinals = finals.any((m) => m.id == _selectedMatch!.id);
+          if (!isInFinals && _selectedMatch!.day == 'Finals') {
+            return true;
+          }
+          return isInFinals;
         }
       }
     }
@@ -5745,6 +6127,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         await _saveScores();
         setState(() {
           _bottomNavIndex = index;
+          // Save navigation state when bottom nav changes
+          _saveNavigationState();
         });
       },
       type: BottomNavigationBarType.fixed,
@@ -5761,178 +6145,173 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   // Build playoffs content based on bottom nav index
   Widget _buildPlayoffsContent() {
     if (_bottomNavIndex == 0) {
-      // Make header (dropdown + tab bar) and body scroll together
-      return NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          final List<Widget> slivers = [];
-          final filteredDivisions = _filteredAvailableDivisions;
-          if (filteredDivisions.isNotEmpty) {
-            slivers.add(
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: Container(
-                          constraints: BoxConstraints(
-                            maxWidth: _getDropdownWidth(),
-                            minWidth: 120,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(15),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: DropdownButtonFormField<String>(
-                            value: _selectedDivision,
-                            decoration: InputDecoration(
-                              hintText: 'Select Division',
-                              hintStyle: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 13,
-                              ),
-                              prefixIcon: Icon(
-                                Icons.sports_basketball,
-                                color: Colors.grey[600],
-                                size: 18,
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 2,
-                              ),
-                            ),
-                            isExpanded: true,
-                            items: filteredDivisions.map((String division) {
-                              return DropdownMenuItem<String>(
-                                value: division,
-                                child: Row(
-                                  children: [
-                                    if (_selectedDivision == division) ...[
-                                      const Icon(
-                                        Icons.check_circle,
-                                        color: Color(0xFF2196F3),
-                                        size: 14,
-                                      ),
-                                      const SizedBox(width: 8),
-                                    ],
-                                    Expanded(
-                                      child: Text(
-                                        division,
-                                        style: const TextStyle(fontSize: 13),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (String? newValue) async {
-                              _previousDivision = _selectedDivision;
-                              setState(() {
-                                _selectedDivision = newValue;
-                                _selectedMatch = null;
-                                _reshuffledMatches = null;
-                                _cachedStandings = null;
-                                _lastStandingsCacheKey = null;
-                                _isFirstLoad = false;
-                              });
-                              if (newValue != null) {
-                                await _scoreService.saveSelectedDivision(
-                                  widget.sportName,
-                                  newValue,
-                                );
-                              }
-                              await _loadScores();
-                              if (_bottomNavIndex == 1) {
-                                final newDivisionPlayoffsStarted =
-                                    _playoffsStartedByDivision[newValue ?? ''] ?? false;
-                                if (!newDivisionPlayoffsStarted) {
-                                  setState(() {
-                                    _bottomNavIndex = 0;
-                                  });
-                                }
-                              }
-                              if (_previousDivision != newValue && _teams.isNotEmpty) {
-                                final currentDivision = newValue ?? 'all';
-                                final hasShownForDivision =
-                                    _hasShownGamesPerTeamDialogByDivision[currentDivision] ?? false;
-                                if (!hasShownForDivision) {
-                                  final hasNoScores = _hasNoScoresForCurrentDivision();
-                                  // Only show dialog for scoring users (management, owner, scoring)
-                                  if (hasNoScores && _authService.canScore) {
-                                    _hasShownGamesPerTeamDialogByDivision[currentDivision] = true;
-                                    _showGamesPerTeamDialog(
-                                      isFirstLoad: false,
-                                      currentTabIndex: _tabController.index,
-                                    );
-                                  } else {
-                                    _hasShownGamesPerTeamDialogByDivision[currentDivision] = true;
-                                  }
-                                }
-                              }
-                            },
-                          ),
-                        ),
+      // Fixed header (dropdown + tab bar) with scrollable content below
+      return Column(
+        children: [
+          // Division dropdown - fixed at top
+          if (_filteredAvailableDivisions.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              child: Stack(
+                children: [
+                  Center(
+                    child: Container(
+                      constraints: BoxConstraints(
+                        maxWidth: _getDropdownWidth(),
+                        minWidth: 120,
                       ),
-                      // Settings button - only show for scoring users
-                      if (_authService.canScore)
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          bottom: 0,
-                          child: IconButton(
-                            icon: Icon(
-                              Icons.settings,
-                              color: (_playoffsStartedByDivision[_selectedDivision ?? ''] ?? false)
-                                  ? Colors.grey[400]
-                                  : const Color(0xFF2196F3),
-                            ),
-                            iconSize: 18,
-                            onPressed: (_playoffsStartedByDivision[_selectedDivision ?? ''] ?? false)
-                                ? null
-                                : () {
-                                    _showGamesPerTeamDialog(
-                                      isFirstLoad: false,
-                                      currentTabIndex: _tabController.index,
-                                    );
-                                  },
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(15),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedDivision,
+                        decoration: InputDecoration(
+                          hintText: 'Select Division',
+                          hintStyle: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 13,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.sports_basketball,
+                            color: Colors.grey[600],
+                            size: 18,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 2,
                           ),
                         ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-            slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 16))); // spacing
-          }
-
-          slivers.add(
-            SliverToBoxAdapter(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: SizedBox(
-                          height: 44,
-                          child: Theme(
-                            data: Theme.of(context).copyWith(
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        isExpanded: true,
+                        items: _filteredAvailableDivisions.map((String division) {
+                          return DropdownMenuItem<String>(
+                            value: division,
+                            child: Row(
+                              children: [
+                                if (_selectedDivision == division) ...[
+                                  const Icon(
+                                    Icons.check_circle,
+                                    color: Color(0xFF2196F3),
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                Expanded(
+                                  child: Text(
+                                    division,
+                                    style: const TextStyle(fontSize: 13),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
-                            child: TabBar(
+                          );
+                        }).toList(),
+                        onChanged: (String? newValue) async {
+                          // Save scores before changing division
+                          await _saveScores();
+                          
+                          _previousDivision = _selectedDivision;
+                          setState(() {
+                            _selectedDivision = newValue;
+                            _selectedMatch = null;
+                            _reshuffledMatches = null;
+                            _cachedStandings = null;
+                            _lastStandingsCacheKey = null;
+                            _isFirstLoad = false;
+                          });
+                          if (newValue != null) {
+                            await _scoreService.saveSelectedDivision(
+                              widget.sportName,
+                              newValue,
+                            );
+                          }
+                          await _loadScores();
+                          if (_bottomNavIndex == 1) {
+                            final newDivisionPlayoffsStarted =
+                                _playoffsStartedByDivision[newValue ?? ''] ?? false;
+                            if (!newDivisionPlayoffsStarted) {
+                              setState(() {
+                                _bottomNavIndex = 0;
+                              });
+                            }
+                          }
+                          if (_previousDivision != newValue && _teams.isNotEmpty) {
+                            final currentDivision = newValue ?? 'all';
+                            final hasShownForDivision =
+                                _hasShownGamesPerTeamDialogByDivision[currentDivision] ?? false;
+                            if (!hasShownForDivision) {
+                              final hasNoScores = _hasNoScoresForCurrentDivision();
+                              // Only show dialog for scoring users (management, owner, scoring)
+                              if (hasNoScores && _authService.canScore) {
+                                _hasShownGamesPerTeamDialogByDivision[currentDivision] = true;
+                                _showGamesPerTeamDialog(
+                                  isFirstLoad: false,
+                                  currentTabIndex: _tabController.index,
+                                );
+                              } else {
+                                _hasShownGamesPerTeamDialogByDivision[currentDivision] = true;
+                              }
+                            }
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  // Settings button - only show for scoring users
+                  if (_authService.canScore)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      child: IconButton(
+                        icon: Icon(
+                          Icons.settings,
+                          color: (_playoffsStartedByDivision[_selectedDivision ?? ''] ?? false)
+                              ? Colors.grey[400]
+                              : const Color(0xFF2196F3),
+                        ),
+                        iconSize: 18,
+                        onPressed: (_playoffsStartedByDivision[_selectedDivision ?? ''] ?? false)
+                            ? null
+                            : () {
+                                _showGamesPerTeamDialog(
+                                  isFirstLoad: false,
+                                  currentTabIndex: _tabController.index,
+                                );
+                              },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          
+          // TabBar - fixed below dropdown
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: SizedBox(
+                      height: 44,
+                      child: Theme(
+                        data: Theme.of(context).copyWith(
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: TabBar(
                           controller: _tabController,
                           indicator: BoxDecoration(
                             color: const Color(0xFF2196F3),
@@ -5952,7 +6331,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                             fontSize: 12,
                           ),
                           isScrollable: false,
-                              tabs: const [
+                          tabs: const [
                             Tab(
                               child: Padding(
                                 padding: EdgeInsets.symmetric(horizontal: 8),
@@ -5976,29 +6355,26 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                               ),
                             ),
                           ],
-                            ),
-                          ),
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          );
-
-          return slivers;
-        },
-        body: TabBarView(
-          controller: _tabController,
-          children: [
-            _buildPreliminaryRoundsTab(),
-            Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: _buildStandingsTab(),
+          ),
+          
+          // TabBarView - scrollable content (tabs stay fixed above)
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildPreliminaryRoundsTab(),
+                _buildStandingsTab(),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       );
     } else {
       // Show playoffs content - actual playoff tab structure
@@ -6141,10 +6517,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
     return Column(
       children: [
-        // TabBar stays fixed at top (handled higher in build method)
-        // List of matches
+        // List of matches - scrollable only inside
         Expanded(
           child: ListView.builder(
+            shrinkWrap: false,
             padding: const EdgeInsets.all(16),
             itemCount: _preliminaryMatches.length,
             itemBuilder: (context, index) {
@@ -6180,79 +6556,44 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     ),
                   ],
                 ),
-                child: Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed:
-                          _hasNoScores() ? _reshuffleTeams : _showReshuffleScoresDialog,
-                      icon: Icon(
-                        _hasNoScores() ? Icons.shuffle : Icons.lock,
-                        size: 18,
-                      ),
-                      label: const Text('Reshuffle Teams'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _hasNoScores() ? const Color(0xFF2196F3) : Colors.grey[400],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                child: _allPreliminaryGamesCompleted
+                    ? ElevatedButton.icon(
+                        onPressed: () {
+                          // Navigate to Standings tab
+                          setState(() {
+                            _tabController.animateTo(1); // Switch to Standings tab
+                          });
+                        },
+                        icon: const Icon(Icons.visibility, size: 18),
+                        label: const Text('See Standing'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2196F3),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      )
+                    : ElevatedButton.icon(
+                        onPressed:
+                            _hasNoScores() ? _reshuffleTeams : _showReshuffleScoresDialog,
+                        icon: Icon(
+                          _hasNoScores() ? Icons.shuffle : Icons.lock,
+                          size: 18,
+                        ),
+                        label: Text(_allPreliminaryGamesCompleted 
+                            ? 'Games Completed' 
+                            : 'Reshuffle Teams'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _hasNoScores() ? const Color(0xFF2196F3) : Colors.grey[400],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: (_selectedMatch != null && _isSelectedMatchInCurrentTab())
-                          ? () async {
-                              final match = _selectedMatch!;
-                              // Launch scoring for preliminary round (single game)
-                              await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => SemiFinalsScoringScreen(
-                                        match: match,
-                                        initialScores: _matchScores[match.id] ?? {},
-                                        matchFormat: '1game',
-                                        gameWinningScore: _preliminaryGameWinningScore,
-                                        canAdjustSettings: false,
-                                        isFirstCard: false,
-                                        onScoresUpdated: (scores) async {
-                                          setState(() {
-                                            _matchScores[match.id] = Map<String, int>.from(scores);
-                                            _cachedStandings = null;
-                                            _lastStandingsCacheKey = null;
-                                          });
-                                          await _saveScores();
-                                        },
-                                        onSettingsChange: () {},
-                                      ),
-                                    ),
-                                  );
-                            }
-                          : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: (_selectedMatch != null && _isSelectedMatchInCurrentTab())
-                            ? const Color(0xFF38A169)
-                            : Colors.grey[400],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: Text(
-                        (_selectedMatch != null && _isSelectedMatchInCurrentTab() && _hasScoresForSelectedMatch())
-                            ? 'Edit Scoring'
-                            : (_selectedMatch != null && _isSelectedMatchInCurrentTab())
-                                ? 'Start Scoring'
-                                : 'Select a Match',
-                      ),
-                    ),
-                  ),
-                ],
-                ),
               ),
             );
           },
@@ -6292,44 +6633,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             
             // Don't show "Select a Match" button if finals are completed
             if (finalsCompleted || quarterFinals.isEmpty || !_authService.canScore) {
-              // Only show "Go to Semi Finals" button if finals are completed
-              if (finalsCompleted && _allQuarterFinalsScoresSet) {
-                return Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, -2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            final targetIndex = _teams.length == 8 ? 0 : 1;
-                            _playoffTabController.animateTo(targetIndex);
-                          },
-                          icon: const Icon(Icons.score),
-                          label: const Text('Check SF Score'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
+              // When finals are completed, don't show any button (just like SF tab)
               return const SizedBox.shrink();
             }
             
@@ -6433,6 +6737,58 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     );
   }
 
+  // Build Start Scoring button for playoff tabs
+  Widget _buildStartScoringButton(bool isLocked) {
+    // Force rebuild when _selectedMatch changes by using it in the build
+    final selectedMatch = _selectedMatch;
+    final bool isMatchSelected = selectedMatch != null && _isSelectedMatchInCurrentTab();
+    final bool hasScores = isMatchSelected && _hasScoresForSelectedMatch();
+    
+    // Debug logging
+    if (selectedMatch != null) {
+      print('DEBUG: _buildStartScoringButton - selectedMatch.id: ${selectedMatch.id}, isMatchSelected: $isMatchSelected, isLocked: $isLocked, canScore: ${_authService.canScore}');
+    }
+    
+    return ElevatedButton.icon(
+      onPressed:
+          (!_authService.canScore || isLocked)
+              ? null
+              : isMatchSelected
+              ? _startScoring
+              : null,
+      icon: Icon(
+        hasScores ? Icons.edit : Icons.play_arrow,
+        size: 18,
+      ),
+      label: Text(
+        !_authService.canScore
+            ? 'Access Restricted'
+            : isLocked
+            ? 'Finals Started'
+            : isMatchSelected
+            ? (hasScores
+                ? 'Edit Scoring'
+                : 'Start Scoring')
+            : 'Select a Match',
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor:
+            !_authService.canScore
+                ? Colors.red[400]
+                : isLocked
+                ? Colors.grey[400]
+                : isMatchSelected
+                ? const Color(0xFF2196F3)
+                : Colors.grey[400],
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+  }
+
   // Build Semi Finals tab
   Widget _buildSemiFinalsTab() {
     final semiFinals = _getSemiFinals();
@@ -6484,48 +6840,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             child: Row(
               children: [
                 Expanded(
-                  child: Builder(
-                    builder: (context) {
-                      _debugButtonState(); // Debug button state
-                      return ElevatedButton.icon(
-                        onPressed:
-                            (!_authService.canScore || sfLocked)
-                                ? null
-                                : (_selectedMatch != null &&
-                                    _isSelectedMatchInCurrentTab())
-                                ? _startScoring
-                                : null,
-                        label: Text(
-                          !_authService.canScore
-                              ? 'Access Restricted'
-                              : sfLocked
-                              ? 'Finals Started'
-                              : _selectedMatch != null &&
-                                  _isSelectedMatchInCurrentTab()
-                              ? (_hasScoresForSelectedMatch()
-                                  ? 'Edit Scoring'
-                                  : 'Start Scoring')
-                              : 'Select a Match',
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              !_authService.canScore
-                                  ? Colors.red[400]
-                                  : sfLocked
-                                  ? Colors.grey[400]
-                                  : (_selectedMatch != null &&
-                                      _isSelectedMatchInCurrentTab())
-                                  ? const Color(0xFF2196F3)
-                                  : Colors.grey[400],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  child: _buildStartScoringButton(sfLocked),
                 ),
 
                 // Start Finals Button (disabled until all SF scores are set)
@@ -6732,8 +7047,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             ),
           ),
 
-        // Finals action buttons
-        if (finals.isNotEmpty && _authService.canScore)
+        // Finals action buttons - hide when finals are completed (just like QF and SF)
+        if (finals.isNotEmpty && _authService.canScore && !finalsCompleted)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -6751,17 +7066,15 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 // Start/Edit scoring
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: (!finalsCompleted && _authService.canScore && ( _selectedMatch != null))
+                    onPressed: (_selectedMatch != null)
                         ? _startScoring
                         : null,
                     icon: const Icon(Icons.sports_score),
                     label: Text(
-                      !finalsCompleted
-                          ? ((_selectedMatch != null && _hasScoresForSelectedMatch()) ? 'Edit Scoring' : 'Start Scoring')
-                          : 'Final Completed',
+                      (_selectedMatch != null && _hasScoresForSelectedMatch()) ? 'Edit Scoring' : 'Start Scoring',
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: (!finalsCompleted && _selectedMatch != null)
+                      backgroundColor: _selectedMatch != null
                           ? const Color(0xFF2196F3)
                           : Colors.grey[400],
                       foregroundColor: Colors.white,
@@ -6776,7 +7089,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 // Complete Final button
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: (!finalsCompleted && _getFinalsWinner() != null)
+                    onPressed: (_getFinalsWinner() != null)
                         ? () async {
                             final confirm = await showDialog<bool>(
                               context: context,
@@ -6820,7 +7133,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     icon: const Icon(Icons.emoji_events),
                     label: const Text('Complete Final'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: (!finalsCompleted && _getFinalsWinner() != null)
+                      backgroundColor: (_getFinalsWinner() != null)
                           ? const Color(0xFF38A169)
                           : Colors.grey[400],
                       foregroundColor: Colors.white,
@@ -7610,6 +7923,48 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     }
   }
 
+  // Show scoring dialog for preliminary rounds
+  void _showPreliminaryScoringDialog(Match match) {
+    final team1Id = match.team1Id ?? '';
+    final team2Id = match.team2Id ?? '';
+    final team1Score = _getGameScore(match.id, team1Id, 1) ?? 0;
+    final team2Score = _getGameScore(match.id, team2Id, 1) ?? 0;
+    final minScore = _preliminaryGameWinningScore;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return _PreliminaryScoringDialog(
+          match: match,
+          team1Score: team1Score,
+          team2Score: team2Score,
+          minScore: minScore,
+          onSave: (newTeam1Score, newTeam2Score) async {
+            // Update scores in game-level format
+            final scoresToSave = {
+              '${team1Id}_game1': newTeam1Score,
+              '${team2Id}_game1': newTeam2Score,
+            };
+            
+            setState(() {
+              _matchScores[match.id] = scoresToSave;
+              _cachedStandings = null;
+              _lastStandingsCacheKey = null;
+              _standingsUpdateCounter++;
+            });
+            
+            await _saveScores();
+            
+            if (dialogContext.mounted) {
+              Navigator.of(dialogContext).pop();
+            }
+          },
+        );
+      },
+    );
+  }
+
   void _showTeamRegisteredDialog() {
     if (!_authService.canScore) return;
     showDialog(
@@ -7977,6 +8332,476 @@ class _QuarterFinalsGameSettingsScreenState
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// Dialog widget for preliminary rounds scoring
+class _PreliminaryScoringDialog extends StatefulWidget {
+  final Match match;
+  final int team1Score;
+  final int team2Score;
+  final int minScore;
+  final Function(int, int) onSave;
+
+  const _PreliminaryScoringDialog({
+    required this.match,
+    required this.team1Score,
+    required this.team2Score,
+    required this.minScore,
+    required this.onSave,
+  });
+
+  @override
+  State<_PreliminaryScoringDialog> createState() => _PreliminaryScoringDialogState();
+}
+
+class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
+  late int _team1Score;
+  late int _team2Score;
+  late int _initialTeam1Score;
+  late int _initialTeam2Score;
+  bool _isProcessing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _team1Score = widget.team1Score;
+    _team2Score = widget.team2Score;
+    _initialTeam1Score = widget.team1Score;
+    _initialTeam2Score = widget.team2Score;
+  }
+  
+  bool get _hasChanges {
+    return _team1Score != _initialTeam1Score || _team2Score != _initialTeam2Score;
+  }
+  
+  void _handleCancel() {
+    if (_hasChanges) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Discard Changes?'),
+            content: const Text('You have unsaved changes. Are you sure you want to cancel? Changes will not be saved.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Keep Editing'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Close confirmation dialog
+                  Navigator.of(context).pop(); // Close scoring dialog
+                },
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.red,
+                ),
+                child: const Text('Discard'),
+              ),
+            ],
+          );
+        },
+      );
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _handleDecreaseScore(bool isTeam1) {
+    setState(() {
+      if (isTeam1) {
+        final currentScore = _team1Score;
+        final newScore = currentScore - 1;
+        _team1Score = newScore < 0 ? 0 : newScore;
+        
+        // Adjust opponent score if at/above minScore (use current value before update)
+        if (_team2Score >= widget.minScore) {
+          final requiredOpponentScore = _team1Score + 2;
+          if (requiredOpponentScore >= widget.minScore) {
+            _team2Score = requiredOpponentScore;
+          } else {
+            // Can't go below minScore, keep opponent at minScore
+            _team2Score = widget.minScore;
+          }
+        }
+      } else {
+        final currentScore = _team2Score;
+        final newScore = currentScore - 1;
+        _team2Score = newScore < 0 ? 0 : newScore;
+        
+        // Adjust opponent score if at/above minScore (use current value before update)
+        if (_team1Score >= widget.minScore) {
+          final requiredOpponentScore = _team2Score + 2;
+          if (requiredOpponentScore >= widget.minScore) {
+            _team1Score = requiredOpponentScore;
+          } else {
+            // Can't go below minScore, keep opponent at minScore
+            _team1Score = widget.minScore;
+          }
+        }
+      }
+    });
+  }
+
+  void _handleIncreaseScore(bool isTeam1) {
+    setState(() {
+      if (isTeam1) {
+        // Don't increment if team has already won
+        if (_isTeam1MaxReached()) {
+          return;
+        }
+        _team1Score++;
+      } else {
+        // Don't increment if team has already won
+        if (_isTeam2MaxReached()) {
+          return;
+        }
+        _team2Score++;
+      }
+    });
+  }
+  
+  // Check if team has reached max score
+  // Disable increment if:
+  // 1. Team has won (reached minScore and leading by 2+)
+  // 2. Team is at minScore and opponent is not at minScore (team has won)
+  // Allow increment if:
+  // 1. Teams are tied at minScore (11-11, 15-15) - can continue to break tie
+  // 2. Team is below minScore
+  // 3. Team is at minScore but opponent is also at minScore and not leading by 2+
+  bool _isTeam1MaxReached() {
+    // If team1 has won (reached minScore and leading by 2+), disable increment
+    if (_team1Score >= widget.minScore && _team1Score >= _team2Score + 2) {
+      return true; // Team has won, disable further increment
+    }
+    
+    // If team1 is at minScore but team2 is below minScore, team1 has won
+    if (_team1Score >= widget.minScore && _team2Score < widget.minScore) {
+      // Check if team1 is leading by 2+
+      if (_team1Score >= _team2Score + 2) {
+        return true; // Team has won
+      }
+    }
+    
+    // If both teams are at minScore and tied, allow continuing (11-11, 15-15)
+    if (_team1Score == widget.minScore && _team2Score == widget.minScore) {
+      return false; // Allow continuing when tied at minScore
+    }
+    
+    // If team1 is at minScore but team2 is also at minScore and team1 is not leading by 2+
+    // This means it's still ongoing (could be 11-10, 15-14, etc.), allow continuing
+    if (_team1Score == widget.minScore && _team2Score == widget.minScore - 1) {
+      return false; // Still ongoing, allow continuing
+    }
+    
+    return false; // Default: allow increment
+  }
+  
+  bool _isTeam2MaxReached() {
+    // If team2 has won (reached minScore and leading by 2+), disable increment
+    if (_team2Score >= widget.minScore && _team2Score >= _team1Score + 2) {
+      return true; // Team has won, disable further increment
+    }
+    
+    // If team2 is at minScore but team1 is below minScore, team2 has won
+    if (_team2Score >= widget.minScore && _team1Score < widget.minScore) {
+      // Check if team2 is leading by 2+
+      if (_team2Score >= _team1Score + 2) {
+        return true; // Team has won
+      }
+    }
+    
+    // If both teams are at minScore and tied, allow continuing (11-11, 15-15)
+    if (_team2Score == widget.minScore && _team1Score == widget.minScore) {
+      return false; // Allow continuing when tied at minScore
+    }
+    
+    // If team2 is at minScore but team1 is also at minScore and team2 is not leading by 2+
+    // This means it's still ongoing (could be 11-10, 15-14, etc.), allow continuing
+    if (_team2Score == widget.minScore && _team1Score == widget.minScore - 1) {
+      return false; // Still ongoing, allow continuing
+    }
+    
+    return false; // Default: allow increment
+  }
+  
+  // Check if a team has won (reached minScore and won by 2)
+  bool _hasTeam1Won() {
+    return _team1Score >= widget.minScore && _team1Score >= _team2Score + 2;
+  }
+  
+  bool _hasTeam2Won() {
+    return _team2Score >= widget.minScore && _team2Score >= _team1Score + 2;
+  }
+
+  void _saveScores() {
+    if (_isProcessing) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      // Allow resetting to 0-0
+      if (_team1Score == 0 && _team2Score == 0) {
+        widget.onSave(0, 0);
+        return;
+      }
+
+      // If any score is entered (not 0-0), at least one team must reach minScore
+      if (_team1Score > 0 || _team2Score > 0) {
+        // Check if at least one team has reached minScore
+        if (_team1Score < widget.minScore && _team2Score < widget.minScore) {
+          // Neither team has reached minScore - invalid
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Score must be ${widget.minScore} (minimum score to win). Current: $_team1Score-$_team2Score'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          setState(() {
+            _isProcessing = false;
+          });
+          return;
+        }
+      }
+
+      // Prevent ties - if both teams are at/above minScore, they must be different by at least 2
+      if (_team1Score >= widget.minScore && _team2Score >= widget.minScore) {
+        if (_team1Score == _team2Score) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Cannot have a tie score. One team must win by 2 points. Current: $_team1Score-$_team2Score'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          setState(() {
+            _isProcessing = false;
+          });
+          return;
+        }
+      }
+
+      // Validate win-by-2 rule when there are scores
+      bool hasWinner = false;
+      if (_team1Score >= widget.minScore && _team1Score >= _team2Score + 2) {
+        hasWinner = true;
+      } else if (_team2Score >= widget.minScore && _team2Score >= _team1Score + 2) {
+        hasWinner = true;
+      }
+
+      // If one team has reached minScore, the other must be at least 2 points behind (win by 2)
+      if (!hasWinner && (_team1Score >= widget.minScore || _team2Score >= widget.minScore)) {
+        String errorMessage = 'Must win by 2 points. Current score: $_team1Score-$_team2Score';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        setState(() {
+          _isProcessing = false;
+        });
+        return;
+      }
+
+      // Save scores
+      widget.onSave(_team1Score, _team2Score);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving scores: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        title: Text('Score: ${widget.match.team1} vs ${widget.match.team2}'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Team 1
+            Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.match.team1,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: _team1Score <= 0 || _isProcessing
+                              ? null
+                              : () => _handleDecreaseScore(true),
+                          icon: const Icon(Icons.remove_circle_outline),
+                          color: Colors.red[400],
+                        ),
+                        Container(
+                          width: 60,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '$_team1Score',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: (_isProcessing || _isTeam1MaxReached())
+                              ? null
+                              : () => _handleIncreaseScore(true),
+                          icon: const Icon(Icons.add_circle_outline),
+                          color: Colors.green[400],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                if (_hasTeam1Won())
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Winner',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green[700],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            // Team 2
+            Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.match.team2,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: _team2Score <= 0 || _isProcessing
+                              ? null
+                              : () => _handleDecreaseScore(false),
+                          icon: const Icon(Icons.remove_circle_outline),
+                          color: Colors.red[400],
+                        ),
+                        Container(
+                          width: 60,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '$_team2Score',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: (_isProcessing || _isTeam2MaxReached())
+                              ? null
+                              : () => _handleIncreaseScore(false),
+                          icon: const Icon(Icons.add_circle_outline),
+                          color: Colors.green[400],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                if (_hasTeam2Won())
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Winner',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green[700],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isProcessing ? null : _handleCancel,
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isProcessing ? null : _saveScores,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2196F3),
+            foregroundColor: Colors.white,
+          ),
+          child: _isProcessing
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Save'),
+        ),
+      ],
       ),
     );
   }

@@ -500,7 +500,7 @@ class _PickleballTeamRegistrationScreenState
                     decoration: InputDecoration(
                       labelText: 'DUPR Rating',
                       labelStyle: TextStyle(color: Colors.grey[600]),
-                      prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600], size: 10),
+                      prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
                       border: OutlineInputBorder(
                         borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
                       ),

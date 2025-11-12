@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../widgets/custom_app_bar.dart';
 import '../services/event_service.dart';
+import '../services/score_service.dart';
 import '../models/event.dart';
 import 'main_navigation_screen.dart';
 import 'event_detail_screen.dart';
@@ -23,23 +24,103 @@ class UpcomingEventsScreen extends StatefulWidget {
 class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
   bool _isCopying = false; // Add flag to prevent rapid copying
   final EventService _eventService = EventService();
+  final ScoreService _scoreService = ScoreService();
   List<Event> _upcomingEvents = [];
   List<Event> _pastEvents = [];
   bool _isLoading = true;
   bool _isUpcomingExpanded = true; // Track expansion state for upcoming events
   bool _isPastExpanded = true; // Track expansion state for past events
+  Map<String, bool> _eventStartedStatus = {}; // Cache for event started status
 
   @override
   void initState() {
     super.initState();
+    _loadExpansionState();
     _loadEvents();
+  }
+
+  // Load expansion state for sections
+  Future<void> _loadExpansionState() async {
+    final expansionState = await _scoreService.loadHomeExpansionState();
+    if (mounted) {
+      setState(() {
+        _isUpcomingExpanded = expansionState['upcomingExpanded'] ?? true;
+        _isPastExpanded = expansionState['pastExpanded'] ?? true;
+      });
+    }
+  }
+
+  // Save expansion state for sections
+  Future<void> _saveExpansionState() async {
+    await _scoreService.saveHomeExpansionState(
+      _isUpcomingExpanded,
+      _isPastExpanded,
+    );
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Reload expansion state when screen becomes visible
+    _loadExpansionState();
     // Reload events when screen becomes visible to show updated past events
     _loadEvents();
+  }
+
+  // Check if playoffs have started and any score is set for a sport
+  Future<bool> _isEventStarted(String sportName) async {
+    try {
+      // Check all possible divisions for this sport
+      final divisions = ['all', 'Youth (18 or under)', 'Adult 18+'];
+      bool hasPlayoffsStarted = false;
+      bool hasAnyScores = false;
+      
+      for (final division in divisions) {
+        // Check if playoffs have started for this division
+        final playoffsStarted = await _scoreService.loadPlayoffsStartedForDivision(division);
+        if (playoffsStarted) {
+          hasPlayoffsStarted = true;
+          
+          // Check if any playoff scores exist
+          final qfScores = await _scoreService.loadQuarterFinalsScoresForDivision(division);
+          final sfScores = await _scoreService.loadSemiFinalsScoresForDivision(division);
+          final finalsScores = await _scoreService.loadFinalsScoresForDivision(division);
+          
+          // Check if any scores exist (not empty and not all zeros)
+          if (qfScores.isNotEmpty) {
+            for (final matchScores in qfScores.values) {
+              if (matchScores.values.any((score) => score > 0)) {
+                hasAnyScores = true;
+                break;
+              }
+            }
+          }
+          if (!hasAnyScores && sfScores.isNotEmpty) {
+            for (final matchScores in sfScores.values) {
+              if (matchScores.values.any((score) => score > 0)) {
+                hasAnyScores = true;
+                break;
+              }
+            }
+          }
+          if (!hasAnyScores && finalsScores.isNotEmpty) {
+            for (final matchScores in finalsScores.values) {
+              if (matchScores.values.any((score) => score > 0)) {
+                hasAnyScores = true;
+                break;
+              }
+            }
+          }
+          
+          if (hasAnyScores) break;
+        }
+      }
+      
+      return hasPlayoffsStarted && hasAnyScores;
+    } catch (e) {
+      print('Error checking if event started: $e');
+      return false;
+    }
   }
 
   Future<void> _loadEvents() async {
@@ -58,10 +139,18 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
       await Future.delayed(Duration(milliseconds: 1000 - elapsed.inMilliseconds));
     }
     
+    // Check event started status for all events
+    final Map<String, bool> eventStartedStatus = {};
+    for (final event in upcomingEvents) {
+      final isStarted = await _isEventStarted(event.sportName);
+      eventStartedStatus[event.id] = isStarted;
+    }
+    
     if (mounted) {
       setState(() {
         _upcomingEvents = upcomingEvents;
         _pastEvents = pastEvents;
+        _eventStartedStatus = eventStartedStatus;
         _isLoading = false;
       });
     }
@@ -97,6 +186,8 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                           onTap: () {
                             setState(() {
                               _isUpcomingExpanded = !_isUpcomingExpanded;
+                              // Save expansion state when changed
+                              _saveExpansionState();
                             });
                           },
                           child: Row(
@@ -184,6 +275,8 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                           onTap: () {
                             setState(() {
                               _isPastExpanded = !_isPastExpanded;
+                              // Save expansion state when changed
+                              _saveExpansionState();
                             });
                           },
                           child: Row(
@@ -591,7 +684,10 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                                 tournamentTitle: event.title,
                               ),
                             ),
-                          );
+                          ).then((_) {
+                            // After navigation, ensure we're on Preliminary rounds tab
+                            // This is handled by the SportScheduleScreen's initial state
+                          });
                         }
                       },
                       icon: const Icon(Icons.score, size: 16),
@@ -612,96 +708,105 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                     )
                   else
                     // For upcoming events - Register and Details buttons
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                  builder:
-                                      (context) => const MainNavigationScreen(
-                                        initialIndex: 1,
-                                      ),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.app_registration, size: 16),
-                            label: const Text(
-                              'REGISTER',
-                              style: TextStyle(fontSize: 13),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFE67E22),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              elevation: 2,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              // Show details dialog or navigate to details screen
-                              if (event != null) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => EventDetailScreen(
-                                      event: event,
-                                      onSignUp: () {
-                                        final sport = event.sportName.toLowerCase();
-                                        if (sport.contains('pickleball') || sport.contains('pickelball')) {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => PickleballTeamRegistrationScreen(event: event),
-                                            ),
-                                          );
-                                        } else {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => TeamRegistrationScreen(event: event),
-                                            ),
-                                          );
-                                        }
+                    Builder(
+                      builder: (context) {
+                        final eventStarted = event != null ? (_eventStartedStatus[event.id] ?? false) : false;
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: eventStarted
+                                    ? null
+                                    : () {
+                                        Navigator.pushReplacement(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (context) => const MainNavigationScreen(
+                                                  initialIndex: 1,
+                                                ),
+                                          ),
+                                        );
                                       },
-                                    ),
+                                icon: const Icon(Icons.app_registration, size: 16),
+                                label: Text(
+                                  eventStarted ? 'EVENT STARTED' : 'REGISTER',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: eventStarted
+                                      ? Colors.grey[400]
+                                      : const Color(0xFFE67E22),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                );
-                              } else {
-                                _showEventDetails(
-                                  title,
-                                  date,
-                                  location,
-                                  address,
-                                  sportName,
-                                );
-                              }
-                            },
-                            icon: const Icon(Icons.info_outline, size: 16),
-                            label: const Text(
-                              'DETAILS',
-                              style: TextStyle(fontSize: 13),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white.withOpacity(0.9),
-                              foregroundColor: Colors.black87,
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                  elevation: eventStarted ? 0 : 2,
+                                ),
                               ),
-                              elevation: 2,
                             ),
-                          ),
-                        ),
-                      ],
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  // Show details dialog or navigate to details screen
+                                  if (event != null) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => EventDetailScreen(
+                                          event: event,
+                                          onSignUp: () {
+                                            final sport = event.sportName.toLowerCase();
+                                            if (sport.contains('pickleball') || sport.contains('pickelball')) {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => PickleballTeamRegistrationScreen(event: event),
+                                                ),
+                                              );
+                                            } else {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => TeamRegistrationScreen(event: event),
+                                                ),
+                                              );
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                    );
+                                  } else {
+                                    _showEventDetails(
+                                      title,
+                                      date,
+                                      location,
+                                      address,
+                                      sportName,
+                                    );
+                                  }
+                                },
+                                icon: const Icon(Icons.info_outline, size: 16),
+                                label: const Text(
+                                  'DETAILS',
+                                  style: TextStyle(fontSize: 13),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white.withOpacity(0.9),
+                                  foregroundColor: Colors.black87,
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  elevation: 2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                 ],
               ),

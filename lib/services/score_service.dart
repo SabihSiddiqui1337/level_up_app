@@ -560,4 +560,124 @@ class ScoreService {
       return false;
     }
   }
+
+  // Save navigation state for an event (sportName + tournamentTitle)
+  Future<void> saveNavigationState(
+    String sportName,
+    String tournamentTitle,
+    int bottomNavIndex,
+    int tabIndex,
+    int playoffTabIndex,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'nav_state_${sportName}_$tournamentTitle';
+      final navState = {
+        'bottomNavIndex': bottomNavIndex,
+        'tabIndex': tabIndex,
+        'playoffTabIndex': playoffTabIndex,
+      };
+      final navStateJson = json.encode(navState);
+      await prefs.setString(key, navStateJson);
+      print('Saved navigation state for $sportName/$tournamentTitle: bottomNavIndex=$bottomNavIndex, tabIndex=$tabIndex, playoffTabIndex=$playoffTabIndex');
+    } catch (e) {
+      print('Error saving navigation state for $sportName/$tournamentTitle: $e');
+    }
+  }
+
+  // Load navigation state for an event (sportName + tournamentTitle)
+  Future<Map<String, int>?> loadNavigationState(
+    String sportName,
+    String tournamentTitle,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'nav_state_${sportName}_$tournamentTitle';
+      final navStateJson = prefs.getString(key);
+
+      if (navStateJson != null) {
+        final Map<String, dynamic> decoded = json.decode(navStateJson);
+        final navState = {
+          'bottomNavIndex': decoded['bottomNavIndex'] as int? ?? 0,
+          'tabIndex': decoded['tabIndex'] as int? ?? 0,
+          'playoffTabIndex': decoded['playoffTabIndex'] as int? ?? 0,
+        };
+        print('Loaded navigation state for $sportName/$tournamentTitle: $navState');
+        return navState;
+      }
+    } catch (e) {
+      print('Error loading navigation state for $sportName/$tournamentTitle: $e');
+    }
+    return null;
+  }
+
+  // Save expansion state for Home tab sections
+  Future<void> saveHomeExpansionState(
+    bool upcomingExpanded,
+    bool pastExpanded,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('home_upcoming_expanded', upcomingExpanded);
+      await prefs.setBool('home_past_expanded', pastExpanded);
+      print('Saved Home expansion state: upcoming=$upcomingExpanded, past=$pastExpanded');
+    } catch (e) {
+      print('Error saving Home expansion state: $e');
+    }
+  }
+
+  // Load expansion state for Home tab sections
+  Future<Map<String, bool>> loadHomeExpansionState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final upcomingExpanded = prefs.getBool('home_upcoming_expanded') ?? true;
+      final pastExpanded = prefs.getBool('home_past_expanded') ?? true;
+      print('Loaded Home expansion state: upcoming=$upcomingExpanded, past=$pastExpanded');
+      return {
+        'upcomingExpanded': upcomingExpanded,
+        'pastExpanded': pastExpanded,
+      };
+    } catch (e) {
+      print('Error loading Home expansion state: $e');
+      return {
+        'upcomingExpanded': true,
+        'pastExpanded': true,
+      };
+    }
+  }
+
+  // Save expansion state for Schedule tab sections
+  Future<void> saveScheduleExpansionState(
+    bool scheduleExpanded,
+    bool resultsExpanded,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('schedule_schedule_expanded', scheduleExpanded);
+      await prefs.setBool('schedule_results_expanded', resultsExpanded);
+      print('Saved Schedule expansion state: schedule=$scheduleExpanded, results=$resultsExpanded');
+    } catch (e) {
+      print('Error saving Schedule expansion state: $e');
+    }
+  }
+
+  // Load expansion state for Schedule tab sections
+  Future<Map<String, bool>> loadScheduleExpansionState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final scheduleExpanded = prefs.getBool('schedule_schedule_expanded') ?? true;
+      final resultsExpanded = prefs.getBool('schedule_results_expanded') ?? true;
+      print('Loaded Schedule expansion state: schedule=$scheduleExpanded, results=$resultsExpanded');
+      return {
+        'scheduleExpanded': scheduleExpanded,
+        'resultsExpanded': resultsExpanded,
+      };
+    } catch (e) {
+      print('Error loading Schedule expansion state: $e');
+      return {
+        'scheduleExpanded': true,
+        'resultsExpanded': true,
+      };
+    }
+  }
 }

@@ -41,6 +41,40 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
     super.dispose();
   }
 
+  void _handleDecreaseScore(TextEditingController controller, int currentScore, int maxScore) {
+    final isSemiFinalsOrFinals =
+        widget.match.day == 'Semi Finals' || widget.match.day == 'Finals';
+    final minScore = isSemiFinalsOrFinals ? 15 : 11;
+    
+    // Determine which team's score is being decreased
+    final isTeam1 = controller == _team1ScoreController;
+    final otherController = isTeam1 ? _team2ScoreController : _team1ScoreController;
+    
+    final currentOtherScore = int.tryParse(otherController.text) ?? 0;
+    final newScore = currentScore - 1;
+    
+    // Update the current team's score first
+    controller.text = newScore.toString();
+    
+    // Adjust opponent's score when decreasing, based on win-by-2 logic
+    // ALWAYS maintain exactly 2-point difference when opponent is at/above minScore
+    if (currentOtherScore >= minScore) {
+      // Calculate what opponent's score should be to maintain exactly 2-point lead
+      final requiredOpponentScore = newScore + 2;
+      
+      // If required score is >= minScore, use it (maintain exactly 2-point difference)
+      // Example: 18-16, decrease 16 to 15 → opponent 18 becomes 17 (maintain 17-15 = 2 point lead)
+      // Example: 15-15, decrease to 13 → opponent becomes 15 (13+2=15, maintain 15-13 = 2 point lead)
+      // Example: 15-15, decrease to 10 → opponent stays at 15 (10+2=12 < 15, can't go below minScore)
+      if (requiredOpponentScore >= minScore) {
+        otherController.text = requiredOpponentScore.toString();
+      } else {
+        // Can't go below minScore, keep opponent at minScore
+        otherController.text = minScore.toString();
+      }
+    }
+  }
+
   void _handleBackButton() {
     final team1Score = int.tryParse(_team1ScoreController.text) ?? 0;
     final team2Score = int.tryParse(_team2ScoreController.text) ?? 0;
@@ -118,13 +152,17 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
       final isSemiFinalsOrFinals =
           widget.match.day == 'Semi Finals' || widget.match.day == 'Finals';
       final minScore = isSemiFinalsOrFinals ? 15 : 11;
+      final maxScore = minScore; // Max score equals winning score
 
-      // Validate scores using win-by-2 rule (allow scores above minScore)
+      // Validate scores: check max score limit first
       String? validationError;
 
+      // Check if any score exceeds max
+      if (team1Score > maxScore || team2Score > maxScore) {
+        validationError = 'Score cannot exceed $maxScore points. Current: $team1Score-$team2Score';
+      }
       // Allow resetting to 0-0 (no validation error)
-      // But check if there are actual scores entered, then validate them
-      if (team1Score == 0 && team2Score == 0) {
+      else if (team1Score == 0 && team2Score == 0) {
         // No validation needed - allow saving 0-0 to reset scores
         validationError = null;
       }
@@ -143,9 +181,9 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
 
         if (!hasWinner) {
           if (team1Score < minScore && team2Score < minScore) {
-            validationError = 'One team must reach at least $minScore points';
+            validationError = 'One team must reach at least $minScore points to win';
           } else {
-            validationError = 'Must win by 2 points (current: $team1Score-$team2Score)';
+            validationError = 'Must win by 2 points. Current score: $team1Score-$team2Score';
           }
         }
       }
@@ -398,20 +436,8 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
             builder: (context, value, child) {
               final currentScore = int.tryParse(value.text) ?? 0;
 
-              // Get the opponent score
-              final opponentController =
-                  controller == _team1ScoreController
-                      ? _team2ScoreController
-                      : _team1ScoreController;
-              final opponentScore = int.tryParse(opponentController.text) ?? 0;
-
-              // Determine if this team has won (reached minScore and ahead by 2)
-              final hasWon =
-                  currentScore >= maxScore && currentScore >= opponentScore + 2;
-
               final minusDisabled = currentScore <= 0;
-              final plusDisabled =
-                  hasWon; // Disable plus button if team has won
+              final plusDisabled = currentScore >= maxScore;
 
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -422,7 +448,7 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
                         minusDisabled
                             ? null
                             : () {
-                              controller.text = (currentScore - 1).toString();
+                              _handleDecreaseScore(controller, currentScore, maxScore);
                             },
                     icon: Icon(
                       Icons.remove,
@@ -439,21 +465,18 @@ class _MatchScoringScreenState extends State<MatchScoringScreen> {
 
                   // Increase Button
                   IconButton(
-                    onPressed:
-                        plusDisabled
-                            ? null
-                            : () {
-                              controller.text = (currentScore + 1).toString();
-                            },
+                    onPressed: plusDisabled ? null : () {
+                      // Don't allow incrementing beyond maxScore
+                      controller.text = (currentScore + 1).toString();
+                    },
                     icon: Icon(
                       Icons.add,
                       color: plusDisabled ? Colors.grey : Colors.green,
                     ),
                     style: IconButton.styleFrom(
-                      backgroundColor:
-                          plusDisabled
-                              ? Colors.grey.withOpacity(0.1)
-                              : Colors.green.withOpacity(0.1),
+                      backgroundColor: plusDisabled 
+                          ? Colors.grey.withOpacity(0.1)
+                          : Colors.green.withOpacity(0.1),
                       shape: const CircleBorder(),
                     ),
                   ),

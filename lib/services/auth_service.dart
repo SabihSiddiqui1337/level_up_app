@@ -281,7 +281,7 @@ class AuthService {
       print('User found: ${user.name} (${user.username}) with role: ${user.role}');
       _currentUser = user;
       await _saveCurrentUser(); // Save current user session
-      print('canScore after login: ${canScore}');
+      print('canScore after login: $canScore');
       return true;
     } catch (e) {
       print('User not found: $e');

@@ -6,6 +6,7 @@ import '../models/team.dart';
 import '../models/pickleball_team.dart';
 import '../models/event.dart';
 import '../services/event_service.dart';
+import '../services/score_service.dart';
 import '../widgets/custom_app_bar.dart';
 
 class GameSelectionScreen extends StatefulWidget {
@@ -26,9 +27,11 @@ class GameSelectionScreen extends StatefulWidget {
 
 class _GameSelectionScreenState extends State<GameSelectionScreen> {
   final EventService _eventService = EventService();
+  final ScoreService _scoreService = ScoreService();
   List<Event> _events = [];
   List<String> _sportNames = [];
   bool _isLoading = true;
+  Map<String, bool> _eventStartedStatus = {}; // Cache for event started status
 
   @override
   void initState() {
@@ -43,6 +46,62 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
     _loadEvents();
   }
 
+  // Check if playoffs have started and any score is set for a sport
+  Future<bool> _isEventStarted(String sportName) async {
+    try {
+      // Check all possible divisions for this sport
+      final divisions = ['all', 'Youth (18 or under)', 'Adult 18+'];
+      bool hasPlayoffsStarted = false;
+      bool hasAnyScores = false;
+      
+      for (final division in divisions) {
+        // Check if playoffs have started for this division
+        final playoffsStarted = await _scoreService.loadPlayoffsStartedForDivision(division);
+        if (playoffsStarted) {
+          hasPlayoffsStarted = true;
+          
+          // Check if any playoff scores exist
+          final qfScores = await _scoreService.loadQuarterFinalsScoresForDivision(division);
+          final sfScores = await _scoreService.loadSemiFinalsScoresForDivision(division);
+          final finalsScores = await _scoreService.loadFinalsScoresForDivision(division);
+          
+          // Check if any scores exist (not empty and not all zeros)
+          if (qfScores.isNotEmpty) {
+            for (final matchScores in qfScores.values) {
+              if (matchScores.values.any((score) => score > 0)) {
+                hasAnyScores = true;
+                break;
+              }
+            }
+          }
+          if (!hasAnyScores && sfScores.isNotEmpty) {
+            for (final matchScores in sfScores.values) {
+              if (matchScores.values.any((score) => score > 0)) {
+                hasAnyScores = true;
+                break;
+              }
+            }
+          }
+          if (!hasAnyScores && finalsScores.isNotEmpty) {
+            for (final matchScores in finalsScores.values) {
+              if (matchScores.values.any((score) => score > 0)) {
+                hasAnyScores = true;
+                break;
+              }
+            }
+          }
+          
+          if (hasAnyScores) break;
+        }
+      }
+      
+      return hasPlayoffsStarted && hasAnyScores;
+    } catch (e) {
+      print('Error checking if event started: $e');
+      return false;
+    }
+  }
+
   Future<void> _loadEvents() async {
     // Ensure refresh indicator shows for at least 1 second
     final startTime = DateTime.now();
@@ -50,6 +109,13 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
     await _eventService.initialize();
     // Load upcoming events excluding completed ones
     final upcomingEvents = await _eventService.getUpcomingEventsExcludingCompleted();
+    
+    // Check event started status for all events
+    final Map<String, bool> eventStartedStatus = {};
+    for (final event in upcomingEvents) {
+      final isStarted = await _isEventStarted(event.sportName);
+      eventStartedStatus[event.sportName] = isStarted;
+    }
     
     // Calculate elapsed time and ensure minimum 1 second duration
     final elapsed = DateTime.now().difference(startTime);
@@ -62,6 +128,7 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
         _events = upcomingEvents;
         // Get unique sport names from events
         _sportNames = _events.map((e) => e.sportName).toSet().toList();
+        _eventStartedStatus = eventStartedStatus;
         _isLoading = false;
       });
     }
@@ -147,6 +214,9 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
             .toList();
         final event = eventsForSport.isNotEmpty ? eventsForSport.first : null;
         
+        // Check if event has started
+        final isEventStarted = _eventStartedStatus[sportName] ?? false;
+        
         return _buildGameCard(
           context, 
           sportName, 
@@ -154,6 +224,10 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
           color, 
           event?.title ?? sportName, // Show event title if available, otherwise sport name
           () async {
+            if (isEventStarted) {
+              return; // Don't navigate if event has started
+            }
+            
             if (event == null) {
               // Fallback: go directly to registration if no event found
               if (sportName.toLowerCase().contains('pickleball')) {
@@ -182,6 +256,7 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
               ),
             );
           },
+          isEventStarted: isEventStarted,
         );
       },
       ),
@@ -223,8 +298,9 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
     IconData icon,
     Color color,
     String displayTitle, // Event title or sport name
-    VoidCallback onTap,
-  ) {
+    VoidCallback onTap, {
+    bool isEventStarted = false,
+  }) {
     // Determine which image to use based on sport name
     String? imagePath;
     if (gameName.toLowerCase().contains('basketball')) {
@@ -244,69 +320,107 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
       children: [
         // Card with image/background and icon
         Card(
-          elevation: 6,
+          elevation: isEventStarted ? 2 : 6,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              height: 140,
-              decoration: BoxDecoration(
+          child: Stack(
+            children: [
+              InkWell(
+                onTap: isEventStarted ? null : onTap,
                 borderRadius: BorderRadius.circular(16),
-              ),
-              child: Stack(
-                children: [
-                  // Background Image (only if image exists)
-                  if (imagePath != null)
-                    Positioned.fill(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.asset(
-                          imagePath,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            // Fallback to gradient if image fails to load
-                            return Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [color, color.withOpacity(0.8)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                              ),
-                            );
-                          },
+                child: Container(
+                  height: 140,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Stack(
+                    children: [
+                      // Background Image (only if image exists)
+                      if (imagePath != null)
+                        Positioned.fill(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Image.asset(
+                              imagePath,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                // Fallback to gradient if image fails to load
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [color, color.withOpacity(0.8)],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      // Gradient overlay if no image, or semi-transparent overlay if image exists
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            gradient:
+                                imagePath != null
+                                    ? LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.black.withOpacity(isEventStarted ? 0.5 : 0.2),
+                                        Colors.black.withOpacity(isEventStarted ? 0.7 : 0.4),
+                                      ],
+                                    )
+                                    : LinearGradient(
+                                      colors: [
+                                        isEventStarted ? color.withOpacity(0.5) : color,
+                                        isEventStarted ? color.withOpacity(0.3) : color.withOpacity(0.8)
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                          ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+              // Event Started overlay
+              if (isEventStarted)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      color: Colors.black.withOpacity(0.5),
                     ),
-                  // Gradient overlay if no image, or semi-transparent overlay if image exists
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        gradient:
-                            imagePath != null
-                                ? LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.black.withOpacity(0.2),
-                                    Colors.black.withOpacity(0.4),
-                                  ],
-                                )
-                                : LinearGradient(
-                                  colors: [color, color.withOpacity(0.8)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.lock,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Event Started',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
+                ),
+            ],
           ),
         ),
         // Text below the card - show event title if available, otherwise sport name
@@ -317,7 +431,7 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: Colors.grey[800],
+            color: isEventStarted ? Colors.grey[500] : Colors.grey[800],
           ),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
