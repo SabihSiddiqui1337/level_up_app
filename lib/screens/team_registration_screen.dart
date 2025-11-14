@@ -998,14 +998,19 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                             _coachPhoneController.text = currentUser.phone;
                             _coachEmailController.text = currentUser.email;
                             _hasUnsavedChanges = true;
+                            _hasAttemptedValidation = true; // Enable validation
                           });
                           // Trigger validation after filling
                           _validateField('coachName', currentUser.name);
                           _validateField('coachPhone', currentUser.phone);
                           _validateField('coachEmail', currentUser.email);
+                          // Also validate team name field
+                          _validateField('teamName', _teamNameController.text);
                           if (_formKey.currentState != null) {
                             _formKey.currentState!.validate();
                           }
+                          // Trigger form change to enable Next button
+                          _onFormChanged();
                         }
                       },
                       icon: const Icon(Icons.person, size: 18),
@@ -1189,10 +1194,34 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: _players.length >= _getMaxPlayersForSport() ? null : _addRegisteredPlayer,
+                    onPressed: () {
+                      // Check max players excluding auto-added player
+                      final maxPlayers = _getMaxPlayersForSport();
+                      final currentUser = _authService.currentUser;
+                      // Count only players that are NOT the auto-added current user
+                      final nonAutoAddedPlayers = _players.where((p) => p.userId != currentUser?.id).length;
+                      
+                      if (nonAutoAddedPlayers >= maxPlayers) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Max player reached'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      _addRegisteredPlayer();
+                    },
                     icon: const Icon(Icons.add),
-                    label: Text(
-                      _players.length >= _getMaxPlayersForSport() ? 'Max ${_getMaxPlayersForSport()} players' : 'Add Player',
+                    label: Builder(
+                      builder: (context) {
+                        final maxPlayers = _getMaxPlayersForSport();
+                        final currentUser = _authService.currentUser;
+                        final nonAutoAddedPlayers = _players.where((p) => p.userId != currentUser?.id).length;
+                        return Text(
+                          nonAutoAddedPlayers >= maxPlayers ? 'Max $maxPlayers players' : 'Add Player',
+                        );
+                      },
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2196F3),
@@ -1815,39 +1844,6 @@ class _PlayerDialogState extends State<_PlayerDialog> {
                       ),
                     ),
                   
-                  // Show "Add as Guest Player" option when search has text
-                  if (_searchController.text.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.blue[300]!),
-                        borderRadius: BorderRadius.circular(8),
-                        color: Colors.blue[50],
-                      ),
-                      child: ListTile(
-                        leading: const Icon(Icons.person_add, color: Colors.blue),
-                        title: Text('Add "${_searchController.text}" as Guest Player'),
-                        trailing: const Icon(Icons.arrow_forward, color: Colors.blue),
-                        onTap: () {
-                          // Directly add guest player with searched name
-                          final guestName = _searchController.text.trim();
-                          if (guestName.isEmpty) {
-                            return;
-                          }
-                          
-                          setState(() {
-                            _isGuest = true;
-                            _selectedUser = null;
-                            _nameController.text = guestName;
-                            _searchController.clear();
-                            _searchResults = [];
-                            _isSearching = false;
-                          });
-                        },
-                      ),
-                    ),
-                  ],
                   
                   if (_isSearching && _searchResults.isEmpty && _searchController.text.isNotEmpty)
                     Padding(
@@ -1928,79 +1924,74 @@ class _PlayerDialogState extends State<_PlayerDialog> {
                 
                 const SizedBox(height: 16),
                 
-                // Player Name field (enabled only for guest or when user is selected)
-                TextFormField(
-                  controller: _nameController,
-                  textCapitalization: TextCapitalization.words,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  enabled: _isGuest || _selectedUser != null,
-                  decoration: InputDecoration(
-                    labelText: 'Player Name',
-                    border: const OutlineInputBorder(),
-                    filled: !(_isGuest || _selectedUser != null),
-                    fillColor: Colors.grey[200],
+                // Player Name and Age fields (only shown when Guest is checked)
+                if (_isGuest) ...[
+                  TextFormField(
+                    controller: _nameController,
+                    textCapitalization: TextCapitalization.words,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    decoration: const InputDecoration(
+                      labelText: 'Player Name',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      if (value.isNotEmpty) {
+                        _formKey.currentState?.validate();
+                      }
+                    },
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter player name';
+                      }
+                      return null;
+                    },
                   ),
-                  onChanged: (value) {
-                    if (value.isNotEmpty) {
-                      _formKey.currentState?.validate();
-                    }
-                  },
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter player name';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _ageController,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  enabled: _isGuest || _selectedUser != null,
-                  decoration: InputDecoration(
-                    labelText: 'Age',
-                    border: const OutlineInputBorder(),
-                    filled: !(_isGuest || _selectedUser != null),
-                    fillColor: Colors.grey[200],
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _ageController,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    decoration: const InputDecoration(
+                      labelText: 'Age',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ],
+                    onChanged: (value) {
+                      if (value.isNotEmpty) {
+                        _formKey.currentState?.validate();
+                      }
+                    },
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter age';
+                      }
+                      final age = int.tryParse(value);
+                      if (age == null) {
+                        return 'Invalid age';
+                      }
+                      if (age < 1 || age > 99) {
+                        return 'Age must be between 1 and 99';
+                      }
+
+                      // Division-based age validation
+                      if (widget.selectedDivision == 'Youth (18 or under)' &&
+                          age > 18) {
+                        return 'Player must be 18 or under for Youth division';
+                      }
+                      if (widget.selectedDivision == 'Adult 18+' && age < 18) {
+                        return 'Player must be 18 or older for Adult division';
+                      }
+
+                      return null;
+                    },
                   ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(2),
-                  ],
-                  onChanged: (value) {
-                    if (value.isNotEmpty) {
-                      _formKey.currentState?.validate();
-                    }
-                  },
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter age';
-                    }
-                    final age = int.tryParse(value);
-                    if (age == null) {
-                      return 'Invalid age';
-                    }
-                    if (age < 1 || age > 99) {
-                      return 'Age must be between 1 and 99';
-                    }
-
-                    // Division-based age validation
-                    if (widget.selectedDivision == 'Youth (18 or under)' &&
-                        age > 18) {
-                      return 'Player must be 18 or under for Youth division';
-                    }
-                    if (widget.selectedDivision == 'Adult 18+' && age < 18) {
-                      return 'Player must be 18 or older for Adult division';
-                    }
-
-                    return null;
-                  },
-                ),
-              ],
-            ),
+                ],
+            ]),
           ),
         ),
       ),

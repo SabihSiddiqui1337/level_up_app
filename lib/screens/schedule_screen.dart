@@ -366,53 +366,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       ],
                     ),
                   ),
-                  // Action buttons inside the card
-                  if (isCompleted) ...[
-                    const SizedBox(height: 12),
-                    // For completed events - "View Results" button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => SportScheduleScreen(
-                                sportName: event.sportName,
-                                tournamentTitle: event.title,
-                                onHomePressed: widget.onHomePressed,
-                              ),
-                            ),
-                          );
-                          // Reload events when returning to update Schedule/Results categorization
-                          if (mounted) {
-                            _loadEvents();
-                          }
-                        },
-                        icon: const Icon(Icons.emoji_events, size: 16),
-                        label: const Text(
-                          'VIEW RESULTS',
-                          style: TextStyle(fontSize: 13),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFE67E22),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          elevation: 2,
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
           ),
           // Status messages and buttons based on team count, game state, and user role
-          if (!hasEnoughTeams) ...[
-            // Show "X teams left" for all users when less than 8 teams
+          // Don't show team count for completed events
+          if (!isCompleted && !hasEnoughTeams) ...[
+            // Show proper message for insufficient teams
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(12),
@@ -427,7 +388,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '$teamCount team${teamCount == 1 ? '' : 's'} left',
+                      teamCount == 0
+                          ? 'Not enough teams registered. Waiting for 8 more teams to start the game'
+                          : 'Not enough teams registered. Waiting for ${8 - teamCount} more team${8 - teamCount == 1 ? '' : 's'} to start the game',
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.orange[700],
@@ -438,7 +401,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ],
               ),
             ),
-          ] else if (!gameStarted) ...[
+          ] else if (!isCompleted && !gameStarted) ...[
             // Game not started yet
             if (isOwnerOrAdmin) ...[
               // Admin/Owner: Show "Start Game" button
@@ -518,6 +481,45 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
+                ),
+              ),
+            ),
+          ],
+          // View Results button at the bottom for completed events
+          if (isCompleted) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SportScheduleScreen(
+                        sportName: event.sportName,
+                        tournamentTitle: event.title,
+                        onHomePressed: widget.onHomePressed,
+                      ),
+                    ),
+                  );
+                  // Reload events when returning to update Schedule/Results categorization
+                  if (mounted) {
+                    _loadEvents();
+                  }
+                },
+                icon: const Icon(Icons.emoji_events, size: 16),
+                label: const Text(
+                  'VIEW RESULTS',
+                  style: TextStyle(fontSize: 13),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE67E22),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  elevation: 2,
                 ),
               ),
             ),

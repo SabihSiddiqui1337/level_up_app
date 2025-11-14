@@ -195,10 +195,16 @@ class _PickleballTeamRegistrationScreenState
   }
 
   void _addPlayer() {
-    if (_players.isNotEmpty) {
+    // Check max players (1 for pickleball), excluding auto-added player
+    final maxPlayers = 1;
+    // Count only players that are NOT the auto-added current user
+    final currentUser = _authService.currentUser;
+    final nonAutoAddedPlayers = _players.where((p) => p.userId != currentUser?.id).length;
+    
+    if (nonAutoAddedPlayers >= maxPlayers) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Maximum 1 player allowed'),
+          content: Text('Max player reached'),
           backgroundColor: Colors.red,
         ),
       );
@@ -656,7 +662,7 @@ class _PickleballTeamRegistrationScreenState
                             _coachPhoneController.text = currentUser.phone;
                             _coachEmailController.text = currentUser.email;
                           });
-                          // Trigger validation after filling
+                          // Trigger form validation to enable Next button
                           if (_formKey.currentState != null) {
                             _formKey.currentState!.validate();
                           }
@@ -818,21 +824,31 @@ class _PickleballTeamRegistrationScreenState
                         color: const Color(0xFF38A169),
                       ),
                     ),
-                    ElevatedButton.icon(
-                      onPressed: _players.isNotEmpty ? null : _addPlayer,
-                      icon: const Icon(Icons.add),
-                      label: Text(
-                        _players.isNotEmpty
-                            ? 'Max Players Added'
-                            : 'Add Player',
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            _players.isNotEmpty
-                                ? Colors.grey[400]
-                                : const Color(0xFF38A169),
-                        foregroundColor: Colors.white,
-                      ),
+                    Builder(
+                      builder: (context) {
+                        final maxPlayers = 1;
+                        final currentUser = _authService.currentUser;
+                        // Count only players that are NOT the auto-added current user
+                        final nonAutoAddedPlayers = _players.where((p) => p.userId != currentUser?.id).length;
+                        final canAddMore = nonAutoAddedPlayers < maxPlayers;
+                        
+                        return ElevatedButton.icon(
+                          onPressed: canAddMore ? _addPlayer : null,
+                          icon: const Icon(Icons.add),
+                          label: Text(
+                            canAddMore
+                                ? 'Add Player'
+                                : 'Max player reached',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                canAddMore
+                                    ? const Color(0xFF38A169)
+                                    : Colors.grey[400],
+                            foregroundColor: Colors.white,
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -1088,39 +1104,6 @@ class _PickleballPlayerDialogState extends State<_PickleballPlayerDialog> {
                     ),
                   ),
                 
-                // Show "Add as Guest Player" option when search has text
-                if (_searchController.text.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.blue[300]!),
-                      borderRadius: BorderRadius.circular(8),
-                      color: Colors.blue[50],
-                    ),
-                    child: ListTile(
-                      leading: const Icon(Icons.person_add, color: Colors.blue),
-                      title: Text('Add "${_searchController.text}" as Guest Player'),
-                      trailing: const Icon(Icons.arrow_forward, color: Colors.blue),
-                      onTap: () {
-                        final guestName = _searchController.text.trim();
-                        if (guestName.isEmpty) {
-                          return;
-                        }
-                        
-                        setState(() {
-                          _isGuest = true;
-                          _selectedUser = null;
-                          _nameController.text = guestName;
-                          _searchController.clear();
-                          _searchResults = [];
-                          _isSearching = false;
-                        });
-                      },
-                    ),
-                  ),
-                ],
-                
                 // Selected user display
                 if (_selectedUser != null && !_isSearching)
                   Container(
@@ -1195,53 +1178,52 @@ class _PickleballPlayerDialogState extends State<_PickleballPlayerDialog> {
               
               const SizedBox(height: 16),
               
-              // Player Name field (enabled only for guest or when user is selected)
-              TextFormField(
-                controller: _nameController,
-                textCapitalization: TextCapitalization.words,
-                autocorrect: false,
-                enableSuggestions: false,
-                enabled: _isGuest || _selectedUser != null,
-                decoration: InputDecoration(
-                  labelText: 'Player Name',
-                  border: const OutlineInputBorder(),
-                  filled: !(_isGuest || _selectedUser != null),
-                  fillColor: Colors.grey[200],
+              // Player Name and DUPR Rating fields (only shown when Guest is checked)
+              if (_isGuest) ...[
+                TextFormField(
+                  controller: _nameController,
+                  textCapitalization: TextCapitalization.words,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Player Name',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter player name';
+                    }
+                    return null;
+                  },
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter player name';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              // Show locked DUPR rating (read-only) - always locked when fixed rating is provided
-              TextFormField(
-                initialValue: _selectedDuprRating,
-                style: const TextStyle(color: Colors.black87),
-                decoration: InputDecoration(
-                  labelText: 'DUPR Rating',
-                  labelStyle: TextStyle(color: Colors.grey[600]),
-                  prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
-                  border: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                const SizedBox(height: 16),
+                // Show locked DUPR rating (read-only) - always locked when fixed rating is provided
+                TextFormField(
+                  initialValue: _selectedDuprRating,
+                  style: const TextStyle(color: Colors.black87),
+                  decoration: InputDecoration(
+                    labelText: 'DUPR Rating',
+                    labelStyle: TextStyle(color: Colors.grey[600]),
+                    prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                    ),
+                    disabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[200],
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
-                  ),
-                  disabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[200],
+                  readOnly: true,
+                  enabled: false,
                 ),
-                readOnly: true,
-                enabled: false,
-              ),
+              ],
             ],
           ),
         ),
