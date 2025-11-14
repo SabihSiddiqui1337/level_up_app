@@ -29,10 +29,9 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
   List<Team> _allTeams = [];
   List<Team> _filteredTeams = [];
   List<Team> _registeredTeams = []; // Teams already registered for this event
-  Set<String> _selectedTeamIds = {};
+  final Set<String> _selectedTeamIds = {};
   Set<String> _registeredTeamIds = {}; // IDs of teams already registered for this event
   bool _isLoading = true;
-  bool _showTeamsList = true; // Show teams automatically when screen opens
   final FocusNode _searchFocusNode = FocusNode();
   final AuthService _authService = AuthService();
 
@@ -54,9 +53,7 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
   }
 
   void _onFocusChanged() {
-    setState(() {
-      _showTeamsList = _searchFocusNode.hasFocus || _searchController.text.isNotEmpty;
-    });
+    // Focus changed - can be used for future functionality
   }
 
   Future<void> _loadTeams() async {
@@ -77,14 +74,12 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
     _filteredTeams = List.from(_allTeams);
     setState(() {
       _isLoading = false;
-      _showTeamsList = true; // Automatically show teams when loaded
     });
   }
 
   void _onSearchChanged() {
     final query = _searchController.text.toLowerCase().trim();
     setState(() {
-      _showTeamsList = _searchFocusNode.hasFocus || query.isNotEmpty;
       if (query.isEmpty) {
         _filteredTeams = List.from(_allTeams);
       } else {
@@ -353,12 +348,37 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
                                   : null,
                             ),
                             title: Text(user.name),
-                            subtitle: Text('@${user.username}'),
+                            subtitle: isAlreadyAdded
+                                ? Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('@${user.username}'),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        'Player already registered',
+                                        style: TextStyle(
+                                          color: Colors.orange,
+                                          fontSize: 12,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Text('@${user.username}'),
                             trailing: isAlreadyAdded
                                 ? const Icon(Icons.check, color: Colors.green)
                                 : const Icon(Icons.add),
                             onTap: isAlreadyAdded
-                                ? null
+                                ? () {
+                                    // Show message that player is already registered
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('This player is already registered'),
+                                        backgroundColor: Colors.orange,
+                                        duration: Duration(seconds: 2),
+                                      ),
+                                    );
+                                  }
                                 : () {
                                     final player = Player(
                                       id: DateTime.now().millisecondsSinceEpoch.toString() + index.toString(),
@@ -422,7 +442,7 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
                           }
                           
                           final guestPlayer = Player(
-                            id: DateTime.now().millisecondsSinceEpoch.toString() + 'guest',
+                            id: '${DateTime.now().millisecondsSinceEpoch}guest',
                             name: guestName,
                             position: 'Player',
                             jerseyNumber: 0,
@@ -582,79 +602,14 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
                           onPressed: () {
                             setState(() {
                               _searchController.clear();
-                              _showTeamsList = true;
                             });
                           },
                         )
                       : null,
                 ),
                 onChanged: (_) => _onSearchChanged(),
-                onTap: () {
-                  setState(() {
-                    _showTeamsList = true;
-                  });
-                },
               ),
             ),
-            
-            // Teams Registered Already section
-            if (_registeredTeams.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Teams Registered Already',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1976D2),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 150, // Fixed height for scrollable list
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _registeredTeams.length,
-                        itemBuilder: (context, index) {
-                          final team = _registeredTeams[index];
-                          return ListTile(
-                            dense: true,
-                            leading: CircleAvatar(
-                              radius: 16,
-                              child: Text(team.name[0].toUpperCase()),
-                            ),
-                            title: Text(
-                              team.name,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            subtitle: Text(
-                              'Captain: ${_getCaptainName(team)}',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                            trailing: Icon(
-                              Icons.check_circle,
-                              color: Colors.green,
-                              size: 20,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                ),
-              ),
-            ],
             
             // Teams list
             Expanded(
@@ -736,6 +691,65 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
                           },
                         ),
             ),
+            
+            // Teams Registered Already section (at the bottom)
+            if (_registeredTeams.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Teams Registered Already',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1976D2),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 150, // Fixed height for scrollable list
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _registeredTeams.length,
+                        itemBuilder: (context, index) {
+                          final team = _registeredTeams[index];
+                          return ListTile(
+                            dense: true,
+                            leading: CircleAvatar(
+                              radius: 16,
+                              child: Text(team.name[0].toUpperCase()),
+                            ),
+                            title: Text(
+                              team.name,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Captain: ${_getCaptainName(team)}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            trailing: Icon(
+                              Icons.check_circle,
+                              color: Colors.green,
+                              size: 20,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ],
             
             // Make New Team button
             Padding(

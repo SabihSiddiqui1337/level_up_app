@@ -10,6 +10,10 @@ class AuthService {
 
   List<User> _users = [];
   User? _currentUser;
+  
+  // Store verification codes with expiration times
+  // Key: normalized phone number, Value: {code: String, expiresAt: DateTime}
+  final Map<String, Map<String, dynamic>> _verificationCodes = {};
 
   // Initialize the service
   Future<void> initialize() async {
@@ -332,10 +336,15 @@ class AuthService {
       // StateError means username not found, which is good - continue checking
     }
 
-    // Check for phone conflicts
+    // Check for phone conflicts (normalize phone numbers for comparison)
     try {
+      // Normalize phone numbers by removing non-digit characters
+      final normalizedPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
       _users.firstWhere(
-        (user) => user.phone == phone,
+        (user) {
+          final normalizedUserPhone = user.phone.replaceAll(RegExp(r'[^\d]'), '');
+          return normalizedUserPhone == normalizedPhone;
+        },
       );
       // If we get here, phone exists
       throw Exception('PHONE_TAKEN');
@@ -554,6 +563,129 @@ class AuthService {
     }
   }
 
+  // Check if phone number exists in database
+  Future<bool> checkPhoneExists(String phone) async {
+    try {
+      // Normalize phone number (remove non-digit characters)
+      final normalizedPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+      _users.firstWhere(
+        (user) {
+          final normalizedUserPhone = user.phone.replaceAll(RegExp(r'[^\d]'), '');
+          return normalizedUserPhone == normalizedPhone;
+        },
+      );
+      return true; // Phone exists
+    } catch (e) {
+      return false; // Phone doesn't exist
+    }
+  }
+
+  // Get user by phone number
+  User? getUserByPhone(String phone) {
+    try {
+      // Normalize phone number (remove non-digit characters)
+      final normalizedPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+      return _users.firstWhere(
+        (user) {
+          final normalizedUserPhone = user.phone.replaceAll(RegExp(r'[^\d]'), '');
+          return normalizedUserPhone == normalizedPhone;
+        },
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Generate a 6-digit verification code
+  String _generateVerificationCode() {
+    return (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
+  }
+
+  // Send verification code via SMS (simulated)
+  Future<String?> sendVerificationCode(String phone) async {
+    try {
+      // Normalize phone number
+      final normalizedPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+      
+      // Check if phone number exists
+      final phoneExists = await checkPhoneExists(phone);
+      if (!phoneExists) {
+        print('Phone number not found in database: $phone');
+        return null;
+      }
+
+      // Generate verification code
+      final code = _generateVerificationCode();
+      
+      // Set expiration time (10 minutes from now)
+      final expiresAt = DateTime.now().add(const Duration(minutes: 10));
+      
+      // Store code with expiration (replace any existing code for this phone)
+      _verificationCodes[normalizedPhone] = {
+        'code': code,
+        'expiresAt': expiresAt.toIso8601String(),
+      };
+      
+      // In a real app, you would send an actual SMS here
+      // For now, we'll just print it (in production, use an SMS service like Twilio)
+      print('SMS sent to $phone: Your LevelUpSports Code is: $code');
+      
+      // Simulate sending SMS (in production, replace this with actual SMS sending)
+      await Future.delayed(const Duration(seconds: 1));
+      
+      return code;
+    } catch (e) {
+      print('Error sending verification code: $e');
+      return null;
+    }
+  }
+
+  // Verify code and check expiration
+  Future<bool> verifyCode(String phone, String code) async {
+    try {
+      // Normalize phone number
+      final normalizedPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+      
+      // Check if code exists for this phone
+      if (!_verificationCodes.containsKey(normalizedPhone)) {
+        print('No verification code found for phone: $phone');
+        return false;
+      }
+      
+      final storedData = _verificationCodes[normalizedPhone]!;
+      final storedCode = storedData['code'] as String;
+      final expiresAtStr = storedData['expiresAt'] as String;
+      final expiresAt = DateTime.parse(expiresAtStr);
+      
+      // Check if code is expired
+      if (DateTime.now().isAfter(expiresAt)) {
+        print('Verification code expired for phone: $phone');
+        // Remove expired code
+        _verificationCodes.remove(normalizedPhone);
+        return false;
+      }
+      
+      // Check if code matches
+      if (storedCode != code.trim()) {
+        print('Invalid verification code for phone: $phone');
+        return false;
+      }
+      
+      // Code is valid and not expired
+      // Don't remove the code yet - keep it until password is reset
+      return true;
+    } catch (e) {
+      print('Error verifying code: $e');
+      return false;
+    }
+  }
+
+  // Clear verification code after successful password reset
+  void clearVerificationCode(String phone) {
+    final normalizedPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+    _verificationCodes.remove(normalizedPhone);
+  }
+
   // Reset password for a user by email (updates local database)
   Future<bool> resetPassword(String email, String newPassword) async {
     try {
@@ -589,6 +721,55 @@ class AuthService {
       return true;
     } catch (e) {
       print('Error resetting password: $e');
+      return false;
+    }
+  }
+
+  // Reset password by phone number
+  Future<bool> resetPasswordByPhone(String phone, String newPassword) async {
+    try {
+      // Get user by phone number
+      final user = getUserByPhone(phone);
+      
+      if (user == null) {
+        print('User not found for password reset: $phone');
+        return false;
+      }
+
+      // Find user index
+      final userIndex = _users.indexWhere((u) => u.id == user.id);
+      
+      if (userIndex == -1) {
+        print('User index not found for password reset: $phone');
+        return false;
+      }
+
+      // Update the user's password
+      _users[userIndex] = User(
+        id: _users[userIndex].id,
+        name: _users[userIndex].name,
+        email: _users[userIndex].email,
+        password: newPassword,
+        username: _users[userIndex].username,
+        phone: _users[userIndex].phone,
+        role: _users[userIndex].role,
+        createdAt: _users[userIndex].createdAt,
+      );
+
+      // If the current user is the one resetting, update current user too
+      if (_currentUser != null && _currentUser!.id == user.id) {
+        _currentUser = _users[userIndex];
+        await _saveCurrentUser();
+      }
+
+      // Clear verification code after successful reset
+      clearVerificationCode(phone);
+
+      await _saveUsers();
+      print('Password reset successful for phone: $phone');
+      return true;
+    } catch (e) {
+      print('Error resetting password by phone: $e');
       return false;
     }
   }

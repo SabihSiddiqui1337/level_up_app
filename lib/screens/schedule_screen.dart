@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import '../widgets/custom_app_bar.dart';
 import '../widgets/app_loading_widget.dart';
@@ -62,6 +64,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     super.didChangeDependencies();
     // Reload expansion state when screen becomes visible
     _loadExpansionState();
+    _loadEvents();
+  }
+
+  // Reload events when screen becomes visible (called from navigation)
+  void reloadEvents() {
     _loadEvents();
   }
 
@@ -359,6 +366,46 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       ],
                     ),
                   ),
+                  // Action buttons inside the card
+                  if (isCompleted) ...[
+                    const SizedBox(height: 12),
+                    // For completed events - "View Results" button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SportScheduleScreen(
+                                sportName: event.sportName,
+                                tournamentTitle: event.title,
+                                onHomePressed: widget.onHomePressed,
+                              ),
+                            ),
+                          );
+                          // Reload events when returning to update Schedule/Results categorization
+                          if (mounted) {
+                            _loadEvents();
+                          }
+                        },
+                        icon: const Icon(Icons.emoji_events, size: 16),
+                        label: const Text(
+                          'VIEW RESULTS',
+                          style: TextStyle(fontSize: 13),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFE67E22),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          elevation: 2,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -446,8 +493,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
+                onPressed: () async {
+                  await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => SportScheduleScreen(
@@ -457,42 +504,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       ),
                     ),
                   );
+                  // Reload events when returning to update Schedule/Results categorization
+                  if (mounted) {
+                    _loadEvents();
+                  }
                 },
                 icon: const Icon(Icons.schedule),
                 label: const Text('View Schedule'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2196F3),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-          ],
-          // Results button for completed events
-          if (isCompleted) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => SportScheduleScreen(
-                        sportName: event.sportName,
-                        tournamentTitle: event.title,
-                        onHomePressed: widget.onHomePressed,
-                      ),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.emoji_events),
-                label: const Text('View Results'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE67E22),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(

@@ -240,19 +240,21 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildActionCard(
-                          icon: Icons.delete_outline,
-                          title: 'Delete',
-                          subtitle: 'Event',
-                          color: Colors.red,
-                          onTap: () {
-                            Navigator.pop(context);
-                            _showDeleteEventDialog();
-                          },
-                          enabled: hasEvents,
+                      // Only show Delete button for sabih1337 user
+                      if (_authService.currentUser?.username == 'sabih1337')
+                        Expanded(
+                          child: _buildActionCard(
+                            icon: Icons.delete_outline,
+                            title: 'Delete',
+                            subtitle: 'Event',
+                            color: Colors.red,
+                            onTap: () {
+                              Navigator.pop(context);
+                              _showDeleteEventDialog();
+                            },
+                            enabled: hasEvents,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -646,17 +648,19 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                   ],
                                 ),
                               ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete,
-                                  color: Colors.red,
+                              // Only show delete button for sabih1337 user
+                              if (_authService.currentUser?.username == 'sabih1337')
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () async {
+                                    // Show confirmation dialog directly without popping
+                                    // The confirmation will handle closing all dialogs
+                                    _confirmDeleteEvent(event, context);
+                                  },
                                 ),
-                                onPressed: () async {
-                                  // Show confirmation dialog directly without popping
-                                  // The confirmation will handle closing all dialogs
-                                  _confirmDeleteEvent(event, context);
-                                },
-                              ),
                             ],
                           ),
                             );
@@ -2662,19 +2666,113 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
-  void _confirmDeleteEvent(Event event, BuildContext dialogContext) {
+  void _confirmDeleteEvent(Event event, BuildContext dialogContext) async {
     // Get the admin panel context before showing nested dialogs
     // This context is from the AdminPanelScreen state
     final adminContext = context;
     
+    // Check if event is completed - if yes, require "I CONFIRM" text input first
+    final isCompleted = await _eventService.isEventCompleted(event.id);
+    
+    if (isCompleted) {
+      // Show "I CONFIRM" confirmation dialog first for completed events
+      final confirmResult = await showDialog<bool>(
+        context: dialogContext,
+        barrierDismissible: false,
+        builder: (confirmContext) {
+          final confirmController = TextEditingController();
+          return StatefulBuilder(
+            builder: (context, setState) {
+              final confirmationText = confirmController.text.trim();
+              final isConfirmValid = confirmationText == 'I CONFIRM';
+              
+              return WillPopScope(
+                onWillPop: () async {
+                  confirmController.dispose();
+                  return true;
+                },
+                child: AlertDialog(
+                  title: const Text(
+                    'Confirm Deletion',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'This event is already completed. Deleting it will permanently remove all associated data.',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'To confirm deletion, please type "I CONFIRM" (all caps) below:',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: confirmController,
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: InputDecoration(
+                          hintText: 'Type I CONFIRM',
+                          border: const OutlineInputBorder(),
+                          errorText: confirmationText.isNotEmpty && !isConfirmValid
+                              ? 'Must be exactly "I CONFIRM"'
+                              : null,
+                        ),
+                        onChanged: (value) {
+                          setState(() {});
+                        },
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        confirmController.dispose();
+                        Navigator.pop(confirmContext, false);
+                      },
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isConfirmValid ? Colors.red : Colors.grey,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: isConfirmValid
+                          ? () {
+                              confirmController.dispose();
+                              Navigator.pop(confirmContext, true);
+                            }
+                          : null,
+                      child: const Text('Continue'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      );
+      
+      // If user cancelled or didn't confirm, don't proceed
+      if (confirmResult != true) {
+        return;
+      }
+      
+      // Small delay after first confirmation
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    
+    // Show final confirmation dialog
     showDialog(
       context: dialogContext,
-      builder: (confirmContext) => AlertDialog(
+      builder: (finalConfirmContext) => AlertDialog(
         title: const Text('Delete Event'),
-        content: Text('Are you sure you want to delete "${event.title}"?'),
+        content: Text('Are you sure you want to delete "${event.title}"? This action cannot be undone.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(confirmContext),
+            onPressed: () => Navigator.pop(finalConfirmContext),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
@@ -2684,8 +2782,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ),
             onPressed: () async {
               // Close the confirmation dialog first
-              if (confirmContext.mounted) {
-                Navigator.pop(confirmContext);
+              if (finalConfirmContext.mounted) {
+                Navigator.pop(finalConfirmContext);
               }
               
               // Small delay to ensure dialog closes

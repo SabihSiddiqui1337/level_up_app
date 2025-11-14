@@ -12,7 +12,6 @@ import '../services/event_service.dart';
 import '../services/pickleball_team_service.dart';
 import '../keys/pickleball_screen/pickleball_screen_keys.dart';
 import 'pickleball_process_registration_screen.dart';
-import 'player_stats_screen.dart';
 
 class PhoneNumberFormatter extends TextInputFormatter {
   @override

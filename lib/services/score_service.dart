@@ -61,6 +61,32 @@ class ScoreService {
     return {'gamesPerTeam': 1, 'winningScore': 11}; // Default values
   }
 
+  // Save custom schedule flag for a specific division
+  Future<void> saveCustomScheduleForDivision(String division, bool isCustom) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'custom_schedule_$division';
+      await prefs.setBool(key, isCustom);
+      print('Saved custom schedule flag for division $division: $isCustom');
+    } catch (e) {
+      print('Error saving custom schedule flag for division $division: $e');
+    }
+  }
+
+  // Load custom schedule flag for a specific division
+  Future<bool> loadCustomScheduleForDivision(String division) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'custom_schedule_$division';
+      final isCustom = prefs.getBool(key) ?? false;
+      print('Loaded custom schedule flag for division $division: $isCustom');
+      return isCustom;
+    } catch (e) {
+      print('Error loading custom schedule flag for division $division: $e');
+      return false;
+    }
+  }
+
   // Save selected division for a sport
   Future<void> saveSelectedDivision(String sportName, String division) async {
     try {

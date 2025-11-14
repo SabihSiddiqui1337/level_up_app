@@ -1,8 +1,10 @@
-// ignore_for_file: use_build_context_synchronously
+// ignore_for_file: use_build_context_synchronously, unused_field
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
+import '../utils/phone_number_formatter.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -13,16 +15,17 @@ class ForgotPasswordScreen extends StatefulWidget {
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _codeController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _authService = AuthService();
 
   bool _isLoading = false;
-  bool _emailVerified = false;
+  bool _phoneVerified = false;
   bool _codeVerified = false;
   String _verificationCode = '';
+  DateTime? _codeExpiresAt;
   int _resendCountdown = 0;
   Timer? _resendTimer;
   bool _isProcessing = false; // Add flag to prevent rapid clicks
@@ -35,7 +38,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _phoneController.dispose();
     _codeController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
@@ -105,9 +108,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   Text(
                     _codeVerified
                         ? 'Enter your new password'
-                        : _emailVerified
-                            ? 'Enter the verification code sent to your email'
-                            : 'Enter your email address to reset your password',
+                        : _phoneVerified
+                            ? 'Enter the verification code sent to your phone'
+                            : 'Enter your phone number to recover your account',
                     style: Theme.of(
                       context,
                     ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
@@ -116,8 +119,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
                   const SizedBox(height: 40),
 
-                  if (!_emailVerified) ...[
-                    // Email Input
+                  if (!_phoneVerified) ...[
+                    // Phone Number Input
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -131,16 +134,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         ],
                       ),
                       child: TextFormField(
-                        controller: _emailController,
-                        textCapitalization: TextCapitalization.none,
+                        controller: _phoneController,
                         autocorrect: false,
-                        enableSuggestions: true,
-                        keyboardType: TextInputType.emailAddress,
+                        enableSuggestions: false,
+                        keyboardType: TextInputType.phone,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(12), // XXX-XXX-XXXX = 12 characters
+                          PhoneNumberFormatter(),
+                        ],
                         decoration: InputDecoration(
-                          hintText: 'Email Address',
+                          hintText: 'Phone Number (xxx-xxx-xxxx)',
                           hintStyle: TextStyle(color: Colors.grey[500]),
                           prefixIcon: Icon(
-                            Icons.email_outlined,
+                            Icons.phone_outlined,
                             color: const Color(0xFF2196F3),
                           ),
                           border: OutlineInputBorder(
@@ -156,10 +163,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
-                            return 'Please enter your email address';
+                            return 'Please enter your phone number';
                           }
-                          if (!value.contains('@')) {
-                            return 'Please enter a valid email address';
+                          // Check if phone number has at least 10 digits
+                          final digitsOnly = value.replaceAll(RegExp(r'[^\d]'), '');
+                          if (digitsOnly.length < 10) {
+                            return 'Please enter a valid phone number';
                           }
                           return null;
                         },
@@ -177,7 +186,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       height: 56,
                       child: ElevatedButton(
                         onPressed:
-                            (_isLoading || _isProcessing) ? null : _verifyEmail,
+                            (_isLoading || _isProcessing) ? null : _verifyPhone,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2196F3),
                           foregroundColor: Colors.white,
@@ -256,9 +265,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
                             return 'Please enter the verification code';
-                          }
-                          if (value != _verificationCode) {
-                            return 'Invalid verification code';
                           }
                           return null;
                         },
@@ -491,7 +497,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  Future<void> _verifyEmail() async {
+  Future<void> _verifyPhone() async {
     if (!_formKey.currentState!.validate()) return;
 
     // Prevent multiple rapid clicks
@@ -503,21 +509,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
 
     try {
-      final email = _emailController.text.trim();
+      final phone = _phoneController.text.trim();
       
-      // Check if email exists in database
-      final emailExists = await _authService.checkEmailExists(email);
+      // Check if phone number exists in database
+      final phoneExists = await _authService.checkPhoneExists(phone);
 
-      if (emailExists) {
-        // Send password reset email via Firebase Auth
-        final emailSent = await _authService.sendPasswordResetEmail(email);
+      if (phoneExists) {
+        // Send verification code via SMS (simulated)
+        final code = await _authService.sendVerificationCode(phone);
         
-        if (emailSent) {
-          // Generate a verification code for the UI flow
-          _verificationCode = _generateVerificationCode();
+        if (code != null) {
+          // Store verification code and expiration time
+          _verificationCode = code;
+          _codeExpiresAt = DateTime.now().add(const Duration(minutes: 10));
 
           setState(() {
-            _emailVerified = true;
+            _phoneVerified = true;
             _isLoading = false;
             _isProcessing = false;
           });
@@ -529,7 +536,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Password reset email sent to $email. Please check your email for the verification code.',
+                'Verification code sent to $phone. Please check your messages.',
                 style: const TextStyle(color: Colors.white),
               ),
               backgroundColor: const Color(0xFF38A169),
@@ -550,7 +557,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: const Text(
-                'Failed to send password reset email. Please try again.',
+                'Failed to send verification code. Please try again.',
                 style: TextStyle(color: Colors.white),
               ),
               backgroundColor: const Color(0xFFE53E3E),
@@ -571,13 +578,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       } else {
         setState(() {
           _isLoading = false;
+          _isProcessing = false;
         });
 
         // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text(
-              'The email address entered wasn\'t found in the database! Please check that you entered the correct email',
+              'This phone number is not found in our database.',
               style: TextStyle(color: Colors.white),
             ),
             backgroundColor: const Color(0xFFE53E3E),
@@ -626,11 +634,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
 
     try {
-      // Simulate network delay
-      await Future.delayed(const Duration(seconds: 1));
+      final phone = _phoneController.text.trim();
+      final code = _codeController.text.trim();
 
-      if (_codeController.text.trim() == _verificationCode) {
-        // Code is correct - show password reset form
+      // Verify code with expiration check
+      final isValid = await _authService.verifyCode(phone, code);
+
+      if (isValid) {
+        // Code is correct and not expired - show password reset form
         setState(() {
           _codeVerified = true;
           _isLoading = false;
@@ -640,20 +651,38 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           _isLoading = false;
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Invalid verification code. Please try again.',
-              style: TextStyle(color: Colors.white),
+        // Check if code expired
+        if (_codeExpiresAt != null && DateTime.now().isAfter(_codeExpiresAt!)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'This verification code is no longer valid. Please request a new code.',
+                style: TextStyle(color: Colors.white),
+              ),
+              backgroundColor: const Color(0xFFE53E3E),
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            backgroundColor: const Color(0xFFE53E3E),
-            duration: const Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Invalid verification code. Please try again.',
+                style: TextStyle(color: Colors.white),
+              ),
+              backgroundColor: const Color(0xFFE53E3E),
+              duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-          ),
-        );
+          );
+        }
       }
     } catch (e) {
       setState(() {
@@ -682,20 +711,21 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     _startResendCountdown();
 
     try {
-      final email = _emailController.text.trim();
+      final phone = _phoneController.text.trim();
       
-      // Resend password reset email via Firebase Auth
-      final emailSent = await _authService.sendPasswordResetEmail(email);
+      // Resend verification code via SMS (simulated)
+      final code = await _authService.sendVerificationCode(phone);
       
-      if (emailSent) {
-        // Generate a new verification code for the UI flow
-        _verificationCode = _generateVerificationCode();
+      if (code != null) {
+        // Store new verification code and expiration time
+        _verificationCode = code;
+        _codeExpiresAt = DateTime.now().add(const Duration(minutes: 10));
         _codeController.clear();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Password reset email resent to $email. Please check your email.',
+              'Verification code resent to $phone. Please check your messages.',
               style: const TextStyle(color: Colors.white),
             ),
             backgroundColor: const Color(0xFF38A169),
@@ -708,7 +738,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text(
-              'Failed to resend password reset email. Please try again.',
+              'Failed to resend verification code. Please try again.',
               style: TextStyle(color: Colors.white),
             ),
             backgroundColor: const Color(0xFFE53E3E),
@@ -752,12 +782,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
   }
 
-  String _generateVerificationCode() {
-    // Generate a 6-digit verification code
-    return (100000 + (DateTime.now().millisecondsSinceEpoch % 900000))
-        .toString();
-  }
-
   Future<void> _resetPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -769,11 +793,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       // Simulate network delay
       await Future.delayed(const Duration(seconds: 1));
 
-      // Reset the password using AuthService
-      final success = await _authService.resetPassword(
-        _emailController.text.trim(),
-        _newPasswordController.text.trim(),
-      );
+      final phone = _phoneController.text.trim();
+      final newPassword = _newPasswordController.text.trim();
+
+      // Reset the password using AuthService (by phone number)
+      final success = await _authService.resetPasswordByPhone(phone, newPassword);
 
       if (success) {
         // Show success message

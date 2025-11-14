@@ -59,6 +59,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   String? _lastStandingsCacheKey;
   int _standingsUpdateCounter = 0; // Counter to force UI rebuild when standings change
 
+  // Timer for polling score updates
+  Timer? _scoreUpdateTimer;
+  Map<String, Map<String, int>> _lastKnownScores = {}; // Track last known scores for comparison
+
   // Scoring state
   Match? _selectedMatch;
   int?
@@ -121,8 +125,17 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     // Create a cache key based on teams and division
     // Sort team IDs to ensure consistent cache key regardless of team loading order
     final sortedTeamIds = teams.map((t) => t.id).toList()..sort();
+    final division = _selectedDivision ?? 'all';
     String cacheKey =
-        '${widget.sportName}_${_selectedDivision ?? 'all'}_${sortedTeamIds.join('_')}_shuffle_$shouldShuffle';
+        '${widget.sportName}_${division}_${sortedTeamIds.join('_')}_shuffle_$shouldShuffle';
+
+    // Check for custom schedule first (only if not shuffling)
+    if (!shouldShuffle) {
+      final customCacheKey = '${widget.sportName}_${division}_${sortedTeamIds.join('_')}_custom';
+      if (_matchesCache.containsKey(customCacheKey)) {
+        return _matchesCache[customCacheKey]!;
+      }
+    }
 
     // For shuffle operations, add timestamp to ensure unique cache key
     if (shouldShuffle) {
@@ -2308,7 +2321,12 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         selectedGames,
                         selectedScore,
                       );
+                      
+                      // Close the settings dialog first
                       Navigator.of(context).pop();
+                      
+                      // Show prompt: "Do you want to create your own schedule?"
+                      _showCustomSchedulePrompt(selectedGames, selectedScore);
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -2905,6 +2923,9 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     _tabController = TabController(length: 2, vsync: this);
     _playoffTabController = TabController(length: 3, vsync: this);
 
+    // Reset state for new sport/event to prevent carryover
+    _resetStateForNewEvent();
+
     // Load navigation state for this event
     _loadNavigationState();
 
@@ -2937,13 +2958,80 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       }
     });
 
+    // Load current event first to ensure teams are filtered correctly
+    _loadCurrentEvent();
+    
     _loadTeams().then((_) async {
+      // Ensure current event is loaded before loading scores
+      if (_currentEvent == null) {
+        await _loadCurrentEvent();
+      }
       await _loadScores();
+      // Store initial scores for comparison
+      _lastKnownScores = Map<String, Map<String, int>>.from(_matchScores);
+      // Start polling for score updates (every 5 seconds)
+      _startScorePolling();
       // After loading teams and scores, restore navigation state
       // Use a delay to ensure tab controllers are ready
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _loadNavigationState();
       });
+    });
+  }
+
+  // Start polling for score updates
+  void _startScorePolling() {
+    // Cancel any existing timer
+    _scoreUpdateTimer?.cancel();
+    
+    // Poll every 5 seconds for score updates
+    _scoreUpdateTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
+      try {
+        // Reload scores from storage
+        await _loadScores();
+        
+        // Check if scores have changed by comparing with last known scores
+        bool scoresChanged = false;
+        
+        // Check if match scores changed
+        if (_matchScores.length != (_lastKnownScores.length)) {
+          scoresChanged = true;
+        } else {
+          for (var matchId in _matchScores.keys) {
+            final currentScores = _matchScores[matchId];
+            final lastScores = _lastKnownScores[matchId];
+            
+            if (lastScores == null) {
+              scoresChanged = true;
+              break;
+            }
+            // Use null assertion since we've checked for null above
+            if (currentScores?.length != lastScores.length ||
+                currentScores.toString() != lastScores.toString()) {
+              scoresChanged = true;
+              break;
+            }
+          }
+        }
+        
+        if (scoresChanged && mounted) {
+          // Update last known scores
+          _lastKnownScores = Map<String, Map<String, int>>.from(_matchScores);
+          // Clear cache and refresh UI
+          _cachedStandings = null;
+          _lastStandingsCacheKey = null;
+          _standingsUpdateCounter++;
+          setState(() {});
+          print('Score update detected - refreshing UI');
+        }
+      } catch (e) {
+        print('Error polling for score updates: $e');
+      }
     });
   }
 
@@ -3013,10 +3101,18 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Ensure current event is loaded first (needed for team filtering)
+    if (_currentEvent == null) {
+      _loadCurrentEvent();
+    }
     // Load navigation state when dependencies change (but only once, after initial load)
     // This restores the user's last viewed tab/position for this event
     // Step 1: Ensure divisions and _selectedDivision are initialized
     _updateDivisions().then((_) async {
+      // Ensure current event is loaded before proceeding
+      if (_currentEvent == null) {
+        await _loadCurrentEvent();
+      }
       print('DEBUG: didChangeDependencies - _selectedDivision after updateDivisions: $_selectedDivision');
       if (_selectedDivision != null) {
         // Step 2: Load formats for this division
@@ -3033,6 +3129,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       }
     });
     _loadFinalsCompleted();
+    // Reload teams to ensure we have the latest teams for the current event
+    _loadTeams();
   }
 
   Future<void> _loadTeams() async {
@@ -3298,6 +3396,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   @override
   void dispose() {
+    // Cancel score polling timer
+    _scoreUpdateTimer?.cancel();
+    _scoreUpdateTimer = null;
+    
     // Save scores before disposing - use a different approach
     print('DEBUG: dispose() called - saving scores before disposal');
     _saveScoresBeforeDispose();
@@ -3490,6 +3592,10 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         _gamesPerTeamByDivision[_selectedDivision ?? 'all'] ?? 1,
         _preliminaryGameWinningScoreByDivision[_selectedDivision ?? 'all'] ?? 11,
       );
+      
+      // Update last known scores after saving to prevent false positive updates in polling
+      _lastKnownScores = Map<String, Map<String, int>>.from(_matchScores);
+      
       print('DEBUG: _saveScores completed successfully');
     } catch (e) {
       print('Error saving scores to storage: $e');
@@ -8088,6 +8194,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           team1Score: team1Score,
           team2Score: team2Score,
           minScore: minScore,
+          parentContext: context, // Pass parent context for snackbar
           onSave: (newTeam1Score, newTeam2Score) async {
             // Update scores in game-level format
             final scoresToSave = {
@@ -8106,6 +8213,29 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             
             if (dialogContext.mounted) {
               Navigator.of(dialogContext).pop();
+              // Show success snackbar after dialog closes
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text(
+                      'Score saved successfully',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    backgroundColor: Colors.green,
+                    duration: const Duration(seconds: 2),
+                    behavior: SnackBarBehavior.fixed,
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                );
+              }
             }
           },
         );
@@ -8240,6 +8370,505 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
     } catch (e) {
       print('Error loading finals completed: $e');
     }
+  }
+
+  // Reset state for new event/sport to prevent carryover
+  void _resetStateForNewEvent() {
+    // Clear playoff-related state maps
+    _playoffsStartedByDivision.clear();
+    _finalsCompletedByDivision.clear();
+    _playoffScores.clear();
+    _playoffMatchesByDivision.clear();
+    _matchFormats.clear();
+    _gameWinningScores.clear();
+    _cachedStandings = null;
+    _lastStandingsCacheKey = null;
+    _standingsUpdateCounter = 0;
+    _selectedMatch = null;
+    _justRestartedPlayoffs = false;
+    _matchesCache.clear();
+    _reshuffledMatches = null;
+    // DO NOT clear _currentEvent - it's needed to filter teams correctly
+    // _currentEvent will be loaded in _loadCurrentEvent()
+    print('Reset state for new event: ${widget.sportName} - ${widget.tournamentTitle}');
+  }
+
+  // Show prompt: "Do you want to create your own schedule?"
+  void _showCustomSchedulePrompt(int selectedGames, int selectedScore) {
+    // Capture values before dialog builder
+    final division = _selectedDivision ?? 'all';
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Create Custom Schedule'),
+          content: const Text('Do you want to create your own schedule?'),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                // Clear custom schedule flag to use automatic schedule
+                await _scoreService.saveCustomScheduleForDivision(division, false);
+                Navigator.of(context).pop(); // Close prompt
+                // Continue with normal automatic Preliminary Rounds flow
+                // (just close dialog, normal flow continues)
+              },
+              child: const Text('NO'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close prompt
+                // Open custom schedule dialog
+                _showCustomScheduleDialog(selectedGames, selectedScore);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2196F3),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('YES'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Show custom schedule dialog with two columns
+  void _showCustomScheduleDialog(int selectedGames, int selectedScore) {
+    // Capture values before dialog builder
+    final allTeams = _teams;
+    final division = _selectedDivision ?? 'all';
+    final sportName = widget.sportName;
+    
+    if (allTeams.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No teams registered. Cannot create schedule.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Initialize state for custom schedule
+    List<dynamic> availableTeams = List.from(allTeams);
+    List<Map<String, dynamic>> matchups = []; // List of {team1: team, team2: team}
+    String? selectedTeam1;
+    String? selectedTeam2;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            // Filter available teams (teams not yet used in matchups)
+            final usedTeamIds = <String>{};
+            for (var matchup in matchups) {
+              usedTeamIds.add(matchup['team1'].id);
+              usedTeamIds.add(matchup['team2'].id);
+            }
+            final unassignedTeams = availableTeams.where((team) => !usedTeamIds.contains(team.id)).toList();
+
+            // Check if all teams are assigned
+            final allTeamsAssigned = unassignedTeams.isEmpty && matchups.isNotEmpty;
+
+            return AlertDialog(
+              title: const Text('Create Custom Schedule'),
+              contentPadding: const EdgeInsets.all(16),
+              content: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.9,
+                height: MediaQuery.of(context).size.height * 0.7,
+                child: Row(
+                  children: [
+                    // Left Column - List of Teams
+                    Expanded(
+                      flex: 2,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Text(
+                                'Available Teams',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            Expanded(
+                              child: unassignedTeams.isEmpty
+                                  ? Center(
+                                      child: Text(
+                                        allTeamsAssigned
+                                            ? 'All teams assigned'
+                                            : 'No teams available',
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    )
+                                  : ListView.builder(
+                                      itemCount: unassignedTeams.length,
+                                      itemBuilder: (context, index) {
+                                        final team = unassignedTeams[index];
+                                        return ListTile(
+                                          dense: true,
+                                          leading: CircleAvatar(
+                                            radius: 16,
+                                            child: Text(team.name[0].toUpperCase()),
+                                          ),
+                                          title: Text(
+                                            team.name,
+                                            style: const TextStyle(fontSize: 14),
+                                          ),
+                                          subtitle: team.division != null
+                                              ? Text(
+                                                  team.division,
+                                                  style: const TextStyle(fontSize: 12),
+                                                )
+                                              : null,
+                                        );
+                                      },
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    // Right Column - Create Matchups
+                    Expanded(
+                      flex: 3,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Text(
+                                'Create Matchups',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    // Team 1 and Team 2 selectors
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: DropdownButtonFormField<String>(
+                                            decoration: const InputDecoration(
+                                              labelText: 'Team 1',
+                                              border: OutlineInputBorder(),
+                                              contentPadding: EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 8,
+                                              ),
+                                            ),
+                                            value: selectedTeam1,
+                                            items: unassignedTeams.map((team) {
+                                              return DropdownMenuItem<String>(
+                                                value: team.id,
+                                                child: Text(
+                                                  team.name,
+                                                  style: const TextStyle(fontSize: 14),
+                                                ),
+                                              );
+                                            }).toList(),
+                                            onChanged: (value) {
+                                              setDialogState(() {
+                                                selectedTeam1 = value;
+                                              });
+                                            },
+                                          ),
+                                        ),
+                                        const Padding(
+                                          padding: EdgeInsets.symmetric(horizontal: 8),
+                                          child: Text(
+                                            'VS',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF2196F3),
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: DropdownButtonFormField<String>(
+                                            decoration: const InputDecoration(
+                                              labelText: 'Team 2',
+                                              border: OutlineInputBorder(),
+                                              contentPadding: EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 8,
+                                              ),
+                                            ),
+                                            value: selectedTeam2,
+                                            items: unassignedTeams
+                                                .where((team) => team.id != selectedTeam1)
+                                                .map((team) {
+                                              return DropdownMenuItem<String>(
+                                                value: team.id,
+                                                child: Text(
+                                                  team.name,
+                                                  style: const TextStyle(fontSize: 14),
+                                                ),
+                                              );
+                                            }).toList(),
+                                            onChanged: (value) {
+                                              setDialogState(() {
+                                                selectedTeam2 = value;
+                                              });
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    // Add Matchup button
+                                    ElevatedButton.icon(
+                                      onPressed: (selectedTeam1 != null &&
+                                              selectedTeam2 != null &&
+                                              selectedTeam1 != selectedTeam2)
+                                          ? () {
+                                              // Find team objects
+                                              final team1 = allTeams.firstWhere((t) => t.id == selectedTeam1);
+                                              final team2 = allTeams.firstWhere((t) => t.id == selectedTeam2);
+
+                                              // Add matchup
+                                              setDialogState(() {
+                                                matchups.add({
+                                                  'team1': team1,
+                                                  'team2': team2,
+                                                });
+                                                selectedTeam1 = null;
+                                                selectedTeam2 = null;
+                                              });
+                                            }
+                                          : null,
+                                      icon: const Icon(Icons.add, size: 18),
+                                      label: const Text('Add Matchup'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF2196F3),
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    const Divider(),
+                                    const SizedBox(height: 8),
+                                    // List of created matchups
+                                    if (matchups.isEmpty)
+                                      const Center(
+                                        child: Padding(
+                                          padding: EdgeInsets.all(16),
+                                          child: Text(
+                                            'No matchups created yet',
+                                            style: TextStyle(
+                                              color: Colors.grey,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    else
+                                      ...matchups.asMap().entries.map((entry) {
+                                        final index = entry.key;
+                                        final matchup = entry.value;
+                                        return Card(
+                                          margin: const EdgeInsets.only(bottom: 8),
+                                          child: ListTile(
+                                            dense: true,
+                                            leading: CircleAvatar(
+                                              radius: 16,
+                                              backgroundColor: const Color(0xFF2196F3),
+                                              child: Text(
+                                                '${index + 1}',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
+                                            title: Text(
+                                              '${matchup['team1'].name} vs ${matchup['team2'].name}',
+                                              style: const TextStyle(fontSize: 14),
+                                            ),
+                                            trailing: IconButton(
+                                              icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                              onPressed: () {
+                                                setDialogState(() {
+                                                  matchups.removeAt(index);
+                                                });
+                                              },
+                                            ),
+                                          ),
+                                        );
+                                      }),
+                                    // Show message if teams are left unassigned
+                                    if (!allTeamsAssigned && matchups.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 16),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.orange[50],
+                                            border: Border.all(color: Colors.orange[200]!),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            '${unassignedTeams.length} team(s) remaining. All teams must be assigned before creating the schedule.',
+                                            style: TextStyle(
+                                              color: Colors.orange[800],
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    // Show cancel confirmation
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext cancelContext) {
+                        return AlertDialog(
+                          title: const Text('Cancel Custom Schedule?'),
+                          content: const Text('Are you sure you want to cancel creating a custom schedule?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(cancelContext).pop(),
+                              child: const Text('NO'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () async {
+                                // Clear custom schedule flag when canceling
+                                await _scoreService.saveCustomScheduleForDivision(division, false);
+                                
+                                Navigator.of(cancelContext).pop(); // Close cancel confirmation
+                                Navigator.of(dialogContext).pop(); // Close custom schedule dialog
+                                
+                                // Return to regular Schedule screen (already in progress)
+                                // The cache will be cleared when the screen rebuilds
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: const Text('YES'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: allTeamsAssigned
+                      ? () async {
+                          // Create matches from custom schedule
+                          List<Match> customMatches = [];
+                          int matchId = 1;
+                          int courtNumber = 1;
+                          int timeSlot = 10;
+
+                          for (var matchup in matchups) {
+                            final team1 = matchup['team1'];
+                            final team2 = matchup['team2'];
+                            final divisionMatchId = '${division}_$matchId';
+
+                            customMatches.add(
+                              Match(
+                                id: divisionMatchId,
+                                day: 'Day 1',
+                                court: 'Court $courtNumber',
+                                time: '$timeSlot:00',
+                                team1: team1.name,
+                                team2: team2.name,
+                                team1Status: 'Not Checked-in',
+                                team2Status: 'Not Checked-in',
+                                team1Score: 0,
+                                team2Score: 0,
+                                team1Id: team1.id,
+                                team2Id: team2.id,
+                              ),
+                            );
+
+                            matchId++;
+                            courtNumber++;
+                            if (courtNumber > 4) {
+                              courtNumber = 1;
+                              timeSlot++;
+                            }
+                          }
+
+                          // Save custom matches to cache
+                          final sortedTeamIds = allTeams.map((t) => t.id).toList()..sort();
+                          String cacheKey = '${sportName}_${division}_${sortedTeamIds.join('_')}_custom';
+                          
+                          // Access parent state via closure to update cache
+                          // Since we're in a method of _SportScheduleScreenState, we can access instance variables
+                          _matchesCache[cacheKey] = customMatches;
+                          _reshuffledMatches = null;
+
+                          // Save custom schedule flag
+                          await _scoreService.saveCustomScheduleForDivision(division, true);
+
+                          if (mounted) {
+                            Navigator.of(dialogContext).pop(); // Close dialog
+                            // Refresh the UI to show custom matches
+                            setState(() {});
+                          }
+                        }
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: allTeamsAssigned ? const Color(0xFF38A169) : Colors.grey,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text(
+                    allTeamsAssigned ? 'Create Schedule' : 'Assign All Teams',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }
 
@@ -8491,6 +9120,7 @@ class _PreliminaryScoringDialog extends StatefulWidget {
   final int team1Score;
   final int team2Score;
   final int minScore;
+  final BuildContext parentContext; // Parent context for showing snackbars
   final Function(int, int) onSave;
 
   const _PreliminaryScoringDialog({
@@ -8498,6 +9128,7 @@ class _PreliminaryScoringDialog extends StatefulWidget {
     required this.team1Score,
     required this.team2Score,
     required this.minScore,
+    required this.parentContext,
     required this.onSave,
   });
 
@@ -8703,11 +9334,26 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
         // Check if at least one team has reached minScore
         if (_team1Score < widget.minScore && _team2Score < widget.minScore) {
           // Neither team has reached minScore - invalid
-          ScaffoldMessenger.of(context).showSnackBar(
+          // Close dialog first, then show snackbar using parent context
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(widget.parentContext).showSnackBar(
             SnackBar(
-              content: Text('Score must be ${widget.minScore} (minimum score to win). Current: $_team1Score-$_team2Score'),
-              backgroundColor: Colors.red,
+              content: Text(
+                'Score must be ${widget.minScore} (minimum score to win). Current: $_team1Score-$_team2Score',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              backgroundColor: Colors.red[700],
               duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.fixed,
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           );
           setState(() {
@@ -8720,11 +9366,26 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
       // Prevent ties - if both teams are at/above minScore, they must be different by at least 2
       if (_team1Score >= widget.minScore && _team2Score >= widget.minScore) {
         if (_team1Score == _team2Score) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          // Close dialog first, then show snackbar using parent context
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(widget.parentContext).showSnackBar(
             SnackBar(
-              content: Text('Cannot have a tie score. One team must win by 2 points. Current: $_team1Score-$_team2Score'),
-              backgroundColor: Colors.red,
+              content: Text(
+                'Cannot have a tie score. One team must win by 2 points. Current: $_team1Score-$_team2Score',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              backgroundColor: Colors.red[700],
               duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.fixed,
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           );
           setState(() {
@@ -8745,11 +9406,26 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
       // If one team has reached minScore, the other must be at least 2 points behind (win by 2)
       if (!hasWinner && (_team1Score >= widget.minScore || _team2Score >= widget.minScore)) {
         String errorMessage = 'Must win by 2 points. Current score: $_team1Score-$_team2Score';
-        ScaffoldMessenger.of(context).showSnackBar(
+        // Close dialog first, then show snackbar using parent context
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(widget.parentContext).showSnackBar(
           SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
+            content: Text(
+              errorMessage,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            backgroundColor: Colors.red[700],
             duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.fixed,
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         );
         setState(() {
@@ -8761,13 +9437,30 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
       // Save scores
       widget.onSave(_team1Score, _team2Score);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error saving scores: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      // Close dialog first, then show snackbar using parent context
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(widget.parentContext).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error saving scores: $e',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            backgroundColor: Colors.red[700],
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.fixed,
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
