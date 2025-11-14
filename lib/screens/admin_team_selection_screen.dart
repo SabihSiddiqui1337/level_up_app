@@ -8,6 +8,7 @@ import '../models/user.dart';
 import '../models/event.dart';
 import '../services/team_service.dart';
 import '../services/auth_service.dart';
+import '../widgets/app_loading_widget.dart';
 
 class AdminTeamSelectionScreen extends StatefulWidget {
   final Event event;
@@ -27,10 +28,13 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
   
   List<Team> _allTeams = [];
   List<Team> _filteredTeams = [];
+  List<Team> _registeredTeams = []; // Teams already registered for this event
   Set<String> _selectedTeamIds = {};
+  Set<String> _registeredTeamIds = {}; // IDs of teams already registered for this event
   bool _isLoading = true;
-  bool _showTeamsList = false; // Show teams when field is tapped
+  bool _showTeamsList = true; // Show teams automatically when screen opens
   final FocusNode _searchFocusNode = FocusNode();
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -58,14 +62,23 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
   Future<void> _loadTeams() async {
     setState(() => _isLoading = true);
     await _teamService.loadTeams();
+    await _authService.initialize();
     
     // Get all teams (admins can see all teams)
-    // Show ALL registered teams, even if they're registered for other events
     final allTeams = _teamService.teams;
-    _allTeams = List.from(allTeams); // Show all teams
+    
+    // Separate teams: those already registered for this event vs others
+    _registeredTeams = allTeams.where((team) => team.eventId == widget.event.id).toList();
+    _registeredTeamIds = _registeredTeams.map((team) => team.id).toSet();
+    
+    // Show teams not yet registered for this event (or all teams if filtering is disabled)
+    _allTeams = allTeams.where((team) => team.eventId != widget.event.id || team.eventId.isEmpty).toList();
     
     _filteredTeams = List.from(_allTeams);
-    setState(() => _isLoading = false);
+    setState(() {
+      _isLoading = false;
+      _showTeamsList = true; // Automatically show teams when loaded
+    });
   }
 
   void _onSearchChanged() {
@@ -84,6 +97,17 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
   }
 
   void _toggleTeamSelection(String teamId) {
+    // Prevent selecting teams that are already registered
+    if (_registeredTeamIds.contains(teamId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This team is already registered for this event'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    
     setState(() {
       if (_selectedTeamIds.contains(teamId)) {
         _selectedTeamIds.remove(teamId);
@@ -91,6 +115,61 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
         _selectedTeamIds.add(teamId);
       }
     });
+  }
+
+  // Get captain name from createdByUserId
+  String _getCaptainName(Team team) {
+    if (team.createdByUserId != null) {
+      try {
+        final user = _authService.users.firstWhere((u) => u.id == team.createdByUserId);
+        return user.name;
+      } catch (e) {
+        // If user not found, fall back to coachName
+        return team.coachName;
+      }
+    }
+    return team.coachName;
+  }
+
+  // Build players display in columns (3 players per column)
+  Widget _buildPlayersDisplay(List<Player> players) {
+    if (players.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Calculate number of columns needed (3 players per column)
+    final numColumns = (players.length / 3).ceil();
+    
+    return Wrap(
+      spacing: 16,
+      runSpacing: 8,
+      children: List.generate(numColumns, (colIndex) {
+        final startIndex = colIndex * 3;
+        final endIndex = (startIndex + 3 < players.length) ? startIndex + 3 : players.length;
+        final columnPlayers = players.sublist(startIndex, endIndex);
+        
+        return SizedBox(
+          width: 120, // Fixed width for each column
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: columnPlayers.map((player) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  player.userId != null 
+                      ? '${player.name} (${player.userId!})' // Show full ID for registered users
+                      : '${player.name} (Guest)',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black87,
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      }),
+    );
   }
 
   void _registerSelectedTeams() async {
@@ -107,8 +186,26 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
     // Get selected teams
     final selectedTeams = _allTeams.where((team) => _selectedTeamIds.contains(team.id)).toList();
     
+    // Filter out teams that are already registered
+    final teamsToRegister = selectedTeams.where((team) => !_registeredTeamIds.contains(team.id)).toList();
+    
+    if (teamsToRegister.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selected teams are already registered for this event'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    
     // Register each team for the event
-    for (final team in selectedTeams) {
+    for (final team in teamsToRegister) {
+      // Check if team is already registered for this event
+      if (_registeredTeamIds.contains(team.id)) {
+        continue; // Skip if already registered
+      }
+      
       // Update team with event ID
       final updatedTeam = Team(
         id: team.id,
@@ -126,17 +223,21 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
       );
       
       // Save updated team
-      _teamService.updateTeam(updatedTeam);
+      await _teamService.updateTeam(updatedTeam);
     }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${selectedTeams.length} team(s) registered successfully'),
+          content: Text('${teamsToRegister.length} team(s) registered successfully'),
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pop(context);
+      // Reload teams to update registered teams list
+      await _loadTeams();
+      setState(() {
+        _selectedTeamIds.clear(); // Clear selection after registration
+      });
     }
   }
 
@@ -402,18 +503,21 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
                   return;
                 }
                 
+                // Get current user (admin/owner creating the team)
+                final currentUser = authService.currentUser;
+                
                 // Create team with players
                 final newTeam = Team(
                   id: DateTime.now().millisecondsSinceEpoch.toString(),
                   name: teamName,
-                  coachName: 'TBD', // To be determined
-                  coachPhone: '',
-                  coachEmail: '',
-                  coachAge: 0,
+                  coachName: currentUser?.name ?? 'TBD', // Set captain as the creator
+                  coachPhone: currentUser?.phone ?? '',
+                  coachEmail: currentUser?.email ?? '',
+                  coachAge: currentUser?.age ?? 25,
                   players: selectedPlayers,
                   registrationDate: DateTime.now(),
                   division: widget.event.division ?? 'Adult 18+',
-                  createdByUserId: null,
+                  createdByUserId: currentUser?.id, // Set creator as the admin/owner
                   isPrivate: false,
                   eventId: widget.event.id, // Register for the event immediately
                 );
@@ -469,7 +573,7 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
                 focusNode: _searchFocusNode,
                 decoration: InputDecoration(
                   labelText: 'Enter Team Name',
-                  hintText: 'Tap to see all teams or search...',
+                  hintText: 'Search teams...',
                   prefixIcon: const Icon(Icons.search),
                   border: const OutlineInputBorder(),
                   suffixIcon: _searchController.text.isNotEmpty
@@ -478,7 +582,7 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
                           onPressed: () {
                             setState(() {
                               _searchController.clear();
-                              _showTeamsList = _searchFocusNode.hasFocus;
+                              _showTeamsList = true;
                             });
                           },
                         )
@@ -493,29 +597,69 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
               ),
             ),
             
+            // Teams Registered Already section
+            if (_registeredTeams.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Teams Registered Already',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1976D2),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 150, // Fixed height for scrollable list
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _registeredTeams.length,
+                        itemBuilder: (context, index) {
+                          final team = _registeredTeams[index];
+                          return ListTile(
+                            dense: true,
+                            leading: CircleAvatar(
+                              radius: 16,
+                              child: Text(team.name[0].toUpperCase()),
+                            ),
+                            title: Text(
+                              team.name,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Captain: ${_getCaptainName(team)}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            trailing: Icon(
+                              Icons.check_circle,
+                              color: Colors.green,
+                              size: 20,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ],
+            
             // Teams list
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : !_showTeamsList
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.search, size: 64, color: Colors.grey[400]),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Tap on "Enter Team Name" to see all teams',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey[600],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        )
+                  ? const Center(child: AppLoadingWidget())
                   : _filteredTeams.isEmpty
                       ? Center(
                           child: Column(
@@ -543,30 +687,49 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
                             final team = _filteredTeams[index];
                             final isSelected = _selectedTeamIds.contains(team.id);
                             
+                            final captainName = _getCaptainName(team);
+                            final isAlreadyRegistered = _registeredTeamIds.contains(team.id);
+                            
                             return Card(
                               margin: const EdgeInsets.only(bottom: 8),
                               elevation: isSelected ? 4 : 1,
-                              color: isSelected ? Colors.blue[50] : null,
+                              color: isAlreadyRegistered 
+                                  ? Colors.grey[200] 
+                                  : (isSelected ? Colors.blue[50] : null),
                               child: CheckboxListTile(
                                 title: Text(
                                   team.name,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.w600,
+                                    color: isAlreadyRegistered ? Colors.grey[600] : null,
                                   ),
                                 ),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('Captain: ${team.coachName}'),
-                                    Text('Players: ${team.players.length}'),
-                                    if (team.division.isNotEmpty)
-                                      Text('Division: ${team.division}'),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Captain: $captainName',
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                    if (team.players.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      _buildPlayersDisplay(team.players),
+                                    ],
                                   ],
                                 ),
                                 value: isSelected,
-                                onChanged: (_) => _toggleTeamSelection(team.id),
+                                onChanged: isAlreadyRegistered 
+                                    ? null 
+                                    : (_) => _toggleTeamSelection(team.id),
                                 secondary: CircleAvatar(
-                                  child: Text(team.name[0].toUpperCase()),
+                                  backgroundColor: isAlreadyRegistered 
+                                      ? Colors.grey[400] 
+                                      : const Color(0xFF2196F3),
+                                  child: Text(
+                                    team.name[0].toUpperCase(),
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
                                 ),
                               ),
                             );
