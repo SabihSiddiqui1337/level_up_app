@@ -12,6 +12,7 @@ class ScoreService {
   static const String _semiFinalsScoresKey = 'semi_finals_scores';
   static const String _finalsScoresKey = 'finals_scores';
   static const String _playoffsStartedKey = 'playoffs_started';
+  static const String _gameStartedKey = 'game_started';
 
   // Save preliminary settings for a specific division
   Future<void> savePreliminarySettingsForDivision(
@@ -557,6 +558,31 @@ class ScoreService {
       return playoffsStarted;
     } catch (e) {
       print('Error loading playoffs started state: $e');
+      return false;
+    }
+  }
+
+  // Save game started state for a specific event (by event ID)
+  Future<void> saveGameStartedForEvent(String eventId, bool gameStarted) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = '${_gameStartedKey}_$eventId';
+      await prefs.setBool(key, gameStarted);
+      print('Saved game started state for event $eventId: $gameStarted');
+    } catch (e) {
+      print('Error saving game started state for event $eventId: $e');
+    }
+  }
+
+  // Load game started state for a specific event (by event ID)
+  Future<bool> loadGameStartedForEvent(String eventId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = '${_gameStartedKey}_$eventId';
+      final gameStarted = prefs.getBool(key) ?? false;
+      return gameStarted;
+    } catch (e) {
+      print('Error loading game started state for event $eventId: $e');
       return false;
     }
   }

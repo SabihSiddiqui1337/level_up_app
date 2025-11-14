@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../widgets/custom_app_bar.dart';
+import '../widgets/app_loading_widget.dart';
 import '../services/event_service.dart';
 import '../services/score_service.dart';
 import '../models/event.dart';
@@ -10,7 +11,9 @@ import 'main_navigation_screen.dart';
 import 'event_detail_screen.dart';
 import 'team_registration_screen.dart';
 import 'pickleball_team_registration_screen.dart';
+import 'admin_team_selection_screen.dart';
 import 'sport_schedule_screen.dart';
+import '../services/auth_service.dart';
 
 class UpcomingEventsScreen extends StatefulWidget {
   final VoidCallback? onHomePressed;
@@ -25,6 +28,7 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
   bool _isCopying = false; // Add flag to prevent rapid copying
   final EventService _eventService = EventService();
   final ScoreService _scoreService = ScoreService();
+  final AuthService _authService = AuthService();
   List<Event> _upcomingEvents = [];
   List<Event> _pastEvents = [];
   bool _isLoading = true;
@@ -171,7 +175,7 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
         ),
         child: SafeArea(
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: AppLoadingWidget(size: 100))
               : RefreshIndicator(
                   onRefresh: _loadEvents,
                   child: SingleChildScrollView(
@@ -671,40 +675,91 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
 
                   // Action buttons
                   if (isCompleted)
-                    // For completed events - only "Check Score" button
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        // Navigate directly to Sport Schedule screen (Preliminary Rounds tab)
-                        if (event != null) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => SportScheduleScreen(
-                                sportName: event.sportName,
-                                tournamentTitle: event.title,
-                              ),
+                    // For completed events - "Details" and "Check Score" buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              // Navigate to Event Detail screen
+                              if (event != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => EventDetailScreen(
+                                      event: event,
+                                      isCompleted: true,
+                                      onCheckScore: () {
+                                        // Navigate to Sport Schedule screen
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => SportScheduleScreen(
+                                              sportName: event.sportName,
+                                              tournamentTitle: event.title,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      onSignUp: () {}, // Not used for completed events
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.info_outline, size: 16),
+                            label: const Text(
+                              'DETAILS',
+                              style: TextStyle(fontSize: 13),
                             ),
-                          ).then((_) {
-                            // After navigation, ensure we're on Preliminary rounds tab
-                            // This is handled by the SportScheduleScreen's initial state
-                          });
-                        }
-                      },
-                      icon: const Icon(Icons.score, size: 16),
-                      label: const Text(
-                        'CHECK SCORE',
-                        style: TextStyle(fontSize: 13),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2196F3),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        minimumSize: const Size(double.infinity, 0),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white.withOpacity(0.9),
+                              foregroundColor: Colors.black87,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              elevation: 2,
+                            ),
+                          ),
                         ),
-                        elevation: 2,
-                      ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              // Navigate directly to Sport Schedule screen (Preliminary Rounds tab)
+                              if (event != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => SportScheduleScreen(
+                                      sportName: event.sportName,
+                                      tournamentTitle: event.title,
+                                    ),
+                                  ),
+                                ).then((_) {
+                                  // After navigation, ensure we're on Preliminary rounds tab
+                                  // This is handled by the SportScheduleScreen's initial state
+                                });
+                              }
+                            },
+                            icon: const Icon(Icons.score, size: 16),
+                            label: const Text(
+                              'CHECK SCORE',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2196F3),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              elevation: 2,
+                            ),
+                          ),
+                        ),
+                      ],
                     )
                   else
                     // For upcoming events - Register and Details buttons
@@ -758,21 +813,37 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                                         builder: (context) => EventDetailScreen(
                                           event: event,
                                           onSignUp: () {
-                                            final sport = event.sportName.toLowerCase();
-                                            if (sport.contains('pickleball') || sport.contains('pickelball')) {
+                                            // Check if user is owner/admin
+                                            final currentUser = _authService.currentUser;
+                                            final isOwnerOrAdmin = currentUser?.role == 'owner' || 
+                                                                    currentUser?.role == 'scoring';
+                                            
+                                            if (isOwnerOrAdmin) {
+                                              // Navigate to admin team selection screen
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
-                                                  builder: (context) => PickleballTeamRegistrationScreen(event: event),
+                                                  builder: (context) => AdminTeamSelectionScreen(event: event),
                                                 ),
                                               );
                                             } else {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) => TeamRegistrationScreen(event: event),
-                                                ),
-                                              );
+                                              // Regular users go to team registration
+                                              final sport = event.sportName.toLowerCase();
+                                              if (sport.contains('pickleball') || sport.contains('pickelball')) {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) => PickleballTeamRegistrationScreen(event: event),
+                                                  ),
+                                                );
+                                              } else {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) => TeamRegistrationScreen(event: event),
+                                                  ),
+                                                );
+                                              }
                                             }
                                           },
                                         ),

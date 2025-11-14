@@ -1862,6 +1862,15 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       builder: (BuildContext context) {
         int selectedGames = _gamesPerTeam;
         int selectedScore = _preliminaryGameWinningScore;
+        final sportName = widget.sportName.toLowerCase();
+        final isBasketball = sportName.contains('basketball');
+        final isVolleyball = sportName.contains('volleyball');
+        
+        // Create controller for "First to:" input (Basketball/Volleyball)
+        final scoreController = TextEditingController(
+          text: (isBasketball || isVolleyball) && selectedScore > 0 ? selectedScore.toString() : '',
+        );
+        bool scoreError = false;
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
@@ -1967,70 +1976,199 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     const SizedBox(height: 16),
                     Divider(),
                     const SizedBox(height: 12),
-                    Text(
-                      'Game Winning Score:',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap:
-                                () => setDialogState(() => selectedScore = 11),
-                            child: Container(
-                              padding: EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color:
-                                    selectedScore == 11
-                                        ? Color(0xFF2196F3)
-                                        : Colors.grey[300],
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  '11 Points',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
+                    // Check sport type to determine scoring input method
+                    Builder(
+                      builder: (context) {
+                        final sportName = widget.sportName.toLowerCase();
+                        final isPickleball = sportName.contains('pickleball') || sportName.contains('pickelball');
+                        final isBasketball = sportName.contains('basketball');
+                        final isVolleyball = sportName.contains('volleyball');
+                        
+                        // For Pickleball: Show 11/15 dropdown
+                        if (isPickleball) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Division:',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap:
-                                () => setDialogState(() => selectedScore = 15),
-                            child: Container(
-                              padding: EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color:
-                                    selectedScore == 15
-                                        ? Color(0xFF2196F3)
-                                        : Colors.grey[300],
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  '15 Points',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setDialogState(() => selectedScore = 11),
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: selectedScore == 11
+                                              ? Color(0xFF2196F3)
+                                              : Colors.grey[300],
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            '11 Points',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setDialogState(() => selectedScore = 15),
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: selectedScore == 15
+                                              ? Color(0xFF2196F3)
+                                              : Colors.grey[300],
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            '15 Points',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          );
+                        }
+                        
+                        // For Basketball and Volleyball: Show "First to:" text input
+                        if (isBasketball || isVolleyball) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'First to:',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: scoreController,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  hintText: 'Enter points (e.g., 21)',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  errorText: scoreError ? 'Please enter a valid number' : null,
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                ),
+                                onChanged: (value) {
+                                  final parsed = int.tryParse(value);
+                                  if (parsed != null && parsed > 0) {
+                                    setDialogState(() {
+                                      selectedScore = parsed;
+                                      scoreError = false;
+                                    });
+                                  } else if (value.isNotEmpty) {
+                                    setDialogState(() {
+                                      scoreError = true;
+                                    });
+                                  } else {
+                                    setDialogState(() {
+                                      selectedScore = 0;
+                                      scoreError = false;
+                                    });
+                                  }
+                                },
+                              ),
+                            ],
+                          );
+                        }
+                        
+                        // Default: Show 11/15 dropdown for other sports
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Game Winning Score:',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => setDialogState(() => selectedScore = 11),
+                                    child: Container(
+                                      padding: EdgeInsets.symmetric(vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: selectedScore == 11
+                                            ? Color(0xFF2196F3)
+                                            : Colors.grey[300],
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          '11 Points',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => setDialogState(() => selectedScore = 15),
+                                    child: Container(
+                                      padding: EdgeInsets.symmetric(vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: selectedScore == 15
+                                            ? Color(0xFF2196F3)
+                                            : Colors.grey[300],
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          '15 Points',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -2062,6 +2200,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 ),
                 ElevatedButton(
                   onPressed: () async {
+                    // Validate "First to:" input for Basketball/Volleyball
+                    if ((isBasketball || isVolleyball) && (selectedScore <= 0 || scoreError)) {
+                      setDialogState(() {
+                        scoreError = true;
+                      });
+                      return;
+                    }
+                    
                     // Check if settings have changed from their current values
                     final gamesChanged = selectedGames != _gamesPerTeam;
                     final scoreChanged =
@@ -2152,6 +2298,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                             selectedScore;
                         _matchesCache.clear();
                         _reshuffledMatches = null;
+                        // Dispose controller after saving
+                        scoreController.dispose();
                       });
 
                       // Save the settings for current division

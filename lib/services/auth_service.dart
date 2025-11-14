@@ -296,6 +296,10 @@ class AuthService {
     required String password,
     required String username,
     required String phone,
+    String? height,
+    String? weight,
+    DateTime? dateOfBirth,
+    String? jerseyNumber,
   }) async {
     print('AuthService.register called with: $email, $username, $phone');
     await Future.delayed(const Duration(seconds: 1)); // Simulate network delay
@@ -352,6 +356,10 @@ class AuthService {
         phone: phone,
         role: 'user', // Default role for new users
         createdAt: DateTime.now(),
+        height: height,
+        weight: weight,
+        dateOfBirth: dateOfBirth,
+        jerseyNumber: jerseyNumber,
       );
 
       _users.add(newUser);
@@ -446,6 +454,11 @@ class AuthService {
     required String name,
     required String phone,
     required String email,
+    String? height,
+    String? weight,
+    DateTime? dateOfBirth,
+    String? profilePicturePath,
+    String? jerseyNumber,
   }) async {
     if (_currentUser == null) return false;
 
@@ -464,6 +477,11 @@ class AuthService {
           phone: phone,
           role: _currentUser!.role,
           createdAt: _currentUser!.createdAt,
+          height: height ?? _currentUser!.height,
+          weight: weight ?? _currentUser!.weight,
+          dateOfBirth: dateOfBirth ?? _currentUser!.dateOfBirth,
+          profilePicturePath: profilePicturePath ?? _currentUser!.profilePicturePath,
+          jerseyNumber: jerseyNumber ?? _currentUser!.jerseyNumber,
         );
 
         // Update current user

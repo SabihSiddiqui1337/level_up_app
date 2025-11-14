@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import '../widgets/custom_app_bar.dart';
+import '../widgets/app_loading_widget.dart';
 import '../services/team_service.dart';
 import '../services/pickleball_team_service.dart';
 import '../services/score_service.dart';
 import 'sport_schedule_screen.dart';
 import '../services/event_service.dart';
+import '../services/auth_service.dart';
 import '../models/event.dart';
 
 class ScheduleScreen extends StatefulWidget {
@@ -27,6 +29,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   bool _isResultsExpanded = true;
 
   final ScoreService _scoreService = ScoreService();
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -124,6 +127,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   ) {
     final teamCount = _teamCountForEvent(event);
     final hasEnoughTeams = teamCount >= 8;
+    final currentUser = _authService.currentUser;
+    final isOwnerOrAdmin = currentUser?.role == 'owner' || currentUser?.role == 'scoring';
+    
+    return FutureBuilder<bool>(
+      future: _scoreService.loadGameStartedForEvent(event.id),
+      builder: (context, snapshot) {
+        final gameStarted = snapshot.data ?? false;
 
     // Determine which image to use based on sport name
     String? imagePath;
@@ -353,26 +363,27 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ),
             ),
           ),
-          // Show error message if not enough teams (for all users including owners)
+          // Status messages and buttons based on team count, game state, and user role
           if (!hasEnoughTeams) ...[
+            // Show "X teams left" for all users when less than 8 teams
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red[50],
+                color: Colors.orange[50],
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red[200]!),
+                border: Border.all(color: Colors.orange[200]!),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: Colors.red[700], size: 20),
+                  Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Please register at least 8 teams before starting. Currently have $teamCount team${teamCount == 1 ? '' : 's'}. Waiting for ${8 - teamCount} more team${8 - teamCount == 1 ? '' : 's'}.',
+                      '$teamCount team${teamCount == 1 ? '' : 's'} left',
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.red[700],
+                        color: Colors.orange[700],
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -380,38 +391,57 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ],
               ),
             ),
-          ],
-          // Results button at bottom
-          if (isCompleted) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => SportScheduleScreen(
-                        sportName: event.sportName,
-                        tournamentTitle: event.title,
-                        onHomePressed: widget.onHomePressed,
-                      ),
+          ] else if (!gameStarted) ...[
+            // Game not started yet
+            if (isOwnerOrAdmin) ...[
+              // Admin/Owner: Show "Start Game" button
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _showStartGameDialog(event),
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Start Game'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.emoji_events),
-                label: const Text('View Results'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE67E22),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
               ),
-            ),
-          ] else if (hasEnoughTeams) ...[
+            ] else ...[
+              // Normal user: Show "Waiting for admin to start the game"
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.hourglass_empty, color: Colors.blue[700], size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Waiting for admin to start the game',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.blue[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ] else if (gameStarted) ...[
+            // Game has started: Show "View Schedule" button
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
@@ -441,8 +471,85 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ),
             ),
           ],
+          // Results button for completed events
+          if (isCompleted) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SportScheduleScreen(
+                        sportName: event.sportName,
+                        tournamentTitle: event.title,
+                        onHomePressed: widget.onHomePressed,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.emoji_events),
+                label: const Text('View Results'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE67E22),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
+    );
+        },
+      );
+  }
+
+  void _showStartGameDialog(Event event) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Start Game'),
+          content: const Text('You\'re about to start the game. Once you tap Start, you can see the View Schedule and Preliminary Rounds screen.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                // Save game started state
+                await _scoreService.saveGameStartedForEvent(event.id, true);
+                if (mounted) {
+                  Navigator.pop(context); // Close dialog
+                  setState(() {}); // Refresh UI
+                  // Navigate to Sport Schedule Screen
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SportScheduleScreen(
+                        sportName: event.sportName,
+                        tournamentTitle: event.title,
+                        onHomePressed: widget.onHomePressed,
+                      ),
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Start'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -462,7 +569,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           child: RefreshIndicator(
             onRefresh: _loadEvents,
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: AppLoadingWidget(size: 100))
                 : SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16.0),

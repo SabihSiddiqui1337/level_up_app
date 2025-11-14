@@ -2,14 +2,17 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:io';
 import '../models/pickleball_team.dart';
 import '../models/pickleball_player.dart';
 import '../models/event.dart';
+import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
 import '../services/pickleball_team_service.dart';
 import '../keys/pickleball_screen/pickleball_screen_keys.dart';
 import 'pickleball_process_registration_screen.dart';
+import 'player_stats_screen.dart';
 
 class PhoneNumberFormatter extends TextInputFormatter {
   @override
@@ -106,6 +109,21 @@ class _PickleballTeamRegistrationScreenState
       _coachPhoneController.text = widget.team!.coachPhone;
       _coachEmailController.text = widget.team!.coachEmail;
       _players.addAll(widget.team!.players);
+    } else {
+      // New team registration: Auto-add current user as a player (Pickleball allows only 1 player)
+      final currentUser = _authService.currentUser;
+      if (currentUser != null) {
+        final autoPlayer = PickleballPlayer(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          name: currentUser.name,
+          duprRating: _selectedDuprRating,
+          userId: currentUser.id, // Link to user profile
+        );
+        _players.add(autoPlayer);
+        if (mounted) {
+          setState(() {});
+        }
+      }
     }
   }
 
@@ -618,6 +636,44 @@ class _PickleballTeamRegistrationScreenState
                   },
                 ),
                 const SizedBox(height: 16),
+                // Team Captain Information Header with Myself button
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Team Captain Information',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1976D2),
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        final currentUser = _authService.currentUser;
+                        if (currentUser != null) {
+                          setState(() {
+                            _coachNameController.text = currentUser.name;
+                            _coachPhoneController.text = currentUser.phone;
+                            _coachEmailController.text = currentUser.email;
+                          });
+                          // Trigger validation after filling
+                          if (_formKey.currentState != null) {
+                            _formKey.currentState!.validate();
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.person, size: 18),
+                      label: const Text('Myself'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2196F3),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _coachNameController,
                   textCapitalization: TextCapitalization.words,
@@ -891,7 +947,14 @@ class _PickleballPlayerDialog extends StatefulWidget {
 class _PickleballPlayerDialogState extends State<_PickleballPlayerDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _searchController = TextEditingController();
+  final AuthService _authService = AuthService();
   String _selectedDuprRating = PickleballScreenKeys.duprRatingUnder35;
+  
+  bool _isGuest = false;
+  User? _selectedUser;
+  List<User> _searchResults = [];
+  bool _isSearching = false;
 
   @override
   void initState() {
@@ -900,13 +963,63 @@ class _PickleballPlayerDialogState extends State<_PickleballPlayerDialog> {
     _selectedDuprRating = widget.fixedDuprRating;
     if (widget.player != null) {
       _nameController.text = widget.player!.name;
+      _isGuest = widget.player!.userId == null;
+      // If player has userId, try to find the user
+      if (widget.player!.userId != null) {
+        final users = _authService.users;
+        try {
+          _selectedUser = users.firstWhere((u) => u.id == widget.player!.userId);
+        } catch (e) {
+          _selectedUser = null;
+        }
+      }
+    } else {
+      _isGuest = false; // Start with registered user mode
     }
+    _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged() {
+    final query = _searchController.text.toLowerCase().trim();
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+      final allUsers = _authService.users;
+      _searchResults = allUsers.where((user) {
+        final queryLower = query.toLowerCase();
+        return user.name.toLowerCase().contains(queryLower) ||
+               user.username.toLowerCase().contains(queryLower) ||
+               user.email.toLowerCase().contains(queryLower) ||
+               user.id.toLowerCase().contains(queryLower) ||
+               user.phone.replaceAll(RegExp(r'[^\d]'), '').contains(query.replaceAll(RegExp(r'[^\d]'), ''));
+      }).toList();
+    });
+  }
+
+  void _selectUser(User user) {
+    setState(() {
+      _selectedUser = user;
+      _isGuest = false;
+      _nameController.text = user.name;
+      _searchController.clear();
+      _searchResults = [];
+      _isSearching = false;
+    });
   }
 
   @override
@@ -919,11 +1032,182 @@ class _PickleballPlayerDialogState extends State<_PickleballPlayerDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Search field for player profiles
+              if (!_isGuest) ...[
+                TextFormField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    labelText: 'Search Player Profile',
+                    hintText: 'Enter player name, ID, username, email, or phone number',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              setState(() {
+                                _searchController.clear();
+                                _searchResults = [];
+                                _isSearching = false;
+                                _selectedUser = null;
+                              });
+                            },
+                          )
+                        : null,
+                  ),
+                  onChanged: (_) => _onSearchChanged(),
+                ),
+                const SizedBox(height: 8),
+                
+                // Search results
+                if (_isSearching && _searchResults.isNotEmpty)
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _searchResults.length,
+                      itemBuilder: (context, index) {
+                        final user = _searchResults[index];
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundImage: user.profilePicturePath != null
+                                ? FileImage(File(user.profilePicturePath!))
+                                : null,
+                            child: user.profilePicturePath == null
+                                ? Text(user.name[0].toUpperCase())
+                                : null,
+                          ),
+                          title: Text(user.name),
+                          subtitle: Text('@${user.username}'),
+                          onTap: () => _selectUser(user),
+                        );
+                      },
+                    ),
+                  ),
+                
+                // Show "Add as Guest Player" option when search has text
+                if (_searchController.text.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.blue[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.blue[50],
+                    ),
+                    child: ListTile(
+                      leading: const Icon(Icons.person_add, color: Colors.blue),
+                      title: Text('Add "${_searchController.text}" as Guest Player'),
+                      trailing: const Icon(Icons.arrow_forward, color: Colors.blue),
+                      onTap: () {
+                        final guestName = _searchController.text.trim();
+                        if (guestName.isEmpty) {
+                          return;
+                        }
+                        
+                        setState(() {
+                          _isGuest = true;
+                          _selectedUser = null;
+                          _nameController.text = guestName;
+                          _searchController.clear();
+                          _searchResults = [];
+                          _isSearching = false;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+                
+                // Selected user display
+                if (_selectedUser != null && !_isSearching)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      border: Border.all(color: Colors.blue[200]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundImage: _selectedUser!.profilePicturePath != null
+                              ? FileImage(File(_selectedUser!.profilePicturePath!))
+                              : null,
+                          child: _selectedUser!.profilePicturePath == null
+                              ? Text(_selectedUser!.name[0].toUpperCase())
+                              : null,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _selectedUser!.name,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                '@${_selectedUser!.username}',
+                                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.clear, size: 20),
+                          onPressed: () {
+                            setState(() {
+                              _selectedUser = null;
+                              _nameController.clear();
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+              ],
+              
+              // Guest checkbox
+              CheckboxListTile(
+                title: const Text('Guest Player'),
+                subtitle: const Text('Add a player manually without linking to a profile'),
+                value: _isGuest,
+                onChanged: (value) {
+                  setState(() {
+                    _isGuest = value ?? false;
+                    if (_isGuest) {
+                      _selectedUser = null;
+                      _searchController.clear();
+                      _searchResults = [];
+                      _isSearching = false;
+                    }
+                  });
+                },
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Player Name field (enabled only for guest or when user is selected)
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(
+                textCapitalization: TextCapitalization.words,
+                autocorrect: false,
+                enableSuggestions: false,
+                enabled: _isGuest || _selectedUser != null,
+                decoration: InputDecoration(
                   labelText: 'Player Name',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
+                  filled: !(_isGuest || _selectedUser != null),
+                  fillColor: Colors.grey[200],
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -971,10 +1255,32 @@ class _PickleballPlayerDialogState extends State<_PickleballPlayerDialog> {
         ElevatedButton(
           onPressed: () {
             if (_formKey.currentState!.validate()) {
+              // Validate that either a user is selected OR guest is checked
+              if (!_isGuest && _selectedUser == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please search and select a player profile, or check Guest to add manually'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              if (_isGuest && _nameController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter player name for guest player'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
               final player = PickleballPlayer(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                id: widget.player?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
                 name: _nameController.text,
                 duprRating: _selectedDuprRating,
+                userId: _isGuest ? null : _selectedUser?.id, // Link to user profile if not guest
               );
               widget.onSave(player);
               Navigator.of(context).pop();

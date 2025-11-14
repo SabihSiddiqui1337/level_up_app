@@ -3,6 +3,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/team.dart';
+import '../services/auth_service.dart';
+import '../models/user.dart';
 
 class TeamService {
   static final TeamService _instance = TeamService._internal();
@@ -21,16 +23,48 @@ class TeamService {
     return _teams.where((team) => !team.isPrivate).toList();
   }
 
-  // Get teams visible to a specific user (public teams + user's private teams)
+  // Get teams visible to a specific user (public teams + user's private teams + teams where user is a player or captain)
   List<Team> getTeamsForUser(String? userId) {
     if (userId == null) {
       // If no user logged in, only show public teams
       return getPublicTeams();
     }
 
-    return _teams
-        .where((team) => !team.isPrivate || team.createdByUserId == userId)
-        .toList();
+    // Get user from AuthService to check name/email
+    final authService = AuthService();
+    User? user;
+    try {
+      user = authService.users.firstWhere((u) => u.id == userId);
+    } catch (e) {
+      user = authService.currentUser;
+    }
+    
+    if (user == null) {
+      return _teams
+          .where((team) => !team.isPrivate || team.createdByUserId == userId)
+          .toList();
+    }
+
+    return _teams.where((team) {
+      // Public teams
+      if (!team.isPrivate) return true;
+      
+      // Teams created by user
+      if (team.createdByUserId == userId) return true;
+      
+      if (user != null) {
+        // Teams where user is captain (check email or name)
+        final isCaptain = team.coachEmail.toLowerCase() == user.email.toLowerCase() ||
+                         team.coachName.toLowerCase() == user.name.toLowerCase();
+        if (isCaptain) return true;
+        
+        // Teams where user is a player
+        final isPlayer = team.players.any((p) => p.userId == userId);
+        if (isPlayer) return true;
+      }
+      
+      return false;
+    }).toList();
   }
 
   // Load teams from SharedPreferences

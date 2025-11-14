@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/team.dart';
 import '../models/event.dart';
+import '../models/user.dart';
 import '../services/team_service.dart';
+import '../services/auth_service.dart';
 import 'payment_screen.dart';
 import 'main_navigation_screen.dart';
 
@@ -267,26 +270,69 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                                 )
                               else
                                 ...widget.team.players.map(
-                                  (player) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.person,
-                                          size: 16,
-                                          color: Color(0xFF1976D2),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          player.name,
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.black87,
+                                  (player) {
+                                    // Get user profile if player is linked to a user
+                                    User? linkedUser;
+                                    final authService = AuthService();
+                                    if (player.userId != null) {
+                                      final users = authService.users;
+                                      try {
+                                        linkedUser = users.firstWhere((u) => u.id == player.userId);
+                                      } catch (e) {
+                                        linkedUser = null;
+                                      }
+                                    }
+                                    
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 20,
+                                            backgroundImage: linkedUser?.profilePicturePath != null
+                                                ? FileImage(File(linkedUser!.profilePicturePath!))
+                                                : null,
+                                            child: linkedUser?.profilePicturePath == null
+                                                ? Text(player.name[0].toUpperCase())
+                                                : null,
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  player.name,
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.black87,
+                                                  ),
+                                                ),
+                                                if (player.userId != null && linkedUser != null)
+                                                  Text(
+                                                    'ID: ${player.userId}',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey[600],
+                                                    ),
+                                                  )
+                                                else if (player.userId == null)
+                                                  Text(
+                                                    'Guest',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey[600],
+                                                      fontStyle: FontStyle.italic,
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
                                 ),
                             ],
                           ),

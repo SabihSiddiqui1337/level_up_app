@@ -8,6 +8,7 @@ class Player {
   final int age;
   final double height; // in feet
   final double weight; // in pounds
+  final String? userId; // Optional: link to user profile if not a guest
 
   Player({
     required this.id,
@@ -19,6 +20,7 @@ class Player {
     required this.age,
     required this.height,
     required this.weight,
+    this.userId, // Optional: only set if linked to a user profile
   });
 
   Map<String, dynamic> toJson() {
@@ -32,6 +34,7 @@ class Player {
       'age': age,
       'height': height,
       'weight': weight,
+      'userId': userId,
     };
   }
 
@@ -46,6 +49,7 @@ class Player {
       age: json['age'],
       height: json['height'],
       weight: json['weight'],
+      userId: json['userId'],
     );
   }
 }

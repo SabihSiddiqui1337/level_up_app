@@ -8,7 +8,9 @@ import 'services/auth_service.dart';
 import 'services/team_service.dart';
 import 'services/pickleball_team_service.dart';
 import 'services/update_service.dart';
+import 'services/notification_service.dart';
 import 'screens/update_prompt_screen.dart';
+import 'widgets/app_loading_widget.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +21,9 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
     print('✅ Firebase initialized successfully');
+    
+    // Initialize notification service
+    await NotificationService().initialize();
   } catch (e, st) {
     print('❌ Firebase initialization failed: $e');
     print(st);
@@ -121,6 +126,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
     await _teamService.loadTeams();
     await _pickleballTeamService.loadTeams();
     _showUpdate = await UpdateService.isUpdateAvailable();
+    
+    // Request notification permission on first launch (before login)
+    // This ensures users are asked for permission when they first open the app
+    final notificationService = NotificationService();
+    final hasRequestedPermission = await notificationService.hasRequestedPermission();
+    if (!hasRequestedPermission) {
+      // Request permission on first app launch
+      // The system will show the permission dialog
+      await notificationService.requestPermission();
+    }
+    
     setState(() {
       _isLoading = false;
     });
@@ -129,7 +145,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: AppLoadingWidget(size: 120),
+          ),
+        ),
+      );
     }
 
     if (_showUpdate) {

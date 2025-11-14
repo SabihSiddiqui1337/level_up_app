@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'team_registration_screen.dart';
 import 'pickleball_team_registration_screen.dart';
+import 'admin_team_selection_screen.dart';
 import 'event_detail_screen.dart';
 import '../models/team.dart';
 import '../models/pickleball_team.dart';
 import '../models/event.dart';
 import '../services/event_service.dart';
 import '../services/score_service.dart';
+import '../services/auth_service.dart';
 import '../widgets/custom_app_bar.dart';
 
 class GameSelectionScreen extends StatefulWidget {
@@ -28,6 +30,7 @@ class GameSelectionScreen extends StatefulWidget {
 class _GameSelectionScreenState extends State<GameSelectionScreen> {
   final EventService _eventService = EventService();
   final ScoreService _scoreService = ScoreService();
+  final AuthService _authService = AuthService();
   List<Event> _events = [];
   List<String> _sportNames = [];
   bool _isLoading = true;
@@ -230,6 +233,7 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
             
             if (event == null) {
               // Fallback: go directly to registration if no event found
+              // Without an event, owners/admins still go to regular registration
               if (sportName.toLowerCase().contains('pickleball')) {
                 _navigateToPickleballRegistration(context);
               } else {
@@ -245,11 +249,26 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
                   event: event,
                   onHomePressed: widget.onHomePressed,
                   onSignUp: () {
-                    // Navigate to appropriate registration form
-                    if (sportName.toLowerCase().contains('pickleball')) {
-                      _navigateToPickleballRegistration(context, event: event);
+                    // Check if user is owner/admin
+                    final currentUser = _authService.currentUser;
+                    final isOwnerOrAdmin = currentUser?.role == 'owner' || 
+                                            currentUser?.role == 'scoring';
+                    
+                    if (isOwnerOrAdmin) {
+                      // Navigate to admin team selection screen
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => AdminTeamSelectionScreen(event: event),
+                        ),
+                      );
                     } else {
-                      _navigateToTeamRegistration(context, sportName, event: event);
+                      // Regular users go to team registration
+                      if (sportName.toLowerCase().contains('pickleball')) {
+                        _navigateToPickleballRegistration(context, event: event);
+                      } else {
+                        _navigateToTeamRegistration(context, sportName, event: event);
+                      }
                     }
                   },
                 ),

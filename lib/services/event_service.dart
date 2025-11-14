@@ -258,6 +258,16 @@ class EventService {
       _events.add(newEvent);
       await _saveEventsToLocal();
       
+      // Send notification to all users about the new event
+      // Note: This should be done via Cloud Functions for production
+      // For now, we'll trigger the notification service
+      try {
+        await _sendEventNotification(newEvent);
+      } catch (e) {
+        print('⚠️ Error sending notification: $e');
+        // Don't fail event creation if notification fails
+      }
+      
       print('Event created successfully: ${newEvent.title}');
       return true;
     } catch (e) {
@@ -348,6 +358,33 @@ class EventService {
       return _events.firstWhere((event) => event.id == eventId);
     } catch (e) {
       return null;
+    }
+  }
+
+  // Send notification when event is created
+  Future<void> _sendEventNotification(Event event) async {
+    try {
+      // Format date
+      final dateStr = '${event.date.month}/${event.date.day}/${event.date.year}';
+      
+      // This will trigger Cloud Functions to send notifications
+      // For now, we'll create a document in Firestore that Cloud Functions will listen to
+      final firestore = _getFirestore();
+      if (firestore != null) {
+        await firestore.collection('event_notifications').add({
+          'eventId': event.id,
+          'eventTitle': event.title,
+          'eventDate': dateStr,
+          'sportName': event.sportName,
+          'createdAt': FieldValue.serverTimestamp(),
+          'sent': false,
+        });
+        print('✅ Event notification queued for: ${event.title}');
+      } else {
+        print('⚠️ Firebase not initialized, skipping notification');
+      }
+    } catch (e) {
+      print('❌ Error sending event notification: $e');
     }
   }
 

@@ -7,12 +7,16 @@ class EventDetailScreen extends StatefulWidget {
   final Event event;
   final VoidCallback? onHomePressed;
   final VoidCallback onSignUp;
+  final bool isCompleted;
+  final VoidCallback? onCheckScore;
 
   const EventDetailScreen({
     super.key,
     required this.event,
     required this.onSignUp,
     this.onHomePressed,
+    this.isCompleted = false,
+    this.onCheckScore,
   });
 
   @override
@@ -220,7 +224,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         ],
       ),
 
-      // Fixed bottom Sign up button
+      // Fixed bottom button - Sign up for upcoming events, Check Score for completed events
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -233,8 +237,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
-              onPressed: widget.onSignUp,
-              child: const Text('Sign up  >', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              onPressed: widget.isCompleted && widget.onCheckScore != null
+                  ? widget.onCheckScore
+                  : widget.onSignUp,
+              child: Text(
+                widget.isCompleted ? 'Check Score  >' : 'Sign up  >',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
             ),
           ),
         ),

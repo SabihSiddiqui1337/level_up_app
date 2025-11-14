@@ -108,20 +108,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
     ];
 
-    // Show "My Team" for all users except owners (admins)
-    if (userRole != 'owner') {
-      baseItems.add(
-        NavigationItem(
-          screen: MyTeamScreen(
-            teamService: _teamService,
-            pickleballTeamService: _pickleballTeamService,
-            onHomePressed: _navigateToHome,
-          ),
-          icon: Icons.group,
-          label: 'My Team',
+    // Show "My Team" for all users including owners
+    baseItems.add(
+      NavigationItem(
+        screen: MyTeamScreen(
+          teamService: _teamService,
+          pickleballTeamService: _pickleballTeamService,
+          onHomePressed: _navigateToHome,
         ),
-      );
-    }
+        icon: Icons.group,
+        label: 'My Team',
+      ),
+    );
 
     baseItems.add(
       NavigationItem(

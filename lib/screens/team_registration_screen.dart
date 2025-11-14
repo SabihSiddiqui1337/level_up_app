@@ -2,14 +2,17 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:io';
 import '../models/team.dart';
 import '../models/player.dart';
 import '../models/event.dart';
+import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
 import '../services/team_service.dart';
 import '../screens/main_navigation_screen.dart'; // Added import for MainNavigationScreen
 import '../screens/process_registration_screen.dart'; // Added import for ProcessRegistrationScreen
+import '../screens/player_stats_screen.dart'; // For navigating to player profiles
 
 class PhoneNumberFormatter extends TextInputFormatter {
   @override
@@ -92,12 +95,30 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
   String? _selectedDivision; // Will be set from event if available
   bool _hasUnsavedChanges = false;
   bool _isSaving = false; // Add flag to prevent rapid saving
+  bool _allowGuestUsers = false; // Enable/disable guest players section
   
   // Validation states for real-time validation
   final Map<String, String?> _fieldErrors = {};
   bool _hasAttemptedValidation = false;
 
   final List<String> _divisions = ['Youth (18 or under)', 'Adult 18+'];
+
+  // Get max players for the sport
+  int _getMaxPlayersForSport() {
+    if (widget.event == null) return 8; // Default
+    
+    final sportName = widget.event!.sportName.toLowerCase();
+    if (sportName.contains('pickleball') || sportName.contains('pickelball')) {
+      return 1;
+    } else if (sportName.contains('volleyball')) {
+      return 8;
+    } else if (sportName.contains('basketball')) {
+      return 6;
+    } else if (sportName.contains('soccer')) {
+      return 10;
+    }
+    return 8; // Default
+  }
 
   @override
   void initState() {
@@ -143,6 +164,27 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
       // Force UI update to show existing players
       if (mounted) {
         setState(() {});
+      }
+    } else {
+      // New team registration: Auto-add current user as a player
+      final currentUser = _authService.currentUser;
+      if (currentUser != null) {
+        final autoPlayer = Player(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          name: currentUser.name,
+          position: 'Player',
+          jerseyNumber: int.tryParse(currentUser.jerseyNumber ?? '0') ?? 0,
+          phoneNumber: currentUser.phone,
+          email: currentUser.email,
+          age: currentUser.age ?? 25,
+          height: double.tryParse(currentUser.height ?? '0') ?? 0.0,
+          weight: double.tryParse(currentUser.weight ?? '0') ?? 0.0,
+          userId: currentUser.id, // Link to user profile
+        );
+        _players.add(autoPlayer);
+        if (mounted) {
+          setState(() {});
+        }
       }
     }
 
@@ -257,19 +299,39 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
     }
   }
 
-  void _addPlayer() {
-    print('_addPlayer called'); // Debug print
+  // Add registered player (from search/profile)
+  void _addRegisteredPlayer() {
     showDialog(
       context: context,
       builder:
           (context) => _PlayerDialog(
             selectedDivision: _selectedDivision ?? 'Adult 18+',
+            allowGuest: false, // Only allow registered users
             onSave: (player) {
-              print('Adding player to team: ${player.name}'); // Debug print
+              print('Adding registered player to team: ${player.name}'); // Debug print
               setState(() {
                 _players.add(player);
                 _hasUnsavedChanges = true;
-                // This will trigger button state update
+              });
+              print('Total players now: ${_players.length}'); // Debug print
+            },
+          ),
+    );
+  }
+
+  // Add guest player (manual entry)
+  void _addGuestPlayer() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => _PlayerDialog(
+            selectedDivision: _selectedDivision ?? 'Adult 18+',
+            allowGuest: true, // Force guest mode
+            onSave: (player) {
+              print('Adding guest player to team: ${player.name}'); // Debug print
+              setState(() {
+                _players.add(player);
+                _hasUnsavedChanges = true;
               });
               print('Total players now: ${_players.length}'); // Debug print
             },
@@ -829,87 +891,77 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: _teamNameController,
-                  textCapitalization: TextCapitalization.words,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  maxLength: 30,
-                  inputFormatters: [LengthLimitingTextInputFormatter(30)],
-                  decoration: InputDecoration(
-                    labelText: 'Team Name',
-                    prefixIcon: const Icon(Icons.sports_basketball),
-                    border: const OutlineInputBorder(),
-                    counterText: '',
-                    errorText: _hasAttemptedValidation ? _fieldErrors['teamName'] : null,
-                    errorStyle: const TextStyle(color: Colors.red),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter team name';
+                // Division Field - Only show for Basketball and Pickleball
+                // For Volleyball and Soccer, hide division field
+                Builder(
+                  builder: (context) {
+                    final sportName = (widget.event != null) 
+                        ? widget.event!.sportName.toLowerCase() 
+                        : '';
+                    final isVolleyball = sportName.contains('volleyball');
+                    final isSoccer = sportName.contains('soccer');
+                    
+                    // Hide division for Volleyball and Soccer
+                    if (isVolleyball || isSoccer) {
+                      return const SizedBox.shrink();
                     }
-                    if (value.length > 30) {
-                      return 'Team name must be 30 characters or less';
-                    }
-                    return null;
+                    
+                    // Show division for Basketball and Pickleball
+                    return (widget.event != null && 
+                     widget.event!.division != null && 
+                     widget.event!.division!.trim().isNotEmpty)
+                        ? TextFormField(
+                            initialValue: widget.event!.division,
+                            style: const TextStyle(color: Colors.black87),
+                            decoration: InputDecoration(
+                              labelText: 'Division (Preset)',
+                              labelStyle: TextStyle(color: Colors.grey[600]),
+                              prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
+                              border: OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                              ),
+                              disabledBorder: OutlineInputBorder(
+                                borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey[200],
+                              hintText: 'Set by event organizer',
+                            ),
+                            readOnly: true,
+                            enabled: false,
+                          )
+                        : DropdownButtonFormField<String>(
+                            value: _selectedDivision,
+                            decoration: const InputDecoration(
+                              labelText: 'Division',
+                              border: OutlineInputBorder(),
+                            ),
+                            items:
+                                _divisions.map((String division) {
+                                  return DropdownMenuItem<String>(
+                                    value: division,
+                                    child: Text(division),
+                                  );
+                                }).toList(),
+                            onChanged: (String? newValue) {
+                              setState(() {
+                                _selectedDivision = newValue!;
+                                _hasUnsavedChanges = true;
+                              });
+                              _validatePlayersForDivision();
+                              // Re-validate age field when division changes
+                              _validateField('coachAge', _coachAgeController.text);
+                              _formKey.currentState?.validate();
+                            },
+                          );
                   },
                 ),
-                const SizedBox(height: 16),
-                // Division Field - Always locked when event has division set (for ALL users)
-                // If event exists and has a division set, it MUST be locked and read-only
-                (widget.event != null && 
-                 widget.event!.division != null && 
-                 widget.event!.division!.trim().isNotEmpty)
-                    ? TextFormField(
-                        initialValue: widget.event!.division,
-                        style: const TextStyle(color: Colors.black87),
-                        decoration: InputDecoration(
-                          labelText: 'Division (Preset)',
-                          labelStyle: TextStyle(color: Colors.grey[600]),
-                          prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
-                          border: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
-                          ),
-                          disabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.blue[300]!, width: 1.5),
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey[200],
-                          hintText: 'Set by event organizer',
-                        ),
-                        readOnly: true,
-                        enabled: false,
-                      )
-                    : DropdownButtonFormField<String>(
-                        value: _selectedDivision,
-                        decoration: const InputDecoration(
-                          labelText: 'Division',
-                          border: OutlineInputBorder(),
-                        ),
-                        items:
-                            _divisions.map((String division) {
-                              return DropdownMenuItem<String>(
-                                value: division,
-                                child: Text(division),
-                              );
-                            }).toList(),
-                        onChanged: (String? newValue) {
-                          setState(() {
-                            _selectedDivision = newValue!;
-                            _hasUnsavedChanges = true;
-                          });
-                          _validatePlayersForDivision();
-                          // Re-validate age field when division changes
-                          _validateField('coachAge', _coachAgeController.text);
-                          _formKey.currentState?.validate();
-                        },
-                      ),
               ],
             ),
           ),
@@ -927,12 +979,44 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Team Captain Information',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: const Color(0xFF1976D2),
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Team Captain Information',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        color: const Color(0xFF1976D2),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        final currentUser = _authService.currentUser;
+                        if (currentUser != null) {
+                          setState(() {
+                            _coachNameController.text = currentUser.name;
+                            _coachPhoneController.text = currentUser.phone;
+                            _coachEmailController.text = currentUser.email;
+                            _hasUnsavedChanges = true;
+                          });
+                          // Trigger validation after filling
+                          _validateField('coachName', currentUser.name);
+                          _validateField('coachPhone', currentUser.phone);
+                          _validateField('coachEmail', currentUser.email);
+                          if (_formKey.currentState != null) {
+                            _formKey.currentState!.validate();
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.person, size: 18),
+                      label: const Text('Myself'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2196F3),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -1056,7 +1140,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
         ),
         const SizedBox(height: 16),
 
-        // Players Section
+        // Section 1 - Registered Players (Always Enabled)
         Card(
           elevation: 4,
           shape: RoundedRectangleBorder(
@@ -1067,39 +1151,146 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Players (${_players.length})',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.headlineSmall?.copyWith(
-                        color: const Color(0xFF1976D2),
-                        fontWeight: FontWeight.bold,
-                      ),
+                Text(
+                  'Section 1 - Registered Players',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: const Color(0xFF1976D2),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Team Name Field (in Section 1)
+                TextFormField(
+                  controller: _teamNameController,
+                  textCapitalization: TextCapitalization.words,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  maxLength: 30,
+                  inputFormatters: [LengthLimitingTextInputFormatter(30)],
+                  decoration: InputDecoration(
+                    labelText: 'Team Name',
+                    prefixIcon: const Icon(Icons.sports_basketball),
+                    border: const OutlineInputBorder(),
+                    counterText: '',
+                    errorText: _hasAttemptedValidation ? _fieldErrors['teamName'] : null,
+                    errorStyle: const TextStyle(color: Colors.red),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter team name';
+                    }
+                    if (value.length > 30) {
+                      return 'Team name must be 30 characters or less';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _players.length >= _getMaxPlayersForSport() ? null : _addRegisteredPlayer,
+                    icon: const Icon(Icons.add),
+                    label: Text(
+                      _players.length >= _getMaxPlayersForSport() ? 'Max ${_getMaxPlayersForSport()} players' : 'Add Player',
                     ),
-                    ElevatedButton.icon(
-                      onPressed: _players.length >= 8 ? null : _addPlayer,
-                      icon: const Icon(Icons.add),
-                      label: Text(
-                        _players.length >= 8 ? 'Max 8 players' : 'Add Player',
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2196F3),
-                        foregroundColor: Colors.white,
-                      ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2196F3),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                  ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Section 2 - Guest Players (Disabled until checkbox)
+        Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CheckboxListTile(
+                  title: const Text(
+                    'Guest Users',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  subtitle: const Text('Enable manual guest player entry'),
+                  value: _allowGuestUsers,
+                  onChanged: (value) {
+                    setState(() {
+                      _allowGuestUsers = value ?? false;
+                    });
+                  },
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: !_allowGuestUsers || _players.length >= _getMaxPlayersForSport()
+                        ? null
+                        : _addGuestPlayer,
+                    icon: const Icon(Icons.add),
+                    label: Text(
+                      _players.length >= _getMaxPlayersForSport() ? 'Max ${_getMaxPlayersForSport()} players' : 'Add Player',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _allowGuestUsers
+                          ? const Color(0xFF2196F3)
+                          : Colors.grey,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Players Overview Section (Always Visible)
+        Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Players Overview (${_players.length})',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: const Color(0xFF1976D2),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 if (_players.isEmpty)
                   const Center(
-                    child: Text(
-                      'No players added yet. Click "Add Player" to get started.',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontStyle: FontStyle.italic,
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Text(
+                        'No players added yet. Add players from Section 1 or Section 2.',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   )
@@ -1110,14 +1301,71 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                     itemCount: _players.length,
                     itemBuilder: (context, index) {
                       final player = _players[index];
+                      // Get user profile if player is linked to a user
+                      User? linkedUser;
+                      if (player.userId != null) {
+                        final users = _authService.users;
+                        try {
+                          linkedUser = users.firstWhere((u) => u.id == player.userId);
+                        } catch (e) {
+                          linkedUser = null;
+                        }
+                      }
+                      
                       return Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundImage: linkedUser?.profilePicturePath != null
+                                ? FileImage(File(linkedUser!.profilePicturePath!))
+                                : null,
+                            child: linkedUser?.profilePicturePath == null
+                                ? Text(player.name[0].toUpperCase())
+                                : null,
+                          ),
                           title: Text(player.name),
-                          subtitle: Text('Age: ${player.age}'),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Age: ${player.age}'),
+                              if (player.userId != null && linkedUser != null)
+                                Text(
+                                  'ID: ${player.userId}',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                )
+                              else if (player.userId == null)
+                                Text(
+                                  'Guest',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey[600], fontStyle: FontStyle.italic),
+                                ),
+                            ],
+                          ),
+                          onTap: player.userId != null && linkedUser != null
+                              ? () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => PlayerStatsScreen(user: linkedUser!),
+                                    ),
+                                  );
+                                }
+                              : null,
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              if (player.userId != null && linkedUser != null)
+                                IconButton(
+                                  icon: const Icon(Icons.person, size: 20),
+                                  tooltip: 'View Profile',
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => PlayerStatsScreen(user: linkedUser!),
+                                      ),
+                                    );
+                                  },
+                                ),
                               IconButton(
                                 icon: const Icon(Icons.edit),
                                 onPressed: () => _editPlayer(index),
@@ -1318,11 +1566,13 @@ class _PlayerDialog extends StatefulWidget {
   final Player? player;
   final String selectedDivision;
   final Function(Player) onSave;
+  final bool allowGuest; // If true, force guest mode; if false, only allow registered users
 
   const _PlayerDialog({
     this.player,
     required this.selectedDivision,
     required this.onSave,
+    this.allowGuest = true, // Default to allowing guest mode
   });
 
   @override
@@ -1333,6 +1583,13 @@ class _PlayerDialogState extends State<_PlayerDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _ageController = TextEditingController();
+  final _searchController = TextEditingController();
+  final AuthService _authService = AuthService();
+  
+  bool _isGuest = false;
+  User? _selectedUser;
+  List<User> _searchResults = [];
+  bool _isSearching = false;
 
   @override
   void initState() {
@@ -1340,23 +1597,128 @@ class _PlayerDialogState extends State<_PlayerDialog> {
     if (widget.player != null) {
       _nameController.text = widget.player!.name;
       _ageController.text = widget.player!.age.toString();
+      _isGuest = widget.player!.userId == null;
+      // If player has userId, try to find the user
+      if (widget.player!.userId != null) {
+        final users = _authService.users;
+        try {
+          _selectedUser = users.firstWhere((u) => u.id == widget.player!.userId);
+        } catch (e) {
+          _selectedUser = null;
+        }
+      }
+    } else {
+      // New player: if allowGuest is false, force registered user mode (not guest)
+      // If allowGuest is true, start with guest mode
+      _isGuest = widget.allowGuest;
+      // If allowGuest is false, ensure we're not in guest mode
+      if (!widget.allowGuest) {
+        _isGuest = false;
+      }
     }
+    _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _ageController.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged() {
+    final query = _searchController.text.toLowerCase().trim();
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+      final allUsers = _authService.users;
+      _searchResults = allUsers.where((user) {
+        final queryLower = query.toLowerCase();
+        return user.name.toLowerCase().contains(queryLower) ||
+               user.username.toLowerCase().contains(queryLower) ||
+               user.email.toLowerCase().contains(queryLower) ||
+               user.id.toLowerCase().contains(queryLower) ||
+               user.phone.replaceAll(RegExp(r'[^\d]'), '').contains(query.replaceAll(RegExp(r'[^\d]'), ''));
+      }).toList();
+    });
+  }
+
+  void _selectUser(User user) {
+    setState(() {
+      _selectedUser = user;
+      _isGuest = false;
+      _nameController.text = user.name;
+      _ageController.text = user.age?.toString() ?? '25';
+      _searchController.clear();
+      _searchResults = [];
+      _isSearching = false;
+    });
+  }
+
+  void _toggleGuest(bool? value) {
+    // Only allow toggling if allowGuest is true
+    if (!widget.allowGuest && value == true) {
+      return;
+    }
+    setState(() {
+      _isGuest = value ?? false;
+      if (_isGuest) {
+        _selectedUser = null;
+        _nameController.clear();
+        _ageController.clear();
+      }
+    });
   }
 
   void _savePlayer() {
     print('_savePlayer called'); // Debug print
     print(
-      'Name: "${_nameController.text}", Age: "${_ageController.text}"',
+      'Name: "${_nameController.text}", Age: "${_ageController.text}", Guest: $_isGuest, UserId: ${_selectedUser?.id}',
     ); // Debug print
 
     if (_formKey.currentState!.validate()) {
+      // If allowGuest is false, user MUST select a registered user
+      if (!widget.allowGuest && _selectedUser == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please search and select a registered player profile'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      // If allowGuest is true, validate that either a user is selected OR guest is checked
+      if (widget.allowGuest) {
+        if (!_isGuest && _selectedUser == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please search and select a player profile, or check Guest to add manually'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        if (_isGuest && _nameController.text.trim().isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please enter player name for guest player'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+
       print('Form validation passed'); // Debug print
       final player = Player(
         id:
@@ -1364,12 +1726,13 @@ class _PlayerDialogState extends State<_PlayerDialog> {
             DateTime.now().millisecondsSinceEpoch.toString(),
         name: _nameController.text,
         position: 'Player', // Default position
-        jerseyNumber: 0, // Default jersey number
-        phoneNumber: '', // Default phone
-        email: '', // Default email
+        jerseyNumber: int.tryParse(_selectedUser?.jerseyNumber ?? '0') ?? 0, // Use user's jersey number if available
+        phoneNumber: _selectedUser?.phone ?? '', // Use user's phone if available
+        email: _selectedUser?.email ?? '', // Use user's email if available
         age: int.parse(_ageController.text),
         height: 6.0, // Default height
         weight: 180.0, // Default weight
+        userId: _isGuest ? null : _selectedUser?.id, // Link to user profile if not guest
       );
 
       print('Player created: ${player.name}'); // Debug print
@@ -1392,15 +1755,191 @@ class _PlayerDialogState extends State<_PlayerDialog> {
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Search field for player profiles
+                // Show if: (not in guest mode) OR (allowGuest is false - force registered user mode)
+                if (!_isGuest || !widget.allowGuest) ...[
+                  TextFormField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      labelText: 'Search Player Profile',
+                      hintText: 'Enter player name, ID, username, email, or phone number',
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                setState(() {
+                                  _searchController.clear();
+                                  _searchResults = [];
+                                  _isSearching = false;
+                                  _selectedUser = null;
+                                });
+                              },
+                            )
+                          : null,
+                    ),
+                    onChanged: (_) => _onSearchChanged(),
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Search results
+                  if (_isSearching && _searchResults.isNotEmpty)
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _searchResults.length,
+                        itemBuilder: (context, index) {
+                          final user = _searchResults[index];
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundImage: user.profilePicturePath != null
+                                  ? FileImage(File(user.profilePicturePath!))
+                                  : null,
+                              child: user.profilePicturePath == null
+                                  ? Text(user.name[0].toUpperCase())
+                                  : null,
+                            ),
+                            title: Text(user.name),
+                            subtitle: Text('@${user.username}'),
+                            onTap: () => _selectUser(user),
+                          );
+                        },
+                      ),
+                    ),
+                  
+                  // Show "Add as Guest Player" option when search has text
+                  if (_searchController.text.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.blue[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.blue[50],
+                      ),
+                      child: ListTile(
+                        leading: const Icon(Icons.person_add, color: Colors.blue),
+                        title: Text('Add "${_searchController.text}" as Guest Player'),
+                        trailing: const Icon(Icons.arrow_forward, color: Colors.blue),
+                        onTap: () {
+                          // Directly add guest player with searched name
+                          final guestName = _searchController.text.trim();
+                          if (guestName.isEmpty) {
+                            return;
+                          }
+                          
+                          setState(() {
+                            _isGuest = true;
+                            _selectedUser = null;
+                            _nameController.text = guestName;
+                            _searchController.clear();
+                            _searchResults = [];
+                            _isSearching = false;
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                  
+                  if (_isSearching && _searchResults.isEmpty && _searchController.text.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        'No players found',
+                        style: TextStyle(color: Colors.grey[600]),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  
+                  // Selected user display
+                  if (_selectedUser != null && !_isSearching)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        border: Border.all(color: Colors.blue[200]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundImage: _selectedUser!.profilePicturePath != null
+                                ? FileImage(File(_selectedUser!.profilePicturePath!))
+                                : null,
+                            child: _selectedUser!.profilePicturePath == null
+                                ? Text(_selectedUser!.name[0].toUpperCase())
+                                : null,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _selectedUser!.name,
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  '@${_selectedUser!.username}',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.clear, size: 20),
+                            onPressed: () {
+                              setState(() {
+                                _selectedUser = null;
+                                _nameController.clear();
+                                _ageController.clear();
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                ],
+                
+                // Guest checkbox (only show if guest mode is allowed)
+                if (widget.allowGuest) ...[
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    title: const Text('Guest Player'),
+                    subtitle: const Text('Add a player manually without linking to a profile'),
+                    value: _isGuest,
+                    onChanged: _toggleGuest,
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                ],
+                
+                const SizedBox(height: 16),
+                
+                // Player Name field (enabled only for guest or when user is selected)
                 TextFormField(
                   controller: _nameController,
                   textCapitalization: TextCapitalization.words,
                   autocorrect: false,
                   enableSuggestions: false,
-                  decoration: const InputDecoration(
+                  enabled: _isGuest || _selectedUser != null,
+                  decoration: InputDecoration(
                     labelText: 'Player Name',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    filled: !(_isGuest || _selectedUser != null),
+                    fillColor: Colors.grey[200],
                   ),
                   onChanged: (value) {
                     if (value.isNotEmpty) {
@@ -1419,9 +1958,12 @@ class _PlayerDialogState extends State<_PlayerDialog> {
                   controller: _ageController,
                   autocorrect: false,
                   enableSuggestions: false,
-                  decoration: const InputDecoration(
+                  enabled: _isGuest || _selectedUser != null,
+                  decoration: InputDecoration(
                     labelText: 'Age',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    filled: !(_isGuest || _selectedUser != null),
+                    fillColor: Colors.grey[200],
                   ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [

@@ -647,17 +647,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                 ),
                               ),
                               IconButton(
-                                icon: Icon(
+                                icon: const Icon(
                                   Icons.delete,
-                                  color: isCompleted ? Colors.grey[400] : Colors.red,
+                                  color: Colors.red,
                                 ),
-                                onPressed: isCompleted
-                                    ? null
-                                    : () async {
-                                        // Show confirmation dialog directly without popping
-                                        // The confirmation will handle closing all dialogs
-                                        _confirmDeleteEvent(event, context);
-                                      },
+                                onPressed: () async {
+                                  // Show confirmation dialog directly without popping
+                                  // The confirmation will handle closing all dialogs
+                                  _confirmDeleteEvent(event, context);
+                                },
                               ),
                             ],
                           ),
@@ -2056,39 +2054,55 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
+      builder: (context) {
+        bool amountError = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                  Row(
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  'Create Event',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                ),
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Create Event',
+                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                               ),
-                              IconButton(
-                        icon: const Icon(Icons.close),
-                                onPressed: () {
-                                  // Dismiss keyboard and dispose focus nodes
-                                  FocusScope.of(context).unfocus();
-                                  titleFocusNode.dispose();
-                                  locationFocusNode.dispose();
-                                  addressFocusNode.dispose();
-                                  descriptionFocusNode.dispose();
-                                  amountFocusNode.dispose();
-                                  Navigator.pop(context);
-                                },
-                              ),
-                            ],
-                          ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () {
+                                // Dismiss keyboard first
+                                FocusScope.of(context).unfocus();
+                                // Close dialog first
+                                Navigator.pop(context);
+                                // Dispose controllers after dialog animation completes (longer delay)
+                                Future.delayed(const Duration(milliseconds: 500), () {
+                                  try {
+                                    titleController.dispose();
+                                    locationController.dispose();
+                                    addressController.dispose();
+                                    descriptionController.dispose();
+                                    amountController.dispose();
+                                    titleFocusNode.dispose();
+                                    locationFocusNode.dispose();
+                                    addressFocusNode.dispose();
+                                    descriptionFocusNode.dispose();
+                                    amountFocusNode.dispose();
+                                  } catch (e) {
+                                    // Controllers may already be disposed, ignore
+                                  }
+                                });
+                              },
+                            ),
+                          ],
+                        ),
                   const SizedBox(height: 12),
                                 _buildImageStyleField(
                                   label: 'Event name',
@@ -2110,7 +2124,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                       // Dismiss other keyboards when tapping this field
                                       FocusScope.of(context).unfocus();
                                       Future.delayed(const Duration(milliseconds: 100), () {
-                                        titleFocusNode.requestFocus();
+                                        try {
+                                          if (!titleFocusNode.hasFocus) {
+                                            titleFocusNode.requestFocus();
+                                          }
+                                        } catch (e) {
+                                          // FocusNode may have been disposed, ignore
+                                        }
                                       });
                                     },
                                   ),
@@ -2183,7 +2203,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                       // Dismiss other keyboards when tapping this field
                                       FocusScope.of(context).unfocus();
                                       Future.delayed(const Duration(milliseconds: 100), () {
-                                        locationFocusNode.requestFocus();
+                                        try {
+                                          if (!locationFocusNode.hasFocus) {
+                                            locationFocusNode.requestFocus();
+                                          }
+                                        } catch (e) {
+                                          // FocusNode may have been disposed, ignore
+                                        }
                                       });
                                     },
                                   ),
@@ -2209,7 +2235,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                           // Dismiss other keyboards when tapping this field
                                           FocusScope.of(context).unfocus();
                                           Future.delayed(const Duration(milliseconds: 100), () {
-                                            addressFocusNode.requestFocus();
+                                            try {
+                                              if (!addressFocusNode.hasFocus) {
+                                                addressFocusNode.requestFocus();
+                                              }
+                                            } catch (e) {
+                                              // FocusNode may have been disposed, ignore
+                                            }
                                           });
                                         },
                                       ),
@@ -2232,7 +2264,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                         // Dismiss other keyboards when tapping this field
                         FocusScope.of(context).unfocus();
                         Future.delayed(const Duration(milliseconds: 100), () {
-                          descriptionFocusNode.requestFocus();
+                          try {
+                            if (!descriptionFocusNode.hasFocus) {
+                              descriptionFocusNode.requestFocus();
+                            }
+                          } catch (e) {
+                            // FocusNode may have been disposed, ignore
+                          }
                         });
                       },
                     ),
@@ -2398,106 +2436,175 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                             ),
                                           ),
                                 ),
+                  ],
+                  // Amount field - Required: user must type "FREE" or enter a value (shown for all sports)
                   const SizedBox(height: 16),
-                  // Amount field
                   _buildImageStyleField(
-                    label: 'Amount (Leave empty for free event)',
-                    hasError: false,
+                    label: 'Amount (Required - type "FREE" for free event)',
+                    hasError: amountError,
                     child: TextField(
                       controller: amountController,
                       focusNode: amountFocusNode,
-                      keyboardType: TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: TextInputType.text,
                       decoration: InputDecoration(
-                        hintText: 'Enter registration amount (e.g., 350.00)',
+                        hintText: 'Enter amount (e.g., 350.00) or type "FREE"',
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                         prefixText: '\$ ',
                       ),
+                      onChanged: (v) {
+                        if (amountError && v.trim().isNotEmpty) {
+                          setDialogState(() => amountError = false);
+                        }
+                      },
                       onTap: () {
                         FocusScope.of(context).unfocus();
                         Future.delayed(const Duration(milliseconds: 100), () {
-                          amountFocusNode.requestFocus();
+                          try {
+                            if (!amountFocusNode.hasFocus) {
+                              amountFocusNode.requestFocus();
+                            }
+                          } catch (e) {
+                            // FocusNode may have been disposed, ignore
+                          }
                         });
                       },
                     ),
                   ),
-                  ],
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          // Dismiss keyboard and dispose focus nodes
-                          FocusScope.of(context).unfocus();
-                          titleFocusNode.dispose();
-                          locationFocusNode.dispose();
-                          addressFocusNode.dispose();
-                          descriptionFocusNode.dispose();
-                          amountFocusNode.dispose();
-                          Navigator.pop(context);
-                        },
-                        child: const Text('Cancel'),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: () {
+                                // Dismiss keyboard first
+                                FocusScope.of(context).unfocus();
+                                // Close dialog first
+                                Navigator.pop(context);
+                                // Dispose controllers after dialog animation completes (longer delay)
+                                Future.delayed(const Duration(milliseconds: 500), () {
+                                  try {
+                                    titleController.dispose();
+                                    locationController.dispose();
+                                    addressController.dispose();
+                                    descriptionController.dispose();
+                                    amountController.dispose();
+                                    titleFocusNode.dispose();
+                                    locationFocusNode.dispose();
+                                    addressFocusNode.dispose();
+                                    descriptionFocusNode.dispose();
+                                    amountFocusNode.dispose();
+                                  } catch (e) {
+                                    // Controllers may already be disposed, ignore
+                                  }
+                                });
+                              },
+                              child: const Text('Cancel'),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
                               onPressed: () async {
+                                // Read values before any potential disposal
+                                final titleText = titleController.text.trim();
+                                final locationText = locationController.text.trim();
+                                final addressText = addressController.text.trim();
+                                final descriptionText = descriptionController.text.trim();
+                                final amountText = amountController.text.trim();
+
                                 setDialogState(() {
-                            titleError = titleController.text.trim().isEmpty;
+                                  titleError = titleText.isEmpty;
                                   dateError = selectedDate == null;
-                            locationError = locationController.text.trim().isEmpty;
-                            addressError = addressController.text.trim().isEmpty;
-                            sportError = (selectedSport == null || selectedSport!.trim().isEmpty);
-                            // Division is required only for Basketball and Pickleball
-                            divisionError = (selectedSport == 'Basketball' || selectedSport == 'Pickleball') && 
-                                           (selectedDivision == null || selectedDivision!.trim().isEmpty);
-                          });
-                          if (titleError || dateError || locationError || addressError || sportError || divisionError) return;
+                                  locationError = locationText.isEmpty;
+                                  addressError = addressText.isEmpty;
+                                  sportError = (selectedSport == null || selectedSport!.trim().isEmpty);
+                                  // Division is required only for Basketball and Pickleball
+                                  divisionError = (selectedSport == 'Basketball' || selectedSport == 'Pickleball') && 
+                                                 (selectedDivision == null || selectedDivision!.trim().isEmpty);
+                                  // Amount is required - must be "FREE" or a valid number
+                                  if (amountText.isEmpty) {
+                                    amountError = true;
+                                  } else if (amountText.toUpperCase() != 'FREE') {
+                                    final parsedAmount = double.tryParse(amountText);
+                                    if (parsedAmount == null || parsedAmount <= 0) {
+                                      amountError = true;
+                                    } else {
+                                      amountError = false;
+                                    }
+                                  } else {
+                                    amountError = false;
+                                  }
+                                });
+                                if (titleError || dateError || locationError || addressError || sportError || divisionError || amountError) return;
 
-                          // Parse amount (null if empty means free event)
-                          double? amount;
-                          if (amountController.text.trim().isNotEmpty) {
-                            final parsedAmount = double.tryParse(amountController.text.trim());
-                            if (parsedAmount != null && parsedAmount > 0) {
-                              amount = parsedAmount;
-                            }
-                          }
+                                // Parse amount - "FREE" means null, otherwise parse as number
+                                double? amount;
+                                if (amountText.toUpperCase() == 'FREE') {
+                                  amount = null; // Free event
+                                } else if (amountText.isNotEmpty) {
+                                  final parsedAmount = double.tryParse(amountText);
+                                  if (parsedAmount != null && parsedAmount > 0) {
+                                    amount = parsedAmount;
+                                  }
+                                }
 
-                          final ok = await _eventService.createEvent(
-                                  title: titleController.text.trim(),
+                                final ok = await _eventService.createEvent(
+                                  title: titleText,
                                   date: selectedDate!,
-                                  locationName: locationController.text.trim(),
-                            locationAddress: addressController.text.trim(),
-                            sportName: selectedSport!.trim(),
-                            description: descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
-                            division: selectedDivision,
-                            amount: amount,
-                          );
-                          if (ok) {
-                            // Dismiss keyboard and dispose focus nodes
-                            FocusScope.of(context).unfocus();
-                            titleFocusNode.dispose();
-                            locationFocusNode.dispose();
-                            addressFocusNode.dispose();
-                            descriptionFocusNode.dispose();
-                            amountFocusNode.dispose();
-                            await _eventService.initialize();
-                                if (mounted) {
-                              setState(() {});
-                            }
+                                  locationName: locationText,
+                                  locationAddress: addressText,
+                                  sportName: selectedSport!.trim(),
+                                  description: descriptionText.isEmpty ? null : descriptionText,
+                                  division: selectedDivision,
+                                  amount: amount,
+                                );
+                                if (ok) {
+                                  // Dismiss keyboard first
+                                  FocusScope.of(context).unfocus();
+                                  // Close dialog first
                                   Navigator.pop(context);
-                          }
-                        },
-                        child: const Text('Create'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                                  // Dispose controllers after dialog animation completes (longer delay)
+                                  Future.delayed(const Duration(milliseconds: 500), () {
+                                    try {
+                                      titleController.dispose();
+                                      locationController.dispose();
+                                      addressController.dispose();
+                                      descriptionController.dispose();
+                                      amountController.dispose();
+                                      titleFocusNode.dispose();
+                                      locationFocusNode.dispose();
+                                      addressFocusNode.dispose();
+                                      descriptionFocusNode.dispose();
+                                      amountFocusNode.dispose();
+                                    } catch (e) {
+                                      // Controllers may already be disposed, ignore
+                                    }
+                                  });
+                                  await _eventService.initialize();
+                                  if (mounted) {
+                                    setState(() {});
+                                    // Show success snackbar
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Event created successfully'),
+                                        backgroundColor: Colors.green,
+                                        duration: Duration(seconds: 2),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                              child: const Text('Create'),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
-          ),
+            );
+          },
+        );
+      },
     );
   }
 
