@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:level_up_app/models/event.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/simple_app_bar.dart';
@@ -1062,7 +1063,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           barrierDismissible: false,
                           builder: (BuildContext context) {
                             return AlertDialog(
-                              title: Text('Confirm Winner'),
+                              title:  Text('Confirm Winner'),
                               content: Text(
                                 'Are you sure the winner of the tournament is $winnerName?',
                               ),
@@ -1070,12 +1071,12 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                                 TextButton(
                                   onPressed:
                                       () => Navigator.of(context).pop(false),
-                                  child: Text('Cancel'),
+                                  child: const Text('Cancel'),
                                 ),
                                 ElevatedButton(
                                   onPressed:
                                       () => Navigator.of(context).pop(true),
-                                  child: Text('Confirm'),
+                                  child: const Text('Confirm'),
                                 ),
                               ],
                             );
@@ -1780,14 +1781,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
-            title: Text('Insufficient Teams'),
+            title: const Text('Insufficient Teams'),
             content: Text(
               'Not enough teams registered. Need 8 teams to start games. Currently have ${_teams.length} teams.',
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text('OK'),
+                child: const Text('OK'),
               ),
             ],
           );
@@ -1803,14 +1804,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Go to Playoffs'),
-          content: Text(
+          title: const Text('Go to Playoffs'),
+          content: const Text(
             'Are you sure you want to go to the playoffs? This will begin the elimination rounds based on current standings.',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel'),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -1857,7 +1858,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                   true,
                 );
               },
-              child: Text('Go to Playoffs'),
+              child: const Text('Go to Playoffs'),
             ),
           ],
         );
@@ -2354,14 +2355,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Restart Playoffs'),
-          content: Text(
+          title: const Text('Restart Playoffs'),
+          content: const Text(
             'This will clear all Quarter Finals, Semi Finals, and Finals scores. Your preliminary round scores will be kept.',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel'),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -2467,7 +2468,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 backgroundColor: const Color.fromARGB(225, 243, 51, 33),
                 foregroundColor: Colors.white,
               ),
-              child: Text('Restart Playoffs'),
+              child: const Text('Restart Playoffs'),
             ),
           ],
         );
@@ -3155,7 +3156,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             barrierDismissible: true, // Allow dismissing by tapping outside
             builder: (BuildContext context) {
               return AlertDialog(
-                title: Text('Insufficient Teams'),
+                title: const Text('Insufficient Teams'),
                 content: Text(
                   'Not enough teams registered. Need 8 teams to start games. Currently have ${_teams.length} teams.\n\nPlease go back and register more teams.',
                 ),
@@ -3170,7 +3171,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         ),
                       );
                     },
-                    child: Text('Go Back'),
+                    child: const Text('Go Back'),
                   ),
                 ],
               );
@@ -5216,7 +5217,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const SizedBox(width: 4),
-                          Text(
+                          const Text(
                             'Winner',
                             style: TextStyle(
                               color: Colors.amber,
@@ -5236,7 +5237,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child:
                     isPlayoffMatch
-                        ? Text(
+                        ? const Text(
                           'VS',
                           style: TextStyle(
                             color: Colors.white,
@@ -5248,7 +5249,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const SizedBox(width: 8),
-                            Text(
+                            const Text(
                               'VS',
                               style: TextStyle(
                                 color: Colors.white,
@@ -5293,7 +5294,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const SizedBox(width: 4),
-                          Text(
+                          const Text(
                             'Winner',
                             style: TextStyle(
                               color: Colors.amber,
@@ -5411,7 +5412,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Text(
+                                  const Text(
                                     '* Qualified for Playoffs',
                                     style: TextStyle(
                                       color: Colors.white,
@@ -5449,7 +5450,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             child: ElevatedButton.icon(
               onPressed: _startPlayoffs,
               icon: const Icon(Icons.play_arrow),
-              label: Text('Start Playoffs'),
+              label: const Text('Start Playoffs'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2196F3),
                 foregroundColor: Colors.white,
@@ -5512,7 +5513,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                             _saveNavigationState();
                           },
                           icon: const Icon(Icons.sports_esports),
-                          label: Text('Check Playoffs score'),
+                          label: const Text('Check Playoffs score'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF2196F3),
                             foregroundColor: Colors.white,
@@ -5556,7 +5557,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           });
                         },
                         icon: const Icon(Icons.sports_esports),
-                            label: Text('Go to Playoffs'),
+                            label: const Text('Go to Playoffs'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF2196F3),
                               foregroundColor: Colors.white,
@@ -5590,7 +5591,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         child: ElevatedButton.icon(
                           onPressed: allQFZero ? _restartPlayoffs : null,
                           icon: Icon(allQFZero ? Icons.refresh : Icons.lock),
-                          label: Text('Restart Playoffs'),
+                          label: const Text('Restart Playoffs'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: allQFZero
                                 ? const Color.fromARGB(225, 243, 51, 33)
@@ -5613,7 +5614,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                             _saveNavigationState();
                           },
                           icon: const Icon(Icons.sports_esports),
-                          label: Text('Go to Playoffs'),
+                          label: const Text('Go to Playoffs'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF2196F3),
                             foregroundColor: Colors.white,
@@ -5650,7 +5651,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           });
                         },
                         icon: const Icon(Icons.sports_esports),
-                        label: Text('Go to Playoffs'),
+                        label: const Text('Go to Playoffs'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2196F3),
                           foregroundColor: Colors.white,
@@ -5708,7 +5709,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         icon: Icon(
                           hasPlayoffScores ? Icons.lock : Icons.refresh,
                         ),
-                        label: Text('Restart Playoffs'),
+                        label: const Text('Restart Playoffs'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor:
                               hasPlayoffScores
@@ -5747,7 +5748,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           _saveNavigationState();
                         },
                         icon: const Icon(Icons.sports_esports),
-                        label: Text('Go to Playoffs'),
+                        label: const Text('Go to Playoffs'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2196F3),
                           foregroundColor: Colors.white,
@@ -5774,7 +5775,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
           child: Text(
             text,
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
               fontSize: 12,
@@ -5792,7 +5793,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
         child: Text(
           text,
-          style: TextStyle(
+          style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
             fontSize: 12,
@@ -5866,7 +5867,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 Expanded(
                   child: Text(
                     standing.teamName,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
@@ -5884,7 +5885,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             width: 30,
             child: Text(
               '${standing.wins}',
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -5896,7 +5897,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             width: 30,
             child: Text(
               '${standing.losses}',
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -5922,7 +5923,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
             width: 30,
             child: Text(
               '${standing.points}',
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -6291,14 +6292,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Reset Scores Required'),
-          content: Text(
+          title: const Text('Reset Scores Required'),
+          content: const Text(
             'Please manually reset all scores to 0 before reshuffling teams.',
           ),
           actions: [
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('OK'),
+              child: const Text('OK'),
             ),
           ],
         );
@@ -6312,14 +6313,14 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Playoffs in Progress'),
-          content: Text(
+          title: const Text('Playoffs in Progress'),
+          content: const Text(
             'To edit playoff scores, you\'ll need to restart the playoffs first. This will reset the entire playoff bracket and allow you to make changes.',
           ),
           actions: [
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel'),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
@@ -6330,7 +6331,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 backgroundColor: const Color.fromARGB(225, 243, 51, 33),
                 foregroundColor: Colors.white,
               ),
-              child: Text('Restart Playoffs'),
+              child: const Text('Restart Playoffs'),
             ),
           ],
         );
@@ -6344,8 +6345,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Access Restricted'),
-          content: Text(
+          title: const Text('Access Restricted'),
+          content: const Text(
             'Only authorized administrators can access scoring features. Please contact an administrator if you need scoring access.',
           ),
           actions: [
@@ -6355,7 +6356,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
               ),
-              child: Text('OK'),
+              child: const Text('OK'),
             ),
           ],
         );
@@ -6380,7 +6381,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 backgroundColor: const Color(0xFF2196F3),
                 foregroundColor: Colors.white,
               ),
-              child: Text('OK'),
+              child: const Text('OK'),
             ),
           ],
         );
@@ -6405,7 +6406,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       backgroundColor: Colors.white,
       selectedItemColor: const Color(0xFF2196F3),
       unselectedItemColor: Colors.grey[600],
-      selectedLabelStyle: TextStyle(fontWeight: FontWeight.bold),
+      selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
       items: const [
         BottomNavigationBarItem(icon: Icon(Icons.sports_score), label: 'Games'),
         BottomNavigationBarItem(icon: Icon(Icons.sports), label: 'Playoffs'),
@@ -6477,7 +6478,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                                     Expanded(
                                       child: Text(
                                         division,
-                                        style: TextStyle(fontSize: 13),
+                                        style: const TextStyle(fontSize: 13),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
@@ -6592,11 +6593,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           dividerColor: Colors.transparent,
                           labelColor: Colors.white,
                           unselectedLabelColor: Colors.grey[600],
-                          labelStyle: TextStyle(
+                          labelStyle: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
-                          unselectedLabelStyle: TextStyle(
+                          unselectedLabelStyle: const TextStyle(
                             fontWeight: FontWeight.w500,
                             fontSize: 12,
                           ),
@@ -6680,11 +6681,11 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                   dividerColor: Colors.transparent,
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.grey[600],
-                  labelStyle: TextStyle(
+                  labelStyle: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
-                  unselectedLabelStyle: TextStyle(
+                  unselectedLabelStyle: const TextStyle(
                     fontWeight: FontWeight.w500,
                     fontSize: 12,
                   ),
@@ -6845,7 +6846,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           });
                         },
                         icon: const Icon(Icons.visibility, size: 18),
-                        label: Text('See Standing'),
+                        label: const Text('See Standing'),
                       style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2196F3),
                         foregroundColor: Colors.white,
@@ -7294,7 +7295,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                   ),
                   child: Text(
                     _getFinalsWinner()!,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -7375,16 +7376,16 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                               context: context,
                               barrierDismissible: false,
                               builder: (context) => AlertDialog(
-                                title: Text('Complete Finals?'),
-                                content: Text('Are you sure you want to complete the final? You will not be able to edit the score again.'),
+                                title: const Text('Complete Finals?'),
+                                content: const Text('Are you sure you want to complete the final? You will not be able to edit the score again.'),
                                 actions: [
                                   TextButton(
                                     onPressed: () => Navigator.of(context).pop(false),
-                                    child: Text('Cancel'),
+                                    child: const Text('Cancel'),
                                   ),
                                   ElevatedButton(
                                     onPressed: () => Navigator.of(context).pop(true),
-                                    child: Text('Yes, Complete'),
+                                    child: const Text('Yes, Complete'),
                                   ),
                                 ],
                               ),
@@ -7411,7 +7412,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                           }
                         : null,
                     icon: const Icon(Icons.emoji_events),
-                    label: Text('Complete Final'),
+                    label: const Text('Complete Final'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: (_getFinalsWinner() != null)
                           ? const Color(0xFF38A169)
@@ -8091,8 +8092,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Reset All Playoff Scores?'),
-          content: Text(
+          title: const Text('Reset All Playoff Scores?'),
+          content: const Text(
             'This will reset all scores for Quarter Finals, Semi Finals, and Finals. This action cannot be undone. Do you want to continue?',
           ),
           actions: [
@@ -8112,7 +8113,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
               ),
-              child: Text('Reset All Scores'),
+              child: const Text('Reset All Scores'),
             ),
           ],
         );
@@ -8183,7 +8184,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('All playoff scores have been reset'),
+            content: const Text('All playoff scores have been reset'),
             backgroundColor: Colors.green[600],
             duration: const Duration(seconds: 2),
           ),
@@ -8243,7 +8244,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text(
+                    content: const Text(
                       'Score saved successfully',
                       style: TextStyle(
                         color: Colors.white,
@@ -8278,12 +8279,12 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         builder: (context, setState) {
           final List<dynamic> teams = _teams;
           return AlertDialog(
-            title: Text("Registered Teams (Admin)"),
+            title: const Text("Registered Teams (Admin)"),
             content: Container(
               width: 320,
               constraints: const BoxConstraints(maxHeight: 400),
               child: teams.isEmpty
-                  ? Text('No teams registered.')
+                  ? const Text('No teams registered.')
                   : ListView.builder(
                       itemCount: teams.length,
                       itemBuilder: (context, idx) {
@@ -8297,17 +8298,17 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                               final confirmed = await showDialog<bool>(
                                 context: context,
                                 builder: (ctx2) => AlertDialog(
-                                  title: Text('Delete Team'),
+                                  title: const Text('Delete Team'),
                                   content: Text('Are you sure you want to delete ${team.name}?'),
                                   actions: [
                                     TextButton(
-                                      child: Text('Cancel'),
+                                      child: const Text('Cancel'),
                                       onPressed: () => Navigator.pop(ctx2, false),
                                     ),
                                     ElevatedButton(
                                       style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                                       onPressed: () => Navigator.pop(ctx2, true),
-                                      child: Text('Delete'),
+                                      child: const Text('Delete'),
                                     ),
                                   ],
                                 ),
@@ -8334,7 +8335,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                     ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Close')),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
             ],
           );
         },
@@ -8435,8 +8436,8 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Create Custom Schedule'),
-          content: Text('Do you want to create your own schedule?'),
+          title: const Text('Create Custom Schedule'),
+          content: const Text('Do you want to create your own schedule?'),
           actions: [
             TextButton(
               onPressed: () async {
@@ -8448,7 +8449,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 // Continue with normal automatic Preliminary Rounds flow
                 // (just close dialog, normal flow continues)
               },
-              child: Text('NO'),
+              child: const Text('NO'),
             ),
             ElevatedButton(
               onPressed: () {
@@ -8462,7 +8463,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                 backgroundColor: const Color(0xFF2196F3),
                 foregroundColor: Colors.white,
               ),
-              child: Text('YES'),
+              child: const Text('YES'),
             ),
           ],
         );
@@ -8547,7 +8548,7 @@ class _QuarterFinalsGameSettingsScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Game Settings'),
+        title: const Text('Game Settings'),
         backgroundColor: const Color(0xFF2196F3),
         foregroundColor: Colors.white,
       ),
@@ -8558,7 +8559,7 @@ class _QuarterFinalsGameSettingsScreenState
           children: [
             const SizedBox(height: 20),
             // Match Total Games setting
-            Text(
+            const Text(
               'Match Total Games:',
               style: TextStyle(
                 fontSize: 16,
@@ -8658,7 +8659,7 @@ class _QuarterFinalsGameSettingsScreenState
             ),
             const SizedBox(height: 32),
             // Game Winning Score setting
-            Text(
+            const Text(
               'Game Winning Score:',
               style: TextStyle(
                 fontSize: 16,
@@ -8776,7 +8777,7 @@ class _QuarterFinalsGameSettingsScreenState
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                child: Text(
+                child: const Text(
                   'Save Settings',
                   style: TextStyle(
                     fontSize: 16,
@@ -8826,7 +8827,7 @@ class _QuarterFinalsGameSettingsScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Game Settings'),
+        title: const Text('Game Settings'),
         backgroundColor: const Color(0xFF2196F3),
         foregroundColor: Colors.white,
       ),
@@ -8837,7 +8838,7 @@ class _QuarterFinalsGameSettingsScreenState
           children: [
             const SizedBox(height: 20),
             // Match Total Games setting
-            Text(
+            const Text(
               'Match Total Games:',
               style: TextStyle(
                 fontSize: 16,
@@ -8907,7 +8908,7 @@ class _QuarterFinalsGameSettingsScreenState
             ),
             const SizedBox(height: 32),
             // Game Winning Score setting
-            Text(
+            const Text(
               'Game Winning Score:',
               style: TextStyle(
                 fontSize: 16,
@@ -8995,7 +8996,7 @@ class _QuarterFinalsGameSettingsScreenState
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                child: Text(
+                child: const Text(
                   'Save Settings',
                   style: TextStyle(
                     fontSize: 16,
@@ -9019,7 +9020,7 @@ class _QuarterFinalsGameSettingsScreenState
                                           ),
                                           child: Text(
                                             '${unassignedTeams.length}',
-                                            style: TextStyle(
+                                            style: const TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.bold,
                                               fontSize: 14,
@@ -9089,7 +9090,7 @@ class _QuarterFinalsGameSettingsScreenState
                                                         team.name.isNotEmpty
                                                             ? team.name[0].toUpperCase()
                                                             : 'T',
-                                                        style: TextStyle(
+                                                        style: const TextStyle(
                                                           fontSize: 18,
                                                           fontWeight: FontWeight.bold,
                                                           color: Color(0xFF2196F3),
@@ -9099,7 +9100,7 @@ class _QuarterFinalsGameSettingsScreenState
                                                   ),
                                                   title: Text(
                                                     team.name,
-                                                    style: TextStyle(
+                                                    style: const TextStyle(
                                                       fontSize: 14,
                                                       fontWeight: FontWeight.w600,
                                                     ),
@@ -9186,7 +9187,7 @@ class _QuarterFinalsGameSettingsScreenState
                                           ),
                                           child: Text(
                                             '${matchups.length}',
-                                            style: TextStyle(
+                                            style: const TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.bold,
                                               fontSize: 14,
@@ -9215,7 +9216,7 @@ class _QuarterFinalsGameSettingsScreenState
                                               crossAxisAlignment: CrossAxisAlignment.stretch,
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                Text(
+                                                const Text(
                                                   'Select Teams',
                                                   style: TextStyle(
                                                     fontSize: 14,
@@ -9259,7 +9260,7 @@ class _QuarterFinalsGameSettingsScreenState
                                                               value: team.id,
                                                               child: Text(
                                                                 team.name,
-                                                                style: TextStyle(
+                                                                style: const TextStyle(
                                                                   fontSize: 13,
                                                                   fontWeight: FontWeight.w500,
                                                                 ),
@@ -9287,7 +9288,7 @@ class _QuarterFinalsGameSettingsScreenState
                                                           color: const Color(0xFF2196F3).withOpacity(0.1),
                                                           borderRadius: BorderRadius.circular(8),
                                                         ),
-                                                        child: Text(
+                                                        child: const Text(
                                                           'VS',
                                                           style: TextStyle(
                                                             fontSize: 14,
@@ -9331,7 +9332,7 @@ class _QuarterFinalsGameSettingsScreenState
                                                               value: team.id,
                                                               child: Text(
                                                                 team.name,
-                                                                style: TextStyle(
+                                                                style: const TextStyle(
                                                                   fontSize: 13,
                                                                   fontWeight: FontWeight.w500,
                                                                 ),
@@ -9373,7 +9374,7 @@ class _QuarterFinalsGameSettingsScreenState
                                                         }
                                                       : null,
                                                   icon: const Icon(Icons.add_circle_outline, size: 18),
-                                                  label: Text(
+                                                  label: const Text(
                                                     'Add Matchup',
                                                     style: TextStyle(
                                                       fontSize: 14,
@@ -9464,7 +9465,7 @@ class _QuarterFinalsGameSettingsScreenState
                                                         child: Center(
                                                           child: Text(
                                                             '${index + 1}',
-                                                            style: TextStyle(
+                                                            style: const TextStyle(
                                                               color: Colors.white,
                                                               fontSize: 14,
                                                               fontWeight: FontWeight.bold,
@@ -9480,7 +9481,7 @@ class _QuarterFinalsGameSettingsScreenState
                                                           children: [
                                                             Text(
                                                               matchup['team1'].name,
-                                                              style: TextStyle(
+                                                              style: const TextStyle(
                                                                 fontSize: 14,
                                                                 fontWeight: FontWeight.w600,
                                                               ),
@@ -9499,7 +9500,7 @@ class _QuarterFinalsGameSettingsScreenState
                                                                   ),
                                                                 ),
                                                                 const SizedBox(width: 6),
-                                                                Text(
+                                                                const Text(
                                                                   'VS',
                                                                   style: TextStyle(
                                                                     fontSize: 11,
@@ -9512,7 +9513,7 @@ class _QuarterFinalsGameSettingsScreenState
                                                             const SizedBox(height: 2),
                                                             Text(
                                                               matchup['team2'].name,
-                                                              style: TextStyle(
+                                                              style: const TextStyle(
                                                                 fontSize: 14,
                                                                 fontWeight: FontWeight.w600,
                                                               ),
@@ -9610,12 +9611,12 @@ class _QuarterFinalsGameSettingsScreenState
                                 context: context,
                                 builder: (BuildContext cancelContext) {
                                   return AlertDialog(
-                                    title: Text('Cancel Custom Schedule?'),
-                                    content: Text('Are you sure you want to cancel creating a custom schedule?'),
+                                    title: const Text('Cancel Custom Schedule?'),
+                                    content: const Text('Are you sure you want to cancel creating a custom schedule?'),
                                     actions: [
                                       TextButton(
                                         onPressed: () => Navigator.of(cancelContext).pop(false),
-                                        child: Text('NO'),
+                                        child: const Text('NO'),
                                       ),
                                       ElevatedButton(
                                         onPressed: () => Navigator.of(cancelContext).pop(true),
@@ -9623,7 +9624,7 @@ class _QuarterFinalsGameSettingsScreenState
                                           backgroundColor: Colors.red,
                                           foregroundColor: Colors.white,
                                         ),
-                                        child: Text('YES'),
+                                        child: const Text('YES'),
                                       ),
                                     ],
                                   );
@@ -9647,7 +9648,7 @@ class _QuarterFinalsGameSettingsScreenState
                                 Navigator.of(dialogContext).pop(); // Close custom schedule dialog
                               }
                             },
-                            child: Text(
+                            child: const Text(
                               'Cancel',
                               style: TextStyle(fontSize: 14),
                             ),
@@ -9726,7 +9727,7 @@ class _QuarterFinalsGameSettingsScreenState
                             ),
                             child: Text(
                               allTeamsAssigned ? 'Create Schedule' : 'Assign All Teams',
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                             ),
                           ),
                         ],
@@ -9776,7 +9777,7 @@ class _QuarterFinalsGameSettingsScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Game Settings'),
+        title: const Text('Game Settings'),
         backgroundColor: const Color(0xFF2196F3),
         foregroundColor: Colors.white,
       ),
@@ -9787,7 +9788,7 @@ class _QuarterFinalsGameSettingsScreenState
           children: [
             const SizedBox(height: 20),
             // Match Total Games setting
-            Text(
+            const Text(
               'Match Total Games:',
               style: TextStyle(
                 fontSize: 16,
@@ -9859,7 +9860,7 @@ class _QuarterFinalsGameSettingsScreenState
             ),
             const SizedBox(height: 32),
             // Game Winning Score setting
-            Text(
+            const Text(
               'Game Winning Score:',
               style: TextStyle(
                 fontSize: 16,
@@ -9972,7 +9973,7 @@ class _QuarterFinalsGameSettingsScreenState
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: Text(
+                child: const Text(
                   'Start Scoring',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
@@ -10033,12 +10034,12 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
-            title: Text('Discard Changes?'),
-            content: Text('You have unsaved changes. Are you sure you want to cancel? Changes will not be saved.'),
+            title: const Text('Discard Changes?'),
+            content: const Text('You have unsaved changes. Are you sure you want to cancel? Changes will not be saved.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text('Keep Editing'),
+                child: const Text('Keep Editing'),
               ),
               TextButton(
                 onPressed: () {
@@ -10048,7 +10049,7 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
                 style: TextButton.styleFrom(
                   foregroundColor: Colors.red,
                 ),
-                child: Text('Discard'),
+                child: const Text('Discard'),
               ),
             ],
           );
@@ -10211,7 +10212,7 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
             SnackBar(
               content: Text(
                 'Score must be ${widget.minScore} (minimum score to win). Current: $_team1Score-$_team2Score',
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
@@ -10243,7 +10244,7 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
             SnackBar(
               content: Text(
                 'Cannot have a tie score. One team must win by 2 points. Current: $_team1Score-$_team2Score',
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
@@ -10283,7 +10284,7 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
           SnackBar(
             content: Text(
               errorMessage,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
@@ -10315,7 +10316,7 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
           SnackBar(
             content: Text(
               'Error saving scores: $e',
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
@@ -10360,7 +10361,7 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
                     Expanded(
                       child: Text(
                         widget.match.team1,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
@@ -10386,7 +10387,7 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
                           child: Center(
                             child: Text(
                               '$_team1Score',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -10430,7 +10431,7 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
                     Expanded(
                       child: Text(
                         widget.match.team2,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
@@ -10456,7 +10457,7 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
                           child: Center(
                             child: Text(
                               '$_team2Score',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -10497,7 +10498,7 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
       actions: [
         TextButton(
           onPressed: _isProcessing ? null : _handleCancel,
-          child: Text('Cancel'),
+          child: const Text('Cancel'),
         ),
         ElevatedButton(
           onPressed: _isProcessing ? null : _saveScores,
@@ -10511,7 +10512,7 @@ class _PreliminaryScoringDialogState extends State<_PreliminaryScoringDialog> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : Text('Save'),
+              : const Text('Save'),
         ),
       ],
       ),
