@@ -1,6 +1,6 @@
 // ignore_for_file: use_build_context_synchronously
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Expanded;
 import 'package:flutter/services.dart';
 import '../widgets/custom_app_bar.dart';
 import '../widgets/app_loading_widget.dart';
@@ -12,7 +12,7 @@ import 'event_detail_screen.dart';
 import 'team_registration_screen.dart';
 import 'pickleball_team_registration_screen.dart';
 import 'admin_team_selection_screen.dart';
-import 'sport_schedule_screen.dart';
+import 'sport_schedule_screen.dart' hide Text, Container, BoxDecoration, SizedBox;
 import '../services/auth_service.dart';
 
 class UpcomingEventsScreen extends StatefulWidget {
@@ -680,9 +680,9 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                       children: [
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: () {
+                      onPressed: () {
                               // Navigate to Event Detail screen
-                              if (event != null) {
+                        if (event != null) {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -691,22 +691,22 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                                       isCompleted: true,
                                       onCheckScore: () {
                                         // Navigate to Sport Schedule screen
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => SportScheduleScreen(
-                                              sportName: event.sportName,
-                                              tournamentTitle: event.title,
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SportScheduleScreen(
+                                sportName: event.sportName,
+                                tournamentTitle: event.title,
                                             ),
                                           ),
                                         );
                                       },
                                       onSignUp: () {}, // Not used for completed events
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
+                              ),
+                            ),
+                          );
+                        }
+                      },
                             icon: const Icon(Icons.info_outline, size: 16),
                             label: const Text(
                               'DETAILS',
@@ -743,20 +743,20 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                                 });
                               }
                             },
-                            icon: const Icon(Icons.score, size: 16),
-                            label: const Text(
-                              'CHECK SCORE',
-                              style: TextStyle(fontSize: 13),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF2196F3),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              elevation: 2,
-                            ),
+                      icon: const Icon(Icons.score, size: 16),
+                      label: const Text(
+                        'CHECK SCORE',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2196F3),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 2,
+                      ),
                           ),
                         ),
                       ],
@@ -767,52 +767,52 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                       builder: (context) {
                         final eventStarted = event != null ? (_eventStartedStatus[event.id] ?? false) : false;
                         return Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
                                 onPressed: eventStarted
                                     ? null
                                     : () {
-                                        Navigator.pushReplacement(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder:
-                                                (context) => const MainNavigationScreen(
-                                                  initialIndex: 1,
-                                                ),
-                                          ),
-                                        );
-                                      },
-                                icon: const Icon(Icons.app_registration, size: 16),
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (context) => const MainNavigationScreen(
+                                        initialIndex: 1,
+                                      ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.app_registration, size: 16),
                                 label: Text(
                                   eventStarted ? 'EVENT STARTED' : 'REGISTER',
                                   style: const TextStyle(fontSize: 13),
-                                ),
-                                style: ElevatedButton.styleFrom(
+                            ),
+                            style: ElevatedButton.styleFrom(
                                   backgroundColor: eventStarted
                                       ? Colors.grey[400]
                                       : const Color(0xFFE67E22),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  elevation: eventStarted ? 0 : 2,
-                                ),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
+                                  elevation: eventStarted ? 0 : 2,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: () {
-                                  // Show details dialog or navigate to details screen
-                                  if (event != null) {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => EventDetailScreen(
-                                          event: event,
-                                          onSignUp: () {
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              // Show details dialog or navigate to details screen
+                              if (event != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => EventDetailScreen(
+                                      event: event,
+                                      onSignUp: () {
                                             // Check if user is owner/admin
                                             final currentUser = _authService.currentUser;
                                             final isOwnerOrAdmin = currentUser?.role == 'owner' || 
@@ -828,54 +828,54 @@ class _UpcomingEventsScreenState extends State<UpcomingEventsScreen> {
                                               );
                                             } else {
                                               // Regular users go to team registration
-                                              final sport = event.sportName.toLowerCase();
-                                              if (sport.contains('pickleball') || sport.contains('pickelball')) {
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (context) => PickleballTeamRegistrationScreen(event: event),
-                                                  ),
-                                                );
-                                              } else {
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (context) => TeamRegistrationScreen(event: event),
-                                                  ),
-                                                );
+                                        final sport = event.sportName.toLowerCase();
+                                        if (sport.contains('pickleball') || sport.contains('pickelball')) {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => PickleballTeamRegistrationScreen(event: event),
+                                            ),
+                                          );
+                                        } else {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => TeamRegistrationScreen(event: event),
+                                            ),
+                                          );
                                               }
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                    );
-                                  } else {
-                                    _showEventDetails(
-                                      title,
-                                      date,
-                                      location,
-                                      address,
-                                      sportName,
-                                    );
-                                  }
-                                },
-                                icon: const Icon(Icons.info_outline, size: 16),
-                                label: const Text(
-                                  'DETAILS',
-                                  style: TextStyle(fontSize: 13),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white.withOpacity(0.9),
-                                  foregroundColor: Colors.black87,
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
+                                        }
+                                      },
+                                    ),
                                   ),
-                                  elevation: 2,
-                                ),
-                              ),
+                                );
+                              } else {
+                                _showEventDetails(
+                                  title,
+                                  date,
+                                  location,
+                                  address,
+                                  sportName,
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.info_outline, size: 16),
+                            label: const Text(
+                              'DETAILS',
+                              style: TextStyle(fontSize: 13),
                             ),
-                          ],
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white.withOpacity(0.9),
+                              foregroundColor: Colors.black87,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              elevation: 2,
+                            ),
+                          ),
+                        ),
+                      ],
                         );
                       },
                     ),

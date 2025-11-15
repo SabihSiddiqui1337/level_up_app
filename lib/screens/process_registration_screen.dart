@@ -634,20 +634,30 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-            color: Colors.black87,
+        Flexible(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: Colors.black87,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
-        Text(
-          amount,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-            color: Colors.black87,
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            amount,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: Colors.black87,
+            ),
+            textAlign: TextAlign.end,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -757,9 +767,24 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
   
   void _completeFreeRegistration() async {
     // For free events, skip payment and complete registration directly
-    // Save the team to the database
+    // Save the team to the database with correct eventId
     final teamService = TeamService();
-    await teamService.addTeam(widget.team);
+    // Ensure eventId is set correctly from the event
+    final teamWithEventId = Team(
+      id: widget.team.id,
+      name: widget.team.name,
+      coachName: widget.team.coachName,
+      coachPhone: widget.team.coachPhone,
+      coachEmail: widget.team.coachEmail,
+      coachAge: widget.team.coachAge,
+      players: widget.team.players,
+      registrationDate: widget.team.registrationDate,
+      division: widget.team.division,
+      createdByUserId: widget.team.createdByUserId,
+      isPrivate: widget.team.isPrivate,
+      eventId: widget.event.id, // Ensure eventId is set from the event
+    );
+    await teamService.addTeam(teamWithEventId);
     
     if (mounted) {
       // Navigate to My Team tab after registering (index 2)

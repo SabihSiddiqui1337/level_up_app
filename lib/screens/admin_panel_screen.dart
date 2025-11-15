@@ -921,25 +921,34 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     final addressController = TextEditingController(
       text: event.locationAddress,
     );
-    final sportNameController = TextEditingController();
     final descriptionController = TextEditingController(text: event.description ?? '');
     // Initialize amount controller with event amount (or "FREE" if null)
     final amountController = TextEditingController(
       text: event.amount == null ? 'FREE' : event.amount.toString(),
     );
+    // Add FocusNodes for editable fields
+    final titleFocusNode = FocusNode();
+    final locationFocusNode = FocusNode();
+    final addressFocusNode = FocusNode();
+    final descriptionFocusNode = FocusNode();
+    final amountFocusNode = FocusNode();
+    
     DateTime? selectedDate = event.date;
     String? selectedSport = event.sportName;
-    String? selectedDivision = event.division; // Initialize division from event
-    bool isAddingNewSport = false;
-    final List<String> existingAddresses =
-        _eventService.events.map((e) => e.locationAddress).toSet().toList();
-    List<String> filteredAddresses = [];
+    // Error state variables used in UI via StatefulBuilder (linter doesn't detect usage in closures)
+    // ignore: unused_local_variable
     bool titleError = false;
+    // ignore: unused_local_variable
     bool dateError = false;
+    // ignore: unused_local_variable
     bool locationError = false;
+    // ignore: unused_local_variable
     bool addressError = false;
+    // ignore: unused_local_variable
     bool sportError = false;
+    // ignore: unused_local_variable
     bool divisionError = false;
+    // ignore: unused_local_variable
     bool amountError = false;
 
     showDialog(
@@ -999,7 +1008,24 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                               ),
                               IconButton(
                                 icon: const Icon(Icons.close),
-                                onPressed: () => Navigator.pop(context),
+                                onPressed: () {
+                                  // Dismiss keyboard first
+                                  FocusScope.of(context).unfocus();
+                                  // Close dialog
+                                  Navigator.pop(context);
+                                  // Dispose FocusNodes after dialog closes
+                                  Future.delayed(const Duration(milliseconds: 300), () {
+                                    try {
+                                      titleFocusNode.dispose();
+                                      locationFocusNode.dispose();
+                                      addressFocusNode.dispose();
+                                      descriptionFocusNode.dispose();
+                                      amountFocusNode.dispose();
+                                    } catch (e) {
+                                      // FocusNodes may already be disposed, ignore
+                                    }
+                                  });
+                                },
                               ),
                             ],
                           ),
@@ -1011,151 +1037,215 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Event Name - Locked (read-only)
+                                // Event Name - Editable
                                 _buildImageStyleField(
                                   label: 'Event name',
-                                  hasError: false,
+                                  hasError: titleError,
                                   child: TextField(
                                     controller: titleController,
-                                    readOnly: true,
-                                    enabled: false,
+                                    focusNode: titleFocusNode,
                                     style: const TextStyle(
                                       fontSize: 16,
                                       color: Colors.black87,
                                     ),
                                     decoration: InputDecoration(
-                                      hintText: 'Event name',
+                                      hintText: 'Enter event name',
                                       hintStyle: TextStyle(
                                         color: Colors.grey[400],
                                         fontSize: 16,
                                       ),
                                       border: InputBorder.none,
-                                      filled: true,
-                                      fillColor: Colors.grey[200],
                                       contentPadding:
                                           const EdgeInsets.symmetric(
                                             vertical: 14,
                                             horizontal: 16,
                                           ),
                                     ),
+                                    onChanged: (v) {
+                                      if (titleError && v.isNotEmpty) {
+                                        setDialogState(() => titleError = false);
+                                      }
+                                    },
+                                    onTap: () {
+                                      FocusScope.of(context).unfocus();
+                                      Future.delayed(const Duration(milliseconds: 100), () {
+                                        try {
+                                          if (!titleFocusNode.hasFocus) {
+                                            titleFocusNode.requestFocus();
+                                          }
+                                        } catch (e) {
+                                          // FocusNode may have been disposed, ignore
+                                        }
+                                      });
+                                    },
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                // Description - Locked (read-only)
+                                // Description - Editable
                                 _buildImageStyleField(
                                   label: 'Description',
                                   hasError: false,
                                   child: TextField(
                                     controller: descriptionController,
-                                    readOnly: true,
-                                    enabled: false,
+                                    focusNode: descriptionFocusNode,
                                     minLines: 3,
                                     maxLines: 5,
-                                    decoration: InputDecoration(
-                                      hintText: 'Event description',
+                                    decoration: const InputDecoration(
+                                      hintText: 'Enter event description',
                                       border: InputBorder.none,
-                                      filled: true,
-                                      fillColor: Colors.grey[200],
-                                      contentPadding: const EdgeInsets.symmetric(
+                                      contentPadding: EdgeInsets.symmetric(
                                         vertical: 14,
                                         horizontal: 16,
                                       ),
                                     ),
+                                    onTap: () {
+                                      FocusScope.of(context).unfocus();
+                                      Future.delayed(const Duration(milliseconds: 100), () {
+                                        try {
+                                          if (!descriptionFocusNode.hasFocus) {
+                                            descriptionFocusNode.requestFocus();
+                                          }
+                                        } catch (e) {
+                                          // FocusNode may have been disposed, ignore
+                                        }
+                                      });
+                                    },
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                // Date - Locked (read-only)
+                                // Date - Editable
                                 _buildImageStyleField(
                                   label: 'Date',
-                                  hasError: false,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 14,
-                                      horizontal: 16,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[200],
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.calendar_today,
-                                          size: 20,
-                                          color: Colors.grey[600],
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          selectedDate != null
-                                              ? '${selectedDate!.month}/${selectedDate!.day}/${selectedDate!.year}'
-                                              : 'Select date',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            color: Colors.black87,
+                                  hasError: dateError,
+                                  child: InkWell(
+                                    onTap: () async {
+                                      final picked = await showDatePicker(
+                                        context: context,
+                                        initialDate: selectedDate != null && selectedDate!.isAfter(DateTime.now())
+                                            ? selectedDate!
+                                            : DateTime.now(),
+                                        firstDate: DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
+                                        lastDate: DateTime(2100),
+                                        selectableDayPredicate: (day) {
+                                          final today = DateTime.now();
+                                          final normalizedToday = DateTime(today.year, today.month, today.day);
+                                          final normalizedDay = DateTime(day.year, day.month, day.day);
+                                          return !normalizedDay.isBefore(normalizedToday);
+                                        },
+                                      );
+                                      if (picked != null) {
+                                        setDialogState(() {
+                                          selectedDate = picked;
+                                          dateError = false;
+                                        });
+                                      }
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.calendar_today, size: 20, color: Colors.grey[600]),
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            selectedDate != null
+                                                ? '${selectedDate!.month}/${selectedDate!.day}/${selectedDate!.year}'
+                                                : 'Select date',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              color: selectedDate != null ? Colors.black87 : Colors.grey[400],
+                                            ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                // Location - Locked (read-only)
+                                // Location - Editable
                                 _buildImageStyleField(
                                   label: 'Location',
-                                  hasError: false,
+                                  hasError: locationError,
                                   child: TextField(
                                     controller: locationController,
-                                    readOnly: true,
-                                    enabled: false,
+                                    focusNode: locationFocusNode,
                                     style: const TextStyle(
                                       fontSize: 16,
                                       color: Colors.black87,
                                     ),
                                     decoration: InputDecoration(
-                                      hintText: 'Location name',
+                                      hintText: 'Enter location name',
                                       hintStyle: TextStyle(
                                         color: Colors.grey[400],
                                         fontSize: 16,
                                       ),
                                       border: InputBorder.none,
-                                      filled: true,
-                                      fillColor: Colors.grey[200],
                                       contentPadding:
                                           const EdgeInsets.symmetric(
                                             vertical: 14,
                                             horizontal: 16,
                                           ),
                                     ),
+                                    onChanged: (v) {
+                                      if (locationError && v.isNotEmpty) {
+                                        setDialogState(() => locationError = false);
+                                      }
+                                    },
+                                    onTap: () {
+                                      FocusScope.of(context).unfocus();
+                                      Future.delayed(const Duration(milliseconds: 100), () {
+                                        try {
+                                          if (!locationFocusNode.hasFocus) {
+                                            locationFocusNode.requestFocus();
+                                          }
+                                        } catch (e) {
+                                          // FocusNode may have been disposed, ignore
+                                        }
+                                      });
+                                    },
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                // Address - Locked (read-only)
+                                // Address - Editable
                                 _buildImageStyleField(
                                   label: 'Address',
-                                  hasError: false,
+                                  hasError: addressError,
                                   child: TextField(
                                     controller: addressController,
-                                    readOnly: true,
-                                    enabled: false,
+                                    focusNode: addressFocusNode,
                                     style: const TextStyle(
                                       fontSize: 16,
                                       color: Colors.black87,
                                     ),
                                     decoration: InputDecoration(
-                                      hintText: 'Full address',
+                                      hintText: 'Enter full address',
                                       hintStyle: TextStyle(
                                         color: Colors.grey[400],
                                         fontSize: 16,
                                       ),
                                       border: InputBorder.none,
-                                      filled: true,
-                                      fillColor: Colors.grey[200],
                                       contentPadding:
                                           const EdgeInsets.symmetric(
                                             vertical: 14,
                                             horizontal: 16,
                                           ),
                                     ),
+                                    onChanged: (v) {
+                                      if (addressError && v.isNotEmpty) {
+                                        setDialogState(() => addressError = false);
+                                      }
+                                    },
+                                    onTap: () {
+                                      FocusScope.of(context).unfocus();
+                                      Future.delayed(const Duration(milliseconds: 100), () {
+                                        try {
+                                          if (!addressFocusNode.hasFocus) {
+                                            addressFocusNode.requestFocus();
+                                          }
+                                        } catch (e) {
+                                          // FocusNode may have been disposed, ignore
+                                        }
+                                      });
+                                    },
                                   ),
                                 ),
                                 const SizedBox(height: 24),
@@ -1176,7 +1266,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                       children: [
                                         Expanded(
                                           child: Text(
-                                            selectedSport ?? 'Select sport',
+                                            selectedSport,
                                             style: const TextStyle(
                                               fontSize: 16,
                                               color: Colors.black87,
@@ -1193,12 +1283,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                // Amount/Price field - Only editable field
+                                // Amount/Price field - Editable
                                 _buildImageStyleField(
                                   label: 'Amount (Required - type "FREE" for free event)',
                                   hasError: amountError,
                                   child: TextField(
                                     controller: amountController,
+                                    focusNode: amountFocusNode,
                                     keyboardType: TextInputType.text,
                                     style: const TextStyle(
                                       fontSize: 16,
@@ -1225,6 +1316,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                         });
                                       }
                                     },
+                                    onTap: () {
+                                      FocusScope.of(context).unfocus();
+                                      Future.delayed(const Duration(milliseconds: 100), () {
+                                        try {
+                                          if (!amountFocusNode.hasFocus) {
+                                            amountFocusNode.requestFocus();
+                                          }
+                                        } catch (e) {
+                                          // FocusNode may have been disposed, ignore
+                                        }
+                                      });
+                                    },
                                   ),
                                 ),
                                 const SizedBox(height: 32),
@@ -1244,25 +1347,38 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             width: double.infinity,
                             child: ElevatedButton(
                               onPressed: () async {
-                                // Validate amount field only
+                                // Read values before any potential disposal
+                                final titleText = titleController.text.trim();
+                                final locationText = locationController.text.trim();
+                                final addressText = addressController.text.trim();
+                                final descriptionText = descriptionController.text.trim();
                                 final amountText = amountController.text.trim();
-                                setDialogState(() {
-                                  // Amount is required - must be "FREE" or a valid number
-                                  if (amountText.isEmpty) {
-                                    amountError = true;
-                                  } else if (amountText.toUpperCase() != 'FREE') {
-                                    final parsedAmount = double.tryParse(amountText);
-                                    if (parsedAmount == null || parsedAmount <= 0) {
-                                      amountError = true;
-                                    } else {
-                                      amountError = false;
-                                    }
-                                  } else {
-                                    amountError = false;
+
+                                // Validate all fields
+                                final hasTitleError = titleText.isEmpty;
+                                final hasDateError = selectedDate == null;
+                                final hasLocationError = locationText.isEmpty;
+                                final hasAddressError = addressText.isEmpty;
+                                // Amount is required - must be "FREE" or a valid number
+                                bool hasAmountError = false;
+                                if (amountText.isEmpty) {
+                                  hasAmountError = true;
+                                } else if (amountText.toUpperCase() != 'FREE') {
+                                  final parsedAmount = double.tryParse(amountText);
+                                  if (parsedAmount == null || parsedAmount <= 0) {
+                                    hasAmountError = true;
                                   }
+                                }
+
+                                setDialogState(() {
+                                  titleError = hasTitleError;
+                                  dateError = hasDateError;
+                                  locationError = hasLocationError;
+                                  addressError = hasAddressError;
+                                  amountError = hasAmountError;
                                 });
 
-                                if (amountError) {
+                                if (hasTitleError || hasDateError || hasLocationError || hasAddressError || hasAmountError) {
                                   return;
                                 }
 
@@ -1277,8 +1393,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                   }
                                 }
 
-                                // Only update the amount field, keep everything else the same
+                                // Update all editable fields
                                 final updatedEvent = event.copyWith(
+                                  title: titleText,
+                                  date: selectedDate!,
+                                  locationName: locationText,
+                                  locationAddress: addressText,
+                                  description: descriptionText.isEmpty ? null : descriptionText,
                                   amount: amount,
                                 );
 
@@ -1291,6 +1412,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
                                 if (mounted) {
                                   Navigator.pop(context);
+                                  // Dispose FocusNodes after dialog closes
+                                  Future.delayed(const Duration(milliseconds: 300), () {
+                                    try {
+                                      titleFocusNode.dispose();
+                                      locationFocusNode.dispose();
+                                      addressFocusNode.dispose();
+                                      descriptionFocusNode.dispose();
+                                      amountFocusNode.dispose();
+                                    } catch (e) {
+                                      // FocusNodes may already be disposed, ignore
+                                    }
+                                  });
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
@@ -2048,30 +2181,37 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                 final descriptionText = descriptionController.text.trim();
                                 final amountText = amountController.text.trim();
 
-                                setDialogState(() {
-                                  titleError = titleText.isEmpty;
-                                  dateError = selectedDate == null;
-                                  locationError = locationText.isEmpty;
-                                  addressError = addressText.isEmpty;
-                                  sportError = (selectedSport == null || selectedSport!.trim().isEmpty);
-                                  // Division is required only for Basketball and Pickleball
-                                  divisionError = (selectedSport == 'Basketball' || selectedSport == 'Pickleball') && 
+                                // Check validation errors
+                                final hasTitleError = titleText.isEmpty;
+                                final hasDateError = selectedDate == null;
+                                final hasLocationError = locationText.isEmpty;
+                                final hasAddressError = addressText.isEmpty;
+                                final hasSportError = (selectedSport == null || selectedSport!.trim().isEmpty);
+                                // Division is required only for Basketball and Pickleball
+                                final hasDivisionError = (selectedSport == 'Basketball' || selectedSport == 'Pickleball') && 
                                                  (selectedDivision == null || selectedDivision!.trim().isEmpty);
-                                  // Amount is required - must be "FREE" or a valid number
-                                  if (amountText.isEmpty) {
-                                    amountError = true;
-                                  } else if (amountText.toUpperCase() != 'FREE') {
-                                    final parsedAmount = double.tryParse(amountText);
-                                    if (parsedAmount == null || parsedAmount <= 0) {
-                                      amountError = true;
-                                    } else {
-                                      amountError = false;
-                                    }
-                                  } else {
-                                    amountError = false;
+                                // Amount is required - must be "FREE" or a valid number
+                                bool hasAmountError = false;
+                                if (amountText.isEmpty) {
+                                  hasAmountError = true;
+                                } else if (amountText.toUpperCase() != 'FREE') {
+                                  final parsedAmount = double.tryParse(amountText);
+                                  if (parsedAmount == null || parsedAmount <= 0) {
+                                    hasAmountError = true;
                                   }
+                                }
+                                
+                                setDialogState(() {
+                                  titleError = hasTitleError;
+                                  dateError = hasDateError;
+                                  locationError = hasLocationError;
+                                  addressError = hasAddressError;
+                                  sportError = hasSportError;
+                                  divisionError = hasDivisionError;
+                                  amountError = hasAmountError;
                                 });
-                                if (titleError || dateError || locationError || addressError || sportError || divisionError || amountError) return;
+                                
+                                if (hasTitleError || hasDateError || hasLocationError || hasAddressError || hasSportError || hasDivisionError || hasAmountError) return;
 
                                 // Parse amount - "FREE" means null, otherwise parse as number
                                 double? amount;
@@ -2199,6 +2339,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
+  // Separate widget for the "I CONFIRM" dialog to properly manage TextEditingController lifecycle
+  Widget _ConfirmDeleteDialog({
+    required VoidCallback onConfirm,
+    required VoidCallback onCancel,
+  }) {
+    return _ConfirmDeleteDialogWidget(
+      onConfirm: onConfirm,
+      onCancel: onCancel,
+    );
+  }
+
   void _confirmDeleteEvent(Event event, BuildContext dialogContext) async {
     // Get the admin panel context before showing nested dialogs
     // This context is from the AdminPanelScreen state
@@ -2213,77 +2364,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         context: dialogContext,
         barrierDismissible: false,
         builder: (confirmContext) {
-          final confirmController = TextEditingController();
-          return StatefulBuilder(
-            builder: (context, setState) {
-              final confirmationText = confirmController.text.trim();
-              final isConfirmValid = confirmationText == 'I CONFIRM';
-              
-              return WillPopScope(
-                onWillPop: () async {
-                  confirmController.dispose();
-                  return true;
-                },
-                child: AlertDialog(
-                  title: const Text(
-                    'Confirm Deletion',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'This event is already completed. Deleting it will permanently remove all associated data.',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'To confirm deletion, please type "I CONFIRM" (all caps) below:',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: confirmController,
-                        textCapitalization: TextCapitalization.characters,
-                        decoration: InputDecoration(
-                          hintText: 'Type I CONFIRM',
-                          border: const OutlineInputBorder(),
-                          errorText: confirmationText.isNotEmpty && !isConfirmValid
-                              ? 'Must be exactly "I CONFIRM"'
-                              : null,
-                        ),
-                        onChanged: (value) {
-                          setState(() {});
-                        },
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        confirmController.dispose();
-                        Navigator.pop(confirmContext, false);
-                      },
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isConfirmValid ? Colors.red : Colors.grey,
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: isConfirmValid
-                          ? () {
-                              confirmController.dispose();
-                              Navigator.pop(confirmContext, true);
-                            }
-                          : null,
-                      child: const Text('Continue'),
-                    ),
-                  ],
-                ),
-              );
-            },
+          return _ConfirmDeleteDialog(
+            onConfirm: () => Navigator.pop(confirmContext, true),
+            onCancel: () => Navigator.pop(confirmContext, false),
           );
         },
       );
@@ -2943,5 +3026,92 @@ class _UserManagementScreenState extends State<_UserManagementScreen> {
         ),
       );
     }
+  }
+}
+
+// StatefulWidget for the "I CONFIRM" deletion dialog
+class _ConfirmDeleteDialogWidget extends StatefulWidget {
+  final VoidCallback onConfirm;
+  final VoidCallback onCancel;
+
+  const _ConfirmDeleteDialogWidget({
+    required this.onConfirm,
+    required this.onCancel,
+  });
+
+  @override
+  State<_ConfirmDeleteDialogWidget> createState() => _ConfirmDeleteDialogWidgetState();
+}
+
+class _ConfirmDeleteDialogWidgetState extends State<_ConfirmDeleteDialogWidget> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final confirmationText = _controller.text.trim();
+    final isConfirmValid = confirmationText == 'I CONFIRM';
+
+    return AlertDialog(
+      title: const Text(
+        'Confirm Deletion',
+        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'This event is already completed. Deleting it will permanently remove all associated data.',
+            style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'To confirm deletion, please type "I CONFIRM" (all caps) below:',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _controller,
+            textCapitalization: TextCapitalization.characters,
+            decoration: InputDecoration(
+              hintText: 'Type I CONFIRM',
+              border: const OutlineInputBorder(),
+              errorText: confirmationText.isNotEmpty && !isConfirmValid
+                  ? 'Must be exactly "I CONFIRM"'
+                  : null,
+            ),
+            onChanged: (value) {
+              setState(() {});
+            },
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: widget.onCancel,
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isConfirmValid ? Colors.red : Colors.grey,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: isConfirmValid ? widget.onConfirm : null,
+          child: const Text('Continue'),
+        ),
+      ],
+    );
   }
 }

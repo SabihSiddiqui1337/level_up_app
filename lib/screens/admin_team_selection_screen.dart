@@ -4,11 +4,15 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import '../models/team.dart';
 import '../models/player.dart';
+import '../models/pickleball_team.dart';
+import '../models/pickleball_player.dart';
 import '../models/user.dart';
 import '../models/event.dart';
 import '../services/team_service.dart';
+import '../services/pickleball_team_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_loading_widget.dart';
+import 'main_navigation_screen.dart';
 
 class AdminTeamSelectionScreen extends StatefulWidget {
   final Event event;
@@ -24,6 +28,7 @@ class AdminTeamSelectionScreen extends StatefulWidget {
 
 class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
   final TeamService _teamService = TeamService();
+  final PickleballTeamService _pickleballTeamService = PickleballTeamService();
   final TextEditingController _searchController = TextEditingController();
   
   List<Team> _allTeams = [];
@@ -34,6 +39,15 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
   bool _isLoading = true;
   final FocusNode _searchFocusNode = FocusNode();
   final AuthService _authService = AuthService();
+  
+  // Store original PickleballTeam objects for pickleball events (key: team ID)
+  final Map<String, PickleballTeam> _pickleballTeamMap = {};
+  
+  // Check if event is pickleball
+  bool get _isPickleballEvent {
+    final sportName = widget.event.sportName.toLowerCase();
+    return sportName.contains('pickleball') || sportName.contains('pickelball');
+  }
 
   @override
   void initState() {
@@ -58,18 +72,89 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
 
   Future<void> _loadTeams() async {
     setState(() => _isLoading = true);
-    await _teamService.loadTeams();
     await _authService.initialize();
     
-    // Get all teams (admins can see all teams)
-    final allTeams = _teamService.teams;
-    
-    // Separate teams: those already registered for this event vs others
-    _registeredTeams = allTeams.where((team) => team.eventId == widget.event.id).toList();
-    _registeredTeamIds = _registeredTeams.map((team) => team.id).toSet();
-    
-    // Show teams not yet registered for this event (or all teams if filtering is disabled)
-    _allTeams = allTeams.where((team) => team.eventId != widget.event.id || team.eventId.isEmpty).toList();
+    if (_isPickleballEvent) {
+      // Load pickleball teams
+      await _pickleballTeamService.loadTeams();
+      final allPickleballTeams = _pickleballTeamService.teams;
+      
+      // Store original PickleballTeam objects in map
+      _pickleballTeamMap.clear();
+      for (final pt in allPickleballTeams) {
+        _pickleballTeamMap[pt.id] = pt;
+      }
+      
+      // Separate teams: those already registered for this event vs others
+      final registeredPickleballTeams = allPickleballTeams.where((team) => team.eventId == widget.event.id).toList();
+      _registeredTeamIds = registeredPickleballTeams.map((team) => team.id).toSet();
+      
+      // Convert to Team objects for UI compatibility (simplified conversion)
+      _registeredTeams = registeredPickleballTeams.map((pt) => Team(
+        id: pt.id,
+        name: pt.name,
+        coachName: pt.coachName,
+        coachPhone: pt.coachPhone,
+        coachEmail: pt.coachEmail,
+        coachAge: 25, // Default age for pickleball
+        players: pt.players.map((pp) => Player(
+          id: pp.id,
+          name: pp.name,
+          position: 'Player',
+          jerseyNumber: 0,
+          phoneNumber: '',
+          email: '',
+          age: 25,
+          height: 5.5,
+          weight: 150,
+          userId: pp.userId,
+        )).toList(),
+        registrationDate: pt.registrationDate,
+        division: pt.division,
+        createdByUserId: pt.createdByUserId,
+        isPrivate: pt.isPrivate,
+        eventId: pt.eventId,
+      )).toList();
+      
+      // Show teams not yet registered for this event
+      final allPickleballTeamsNotRegistered = allPickleballTeams.where((team) => team.eventId != widget.event.id || team.eventId.isEmpty).toList();
+      _allTeams = allPickleballTeamsNotRegistered.map((pt) => Team(
+        id: pt.id,
+        name: pt.name,
+        coachName: pt.coachName,
+        coachPhone: pt.coachPhone,
+        coachEmail: pt.coachEmail,
+        coachAge: 25,
+        players: pt.players.map((pp) => Player(
+          id: pp.id,
+          name: pp.name,
+          position: 'Player',
+          jerseyNumber: 0,
+          phoneNumber: '',
+          email: '',
+          age: 25,
+          height: 5.5,
+          weight: 150,
+          userId: pp.userId,
+        )).toList(),
+        registrationDate: pt.registrationDate,
+        division: pt.division,
+        createdByUserId: pt.createdByUserId,
+        isPrivate: pt.isPrivate,
+        eventId: pt.eventId,
+      )).toList();
+    } else {
+      // Load regular teams
+      await _teamService.loadTeams();
+      final allTeams = _teamService.teams;
+      
+      // Separate teams: those already registered for this event vs others
+      _registeredTeams = allTeams.where((team) => team.eventId == widget.event.id).toList();
+      _registeredTeamIds = _registeredTeams.map((team) => team.id).toSet();
+      
+      // Show teams not yet registered for this event (or all teams if filtering is disabled)
+      _allTeams = allTeams.where((team) => team.eventId != widget.event.id || team.eventId.isEmpty).toList();
+    }
     
     _filteredTeams = List.from(_allTeams);
     setState(() {
@@ -201,24 +286,48 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
         continue; // Skip if already registered
       }
       
-      // Update team with event ID
-      final updatedTeam = Team(
-        id: team.id,
-        name: team.name,
-        coachName: team.coachName,
-        coachPhone: team.coachPhone,
-        coachEmail: team.coachEmail,
-        coachAge: team.coachAge,
-        players: team.players,
-        registrationDate: team.registrationDate,
-        division: team.division,
-        createdByUserId: team.createdByUserId,
-        isPrivate: team.isPrivate,
-        eventId: widget.event.id, // Link to event
-      );
-      
-      // Save updated team
-      await _teamService.updateTeam(updatedTeam);
+      if (_isPickleballEvent) {
+        // Get original PickleballTeam from map
+        final originalPickleballTeam = _pickleballTeamMap[team.id];
+        if (originalPickleballTeam != null) {
+          // Update pickleball team with event ID
+          final updatedPickleballTeam = PickleballTeam(
+            id: originalPickleballTeam.id,
+            name: originalPickleballTeam.name,
+            coachName: originalPickleballTeam.coachName,
+            coachPhone: originalPickleballTeam.coachPhone,
+            coachEmail: originalPickleballTeam.coachEmail,
+            players: originalPickleballTeam.players,
+            registrationDate: originalPickleballTeam.registrationDate,
+            division: originalPickleballTeam.division,
+            createdByUserId: originalPickleballTeam.createdByUserId,
+            isPrivate: originalPickleballTeam.isPrivate,
+            eventId: widget.event.id, // Link to event
+          );
+          
+          // Save updated pickleball team
+          await _pickleballTeamService.updateTeam(updatedPickleballTeam);
+        }
+      } else {
+        // Update team with event ID
+        final updatedTeam = Team(
+          id: team.id,
+          name: team.name,
+          coachName: team.coachName,
+          coachPhone: team.coachPhone,
+          coachEmail: team.coachEmail,
+          coachAge: team.coachAge,
+          players: team.players,
+          registrationDate: team.registrationDate,
+          division: team.division,
+          createdByUserId: team.createdByUserId,
+          isPrivate: team.isPrivate,
+          eventId: widget.event.id, // Link to event
+        );
+        
+        // Save updated team
+        await _teamService.updateTeam(updatedTeam);
+      }
     }
 
     if (mounted) {
@@ -234,6 +343,21 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
         _selectedTeamIds.clear(); // Clear selection after registration
       });
     }
+  }
+
+  // Get max players for the sport
+  int _getMaxPlayersForSport() {
+    final sportName = widget.event.sportName.toLowerCase();
+    if (sportName.contains('pickleball') || sportName.contains('pickelball')) {
+      return 2; // Pickleball allows 2 players total
+    } else if (sportName.contains('volleyball')) {
+      return 8;
+    } else if (sportName.contains('basketball')) {
+      return 6;
+    } else if (sportName.contains('soccer')) {
+      return 10;
+    }
+    return 8; // Default
   }
 
   void _createNewTeam() {
@@ -380,6 +504,18 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
                                     );
                                   }
                                 : () {
+                                    // Check max players limit
+                                    final maxPlayers = _getMaxPlayersForSport();
+                                    if (selectedPlayers.length >= maxPlayers) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Maximum $maxPlayers player${maxPlayers == 1 ? '' : 's'} allowed for ${widget.event.sportName}'),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    
                                     final player = Player(
                                       id: DateTime.now().millisecondsSinceEpoch.toString() + index.toString(),
                                       name: user.name,
@@ -420,6 +556,18 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
                         title: Text('Add "${playerSearchController.text}" as Guest Player'),
                         trailing: const Icon(Icons.arrow_forward, color: Colors.blue),
                         onTap: () {
+                          // Check max players limit
+                          final maxPlayers = _getMaxPlayersForSport();
+                          if (selectedPlayers.length >= maxPlayers) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Maximum $maxPlayers player${maxPlayers == 1 ? '' : 's'} allowed for ${widget.event.sportName}'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
+                          
                           // Directly add guest player with searched name
                           final guestName = playerSearchController.text.trim();
                           if (guestName.isEmpty) {
@@ -504,15 +652,22 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                teamNameController.dispose();
-                playerSearchController.dispose();
                 Navigator.pop(context);
+                // Dispose controllers after dialog closes (using delay to ensure dialog is closed)
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  teamNameController.dispose();
+                  playerSearchController.dispose();
+                });
               },
               child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () async {
+                // Store values before any potential early returns or async operations
                 final teamName = teamNameController.text.trim();
+                final playersCount = selectedPlayers.length;
+                final playersCopy = List<Player>.from(selectedPlayers); // Create a copy
+                
                 if (teamName.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -526,32 +681,65 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
                 // Get current user (admin/owner creating the team)
                 final currentUser = authService.currentUser;
                 
-                // Create team with players
-                final newTeam = Team(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  name: teamName,
-                  coachName: currentUser?.name ?? 'TBD', // Set captain as the creator
-                  coachPhone: currentUser?.phone ?? '',
-                  coachEmail: currentUser?.email ?? '',
-                  coachAge: currentUser?.age ?? 25,
-                  players: selectedPlayers,
-                  registrationDate: DateTime.now(),
-                  division: widget.event.division ?? 'Adult 18+',
-                  createdByUserId: currentUser?.id, // Set creator as the admin/owner
-                  isPrivate: false,
-                  eventId: widget.event.id, // Register for the event immediately
-                );
+                if (_isPickleballEvent) {
+                  // Create pickleball team with players
+                  // Convert Player objects to PickleballPlayer objects
+                  final pickleballPlayers = playersCopy.map((player) => PickleballPlayer(
+                    id: player.id,
+                    name: player.name,
+                    duprRating: widget.event.division ?? '< 3.5', // Use event division as DUPR rating
+                    userId: player.userId,
+                  )).toList();
+                  
+                  final newPickleballTeam = PickleballTeam(
+                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    name: teamName,
+                    coachName: currentUser?.name ?? 'TBD', // Set captain as the creator
+                    coachPhone: currentUser?.phone ?? '',
+                    coachEmail: currentUser?.email ?? '',
+                    players: pickleballPlayers,
+                    registrationDate: DateTime.now(),
+                    division: widget.event.division ?? '< 3.5',
+                    createdByUserId: currentUser?.id, // Set creator as the admin/owner
+                    isPrivate: false,
+                    eventId: widget.event.id, // Register for the event immediately
+                  );
+                  
+                  // Save the pickleball team
+                  await _pickleballTeamService.addTeam(newPickleballTeam);
+                } else {
+                  // Create regular team with players
+                  final newTeam = Team(
+                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    name: teamName,
+                    coachName: currentUser?.name ?? 'TBD', // Set captain as the creator
+                    coachPhone: currentUser?.phone ?? '',
+                    coachEmail: currentUser?.email ?? '',
+                    coachAge: currentUser?.age ?? 25,
+                    players: playersCopy,
+                    registrationDate: DateTime.now(),
+                    division: widget.event.division ?? 'Adult 18+',
+                    createdByUserId: currentUser?.id, // Set creator as the admin/owner
+                    isPrivate: false,
+                    eventId: widget.event.id, // Register for the event immediately
+                  );
+                  
+                  // Save the team
+                  await _teamService.addTeam(newTeam);
+                }
                 
-                // Save the team
-                await _teamService.addTeam(newTeam);
-                
+                // Close dialog first, then dispose controllers
                 if (mounted) {
-                  teamNameController.dispose();
-                  playerSearchController.dispose();
-                  Navigator.pop(context); // Close dialog
+                  Navigator.pop(context);
+                  // Dispose controllers after dialog closes (using delay to ensure dialog is closed)
+                  Future.delayed(const Duration(milliseconds: 300), () {
+                    teamNameController.dispose();
+                    playerSearchController.dispose();
+                  });
+                  
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Team "$teamName" created with ${selectedPlayers.length} player(s) and registered successfully'),
+                      content: Text('Team "$teamName" created with $playersCount player(s) and registered successfully'),
                       backgroundColor: Colors.green,
                     ),
                   );
@@ -581,6 +769,25 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
         ),
         backgroundColor: const Color(0xFF2196F3),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              // Navigate back to home screen (MainNavigationScreen with index 0)
+              Navigator.of(context).popUntil((route) => route.isFirst);
+              // If we're not at the main navigation, navigate to it
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => const MainNavigationScreen(initialIndex: 0),
+                ),
+              );
+            },
+            icon: const Icon(Icons.check, color: Colors.white),
+            label: const Text(
+              'Done',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -699,9 +906,9 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Teams Registered Already',
-                      style: TextStyle(
+                    Text(
+                      'Teams Registered Already (${_registeredTeams.length})',
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF1976D2),
@@ -751,23 +958,47 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
               ),
             ],
             
-            // Make New Team button
+            // Make New Team button and Go to Schedule button
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _createNewTeam,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Make New Team'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2196F3),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _createNewTeam,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Make New Team'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2196F3),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            // Navigate to Schedule tab (index 3 in MainNavigationScreen)
+                            Navigator.of(context).popUntil((route) => route.isFirst);
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (context) => const MainNavigationScreen(initialIndex: 3),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.schedule),
+                          label: const Text('Go to Schedule'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE67E22),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   
                   // Register Selected Teams button

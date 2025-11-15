@@ -135,20 +135,50 @@ class _PaymentScreenState extends State<PaymentScreen> {
     // Simulate payment processing
     await Future.delayed(const Duration(seconds: 2));
 
-    // Save the team to the appropriate service
+    // Save the team to the appropriate service with correct eventId
     if (widget.team is Team) {
-      print('Saving basketball team: ${(widget.team as Team).name}');
-      await _teamService.addTeam(widget.team as Team);
+      final team = widget.team as Team;
+      // Ensure eventId is set correctly from the event
+      final teamWithEventId = Team(
+        id: team.id,
+        name: team.name,
+        coachName: team.coachName,
+        coachPhone: team.coachPhone,
+        coachEmail: team.coachEmail,
+        coachAge: team.coachAge,
+        players: team.players,
+        registrationDate: team.registrationDate,
+        division: team.division,
+        createdByUserId: team.createdByUserId,
+        isPrivate: team.isPrivate,
+        eventId: widget.event.id, // Ensure eventId is set from the event
+      );
+      print('Saving basketball team: ${teamWithEventId.name} with eventId: ${teamWithEventId.eventId}');
+      await _teamService.addTeam(teamWithEventId);
       print('Basketball team saved successfully');
     } else if (widget.team is PickleballTeam) {
       final pickleballTeam = widget.team as PickleballTeam;
+      // Ensure eventId is set correctly from the event
+      final teamWithEventId = PickleballTeam(
+        id: pickleballTeam.id,
+        name: pickleballTeam.name,
+        coachName: pickleballTeam.coachName,
+        coachPhone: pickleballTeam.coachPhone,
+        coachEmail: pickleballTeam.coachEmail,
+        players: pickleballTeam.players,
+        registrationDate: pickleballTeam.registrationDate,
+        division: pickleballTeam.division,
+        createdByUserId: pickleballTeam.createdByUserId,
+        isPrivate: pickleballTeam.isPrivate,
+        eventId: widget.event.id, // Ensure eventId is set from the event
+      );
       print(
-        'Saving pickleball team: ${pickleballTeam.name} with ID: ${pickleballTeam.id}',
+        'Saving pickleball team: ${teamWithEventId.name} with ID: ${teamWithEventId.id} and eventId: ${teamWithEventId.eventId}',
       );
       print(
         'Current teams before adding: ${_pickleballTeamService.teams.length}',
       );
-      await _pickleballTeamService.addTeam(pickleballTeam);
+      await _pickleballTeamService.addTeam(teamWithEventId);
       print(
         'Current teams after adding: ${_pickleballTeamService.teams.length}',
       );

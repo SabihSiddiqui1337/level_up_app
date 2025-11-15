@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../main.dart';
-import '../widgets/app_loading_widget.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -33,8 +32,11 @@ class _SplashScreenState extends State<SplashScreen> {
         width: double.infinity,
         height: double.infinity,
         decoration: const BoxDecoration(color: Colors.white),
-        child: const Center(
-          child: AppLoadingWidget(size: 150),
+        child: Image.asset(
+          'assets/splash_sceen.png',
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
         ),
       ),
     );

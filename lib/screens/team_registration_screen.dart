@@ -536,13 +536,19 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
       onWillPop: _onWillPop,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
-            widget.event != null && widget.event!.title.isNotEmpty
-                ? '${widget.event!.title} Registration'
-                : (widget.team == null ? 'Register Team' : 'Edit Team'),
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
+          title: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              widget.event != null && widget.event!.title.isNotEmpty
+                  ? '${widget.event!.title} Registration'
+                  : (widget.team == null ? 'Register Team' : 'Edit Team'),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           backgroundColor: const Color(0xFF1976D2),

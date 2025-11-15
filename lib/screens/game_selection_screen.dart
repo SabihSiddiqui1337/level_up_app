@@ -211,10 +211,10 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
         final icon = _getSportIcon(sportName);
         final color = _getSportColor(index);
 
-        // Find the first upcoming event for this sport
-        final eventsForSport = _events
-            .where((e) => e.sportName.toLowerCase() == sportName.toLowerCase())
-            .toList();
+          // Find the first upcoming event for this sport
+          final eventsForSport = _events
+              .where((e) => e.sportName.toLowerCase() == sportName.toLowerCase())
+              .toList();
         final event = eventsForSport.isNotEmpty ? eventsForSport.first : null;
         
         // Check if event has started
@@ -232,23 +232,23 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
             }
             
             if (event == null) {
-              // Fallback: go directly to registration if no event found
+            // Fallback: go directly to registration if no event found
               // Without an event, owners/admins still go to regular registration
-              if (sportName.toLowerCase().contains('pickleball')) {
-                _navigateToPickleballRegistration(context);
-              } else {
-                _navigateToTeamRegistration(context, sportName);
-              }
-              return;
+            if (sportName.toLowerCase().contains('pickleball')) {
+              _navigateToPickleballRegistration(context);
+            } else {
+              _navigateToTeamRegistration(context, sportName);
             }
+            return;
+          }
 
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => EventDetailScreen(
-                  event: event,
-                  onHomePressed: widget.onHomePressed,
-                  onSignUp: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EventDetailScreen(
+                event: event,
+                onHomePressed: widget.onHomePressed,
+                onSignUp: () {
                     // Check if user is owner/admin
                     final currentUser = _authService.currentUser;
                     final isOwnerOrAdmin = currentUser?.role == 'owner' || 
@@ -264,16 +264,16 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
                       );
                     } else {
                       // Regular users go to team registration
-                      if (sportName.toLowerCase().contains('pickleball')) {
+                  if (sportName.toLowerCase().contains('pickleball')) {
                         _navigateToPickleballRegistration(context, event: event);
-                      } else {
-                        _navigateToTeamRegistration(context, sportName, event: event);
+                  } else {
+                    _navigateToTeamRegistration(context, sportName, event: event);
                       }
-                    }
-                  },
-                ),
+                  }
+                },
               ),
-            );
+            ),
+          );
           },
           isEventStarted: isEventStarted,
         );
@@ -347,67 +347,67 @@ class _GameSelectionScreenState extends State<GameSelectionScreen> {
             children: [
               InkWell(
                 onTap: isEventStarted ? null : onTap,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              height: 140,
+              decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  height: 140,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Stack(
-                    children: [
-                      // Background Image (only if image exists)
-                      if (imagePath != null)
-                        Positioned.fill(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Image.asset(
-                              imagePath,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                // Fallback to gradient if image fails to load
-                                return Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [color, color.withOpacity(0.8)],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
+              ),
+              child: Stack(
+                children: [
+                  // Background Image (only if image exists)
+                  if (imagePath != null)
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.asset(
+                          imagePath,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            // Fallback to gradient if image fails to load
+                            return Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [color, color.withOpacity(0.8)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      // Gradient overlay if no image, or semi-transparent overlay if image exists
-                      Positioned.fill(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            gradient:
-                                imagePath != null
-                                    ? LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
+                      ),
+                    ),
+                  // Gradient overlay if no image, or semi-transparent overlay if image exists
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient:
+                            imagePath != null
+                                ? LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
                                         Colors.black.withOpacity(isEventStarted ? 0.5 : 0.2),
                                         Colors.black.withOpacity(isEventStarted ? 0.7 : 0.4),
-                                      ],
-                                    )
-                                    : LinearGradient(
+                                  ],
+                                )
+                                : LinearGradient(
                                       colors: [
                                         isEventStarted ? color.withOpacity(0.5) : color,
                                         isEventStarted ? color.withOpacity(0.3) : color.withOpacity(0.8)
                                       ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                          ),
-                        ),
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
+            ),
+          ),
               // Event Started overlay
               if (isEventStarted)
                 Positioned.fill(

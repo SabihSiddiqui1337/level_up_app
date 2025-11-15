@@ -6,7 +6,8 @@ import '../widgets/app_loading_widget.dart';
 import '../services/team_service.dart';
 import '../services/pickleball_team_service.dart';
 import '../services/score_service.dart';
-import 'sport_schedule_screen.dart';
+import 'sport_schedule_screen.dart' as sport;
+
 import '../services/event_service.dart';
 import '../services/auth_service.dart';
 import '../models/event.dart';
@@ -442,14 +443,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.blue[700],
-                          fontWeight: FontWeight.w500,
-                        ),
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
+          ],
           ] else if (gameStarted) ...[
             // Game has started: Show "View Schedule" button
             const SizedBox(height: 12),
@@ -460,7 +461,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => SportScheduleScreen(
+                      builder: (context) => sport.SportScheduleScreen(
                         sportName: event.sportName,
                         tournamentTitle: event.title,
                         onHomePressed: widget.onHomePressed,
@@ -495,7 +496,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => SportScheduleScreen(
+                      builder: (context) => sport.SportScheduleScreen(
                         sportName: event.sportName,
                         tournamentTitle: event.title,
                         onHomePressed: widget.onHomePressed,
@@ -554,7 +555,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => SportScheduleScreen(
+                      builder: (context) => sport.SportScheduleScreen(
                         sportName: event.sportName,
                         tournamentTitle: event.title,
                         onHomePressed: widget.onHomePressed,

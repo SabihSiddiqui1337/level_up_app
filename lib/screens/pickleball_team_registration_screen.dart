@@ -447,10 +447,19 @@ class _PickleballTeamRegistrationScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          _currentEvent != null && _currentEvent!.title.isNotEmpty
-              ? '${_currentEvent!.title} Registration'
-              : PickleballScreenKeys.screenTitle,
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            _currentEvent != null && _currentEvent!.title.isNotEmpty
+                ? '${_currentEvent!.title} Registration'
+                : PickleballScreenKeys.screenTitle,
+            style: const TextStyle(
+              color: Colors.white,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         backgroundColor: const Color(0xFF38A169),
         foregroundColor: Colors.white,
