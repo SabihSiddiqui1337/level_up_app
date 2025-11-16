@@ -18,19 +18,21 @@ class ScoreService {
   Future<void> savePreliminarySettingsForDivision(
     String division,
     int gamesPerTeam,
-    int winningScore,
-  ) async {
+    int winningScore, {
+    String? matchFormat,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = 'preliminary_settings_$division';
       final settings = {
         'gamesPerTeam': gamesPerTeam,
         'winningScore': winningScore,
+        if (matchFormat != null) 'matchFormat': matchFormat,
       };
       final settingsJson = json.encode(settings);
       await prefs.setString(key, settingsJson);
       print(
-        'Saved preliminary settings for division $division: gamesPerTeam=$gamesPerTeam, winningScore=$winningScore',
+        'Saved preliminary settings for division $division: gamesPerTeam=$gamesPerTeam, winningScore=$winningScore, matchFormat=${matchFormat ?? '1game'}',
       );
     } catch (e) {
       print('Error saving preliminary settings for division $division: $e');
@@ -38,7 +40,7 @@ class ScoreService {
   }
 
   // Load preliminary settings for a specific division
-  Future<Map<String, int>> loadPreliminarySettingsForDivision(
+  Future<Map<String, dynamic>> loadPreliminarySettingsForDivision(
     String division,
   ) async {
     try {
@@ -51,6 +53,7 @@ class ScoreService {
         final settings = {
           'gamesPerTeam': (decoded['gamesPerTeam'] ?? 1) as int,
           'winningScore': (decoded['winningScore'] ?? 11) as int,
+          'matchFormat': (decoded['matchFormat'] ?? '1game') as String,
         };
         print('Loaded preliminary settings for division $division: $settings');
         return settings;
@@ -58,7 +61,7 @@ class ScoreService {
     } catch (e) {
       print('Error loading preliminary settings for division $division: $e');
     }
-    return {'gamesPerTeam': 1, 'winningScore': 11}; // Default values
+    return {'gamesPerTeam': 1, 'winningScore': 11, 'matchFormat': '1game'}; // Default values
   }
 
   // Save custom schedule flag for a specific division

@@ -3,13 +3,10 @@
 import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../models/event.dart';
-import '../models/team.dart';
-import '../models/pickleball_team.dart';
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
 import '../services/team_service.dart';
 import '../services/pickleball_team_service.dart';
-import '../services/score_service.dart';
 
 class MatchDetailsScreen extends StatefulWidget {
   final User? user; // If null, show current user's matches
@@ -30,7 +27,6 @@ class _MatchDetailsScreenState extends State<MatchDetailsScreen> {
   final _eventService = EventService();
   final _teamService = TeamService();
   final _pickleballTeamService = PickleballTeamService();
-  final _scoreService = ScoreService();
   
   User? _displayUser;
   List<Map<String, dynamic>> _matches = [];

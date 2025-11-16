@@ -1,6 +1,6 @@
-// ignore_for_file: use_build_context_synchronously
+// ignore_for_file: use_build_context_synchronously, undefined_hidden_name
 
-import 'package:flutter/material.dart' hide Expanded;
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../widgets/custom_app_bar.dart';
 import '../widgets/app_loading_widget.dart';

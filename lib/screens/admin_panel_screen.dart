@@ -2340,7 +2340,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   }
 
   // Separate widget for the "I CONFIRM" dialog to properly manage TextEditingController lifecycle
-  Widget _ConfirmDeleteDialog({
+  Widget _confirmDeleteDialog({
     required VoidCallback onConfirm,
     required VoidCallback onCancel,
   }) {
@@ -2364,7 +2364,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         context: dialogContext,
         barrierDismissible: false,
         builder: (confirmContext) {
-          return _ConfirmDeleteDialog(
+          return _confirmDeleteDialog(
             onConfirm: () => Navigator.pop(confirmContext, true),
             onCancel: () => Navigator.pop(confirmContext, false),
           );

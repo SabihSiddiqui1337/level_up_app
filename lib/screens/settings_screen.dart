@@ -1,4 +1,4 @@
-// ignore_for_file: use_build_context_synchronously, valid_regexps
+// ignore_for_file: use_build_context_synchronously, valid_regexps, depend_on_referenced_packages
 
 import 'dart:io';
 import 'package:flutter/material.dart';
