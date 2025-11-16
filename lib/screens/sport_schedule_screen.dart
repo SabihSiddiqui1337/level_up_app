@@ -4782,17 +4782,44 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
 
   // Build preliminary match card (original format)
   Widget _buildPreliminaryMatchCard(Match match) {
-    final team1Score = _getGameScore(match.id, match.team1Id ?? '', 1) ?? 0;
-    final team2Score = _getGameScore(match.id, match.team2Id ?? '', 1) ?? 0;
-    final winningTeamId = _getWinningTeamIdForGame(match.id, 1);
+    final matchFormat = _preliminaryMatchFormat;
+    final team1Id = match.team1Id ?? '';
+    final team2Id = match.team2Id ?? '';
     final isSelected = _selectedMatch?.id == match.id;
-
     final hasOpponent = match.team2 != 'TBA';
 
     // Check if this is a preliminary match that should be locked
     final isPreliminaryMatch =
         match.day == 'Day 1' || match.day == 'Preliminary';
     final isLocked = _playoffsStarted && isPreliminaryMatch;
+    
+    // For best of 3, calculate overall winner from games won
+    String? overallWinnerId;
+    int team1GamesWon = 0;
+    int team2GamesWon = 0;
+    
+    if (matchFormat == 'bestof3') {
+      final minScore = _preliminaryGameWinningScore;
+      for (int game = 1; game <= 3; game++) {
+        final team1GameScore = _getGameScore(match.id, team1Id, game) ?? 0;
+        final team2GameScore = _getGameScore(match.id, team2Id, game) ?? 0;
+        
+        if (team1GameScore >= minScore && team1GameScore >= team2GameScore + 2) {
+          team1GamesWon++;
+        } else if (team2GameScore >= minScore && team2GameScore >= team1GameScore + 2) {
+          team2GamesWon++;
+        }
+      }
+      
+      if (team1GamesWon >= 2) {
+        overallWinnerId = team1Id;
+      } else if (team2GamesWon >= 2) {
+        overallWinnerId = team2Id;
+      }
+    } else {
+      // For 1 game format, use existing logic
+      overallWinnerId = _getWinningTeamIdForGame(match.id, 1);
+    }
 
     return GestureDetector(
       onTap: () {
@@ -4833,55 +4860,98 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         Text(
                           match.team1,
                           style: TextStyle(
-                            fontSize: winningTeamId == match.team1Id ? 18 : 14,
+                            fontSize: overallWinnerId == team1Id ? 18 : 14,
                             fontWeight:
-                                winningTeamId == match.team1Id
+                                overallWinnerId == team1Id
                                     ? FontWeight.bold
                                     : FontWeight.normal,
                             color:
-                                winningTeamId == match.team1Id
+                                overallWinnerId == team1Id
                                     ? Color.fromARGB(255, 105, 196, 2)
                                     : Colors.black,
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Text(
-                              'Score: ',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[600],
-                              ),
+                        // Show games based on match format
+                        if (matchFormat == 'bestof3') ...[
+                          // Show all 3 games for best of 3
+                          for (int game = 1; game <= 3; game++) ...[
+                            Row(
+                              children: [
+                                Text(
+                                  'Game $game: ',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                                Text(
+                                  '${_getGameScore(match.id, team1Id, game) ?? 0}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey[700],
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              '$team1Score',
-                              style: TextStyle(
-                                fontSize:
-                                    winningTeamId == match.team1Id ? 18 : 14,
-                                color: Colors.grey[600],
-                                fontWeight:
-                                    winningTeamId == match.team1Id
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                              ),
-                            ),
+                            if (game < 3) const SizedBox(height: 2),
                           ],
-                        ),
+                        ] else ...[
+                          // Show single game score
+                          Row(
+                            children: [
+                              Text(
+                                'Score: ',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              Text(
+                                '${_getGameScore(match.id, team1Id, 1) ?? 0}',
+                                style: TextStyle(
+                                  fontSize:
+                                      overallWinnerId == team1Id ? 18 : 14,
+                                  color: Colors.grey[600],
+                                  fontWeight:
+                                      overallWinnerId == team1Id
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
 
-                  // VS
+                  // VS or Match Result
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'VS',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[600],
-                      ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Column(
+                      children: [
+                        Text(
+                          'VS',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        if (matchFormat == 'bestof3' && (team1GamesWon > 0 || team2GamesWon > 0)) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '$team1GamesWon-$team2GamesWon',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
 
@@ -4893,97 +4963,123 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                         Text(
                           match.team2,
                           style: TextStyle(
-                            fontSize: winningTeamId == match.team2Id ? 18 : 14,
+                            fontSize: overallWinnerId == team2Id ? 18 : 14,
                             fontWeight:
-                                winningTeamId == match.team2Id
+                                overallWinnerId == team2Id
                                     ? FontWeight.bold
                                     : FontWeight.normal,
                             color:
-                                winningTeamId == match.team2Id
+                                overallWinnerId == team2Id
                                     ? Color.fromARGB(255, 105, 196, 2)
                                     : Colors.black,
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Text(
-                              'Score: ',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[600],
-                              ),
+                        // Show games based on match format
+                        if (matchFormat == 'bestof3') ...[
+                          // Show all 3 games for best of 3
+                          for (int game = 1; game <= 3; game++) ...[
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '${_getGameScore(match.id, team2Id, game) ?? 0}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey[700],
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  ' :Game $game',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              '$team2Score',
-                              style: TextStyle(
-                                fontSize:
-                                    winningTeamId == match.team2Id ? 18 : 14,
-                                color: Colors.grey[600],
-                                fontWeight:
-                                    winningTeamId == match.team2Id
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                              ),
-                            ),
+                            if (game < 3) const SizedBox(height: 2),
                           ],
-                        ),
+                        ] else ...[
+                          // Show single game score
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Text(
+                                '${_getGameScore(match.id, team2Id, 1) ?? 0}',
+                                style: TextStyle(
+                                  fontSize:
+                                      overallWinnerId == team2Id ? 18 : 14,
+                                  color: Colors.grey[600],
+                                  fontWeight:
+                                      overallWinnerId == team2Id
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                ),
+                              ),
+                              Text(
+                                ' :Score',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ],
               ),
 
-              // Winner label under correct team (left)
-              Row(
-                children: [
-                  // Left: team1 - align Winner left under score
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (winningTeamId == match.team1Id && hasOpponent && winningTeamId != null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 2),
-                            child: Text(
+              // Winner label under correct team
+              if (overallWinnerId != null && hasOpponent) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    // Left: team1 - align Winner left
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (overallWinnerId == team1Id)
+                            const Text(
                               'Winner',
                               textAlign: TextAlign.left,
                               style: TextStyle(
                                 color: Color.fromARGB(255, 105, 196, 2),
-                                fontSize: 25,
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  // Spacer (center area)
-                  const SizedBox(width: 16),
-                  // Right: team2 - align Winner right under score
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (winningTeamId == match.team2Id && hasOpponent && winningTeamId != null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 2),
-                            child: Text(
+                    // Spacer (center area)
+                    const SizedBox(width: 16),
+                    // Right: team2 - align Winner right
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          if (overallWinnerId == team2Id)
+                            const Text(
                               'Winner',
                               textAlign: TextAlign.right,
                               style: TextStyle(
                                 color: Color.fromARGB(255, 105, 196, 2),
-                                fontSize: 25,
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

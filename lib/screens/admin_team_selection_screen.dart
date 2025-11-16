@@ -980,19 +980,27 @@ class _AdminTeamSelectionScreenState extends State<AdminTeamSelectionScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () {
-                            // Navigate to Schedule tab (index 3 in MainNavigationScreen)
-                            Navigator.of(context).popUntil((route) => route.isFirst);
-                            Navigator.of(context).pushReplacement(
-                              MaterialPageRoute(
-                                builder: (context) => const MainNavigationScreen(initialIndex: 3),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.schedule),
-                          label: const Text('Go to Schedule'),
+                          onPressed: _registeredTeams.length >= 8
+                              ? () {
+                                  // Navigate to Schedule tab (index 3 in MainNavigationScreen)
+                                  Navigator.of(context).popUntil((route) => route.isFirst);
+                                  Navigator.of(context).pushReplacement(
+                                    MaterialPageRoute(
+                                      builder: (context) => const MainNavigationScreen(initialIndex: 3),
+                                    ),
+                                  );
+                                }
+                              : null, // Disable if less than 8 teams
+                          icon: Icon(_registeredTeams.length >= 8 ? Icons.schedule : Icons.schedule_outlined),
+                          label: Text(
+                            _registeredTeams.length >= 8
+                                ? 'Go to Schedule'
+                                : 'Waiting for ${8 - _registeredTeams.length} more team${8 - _registeredTeams.length == 1 ? '' : 's'}',
+                          ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFE67E22),
+                            backgroundColor: _registeredTeams.length >= 8
+                                ? const Color(0xFFE67E22)
+                                : Colors.grey[400],
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
