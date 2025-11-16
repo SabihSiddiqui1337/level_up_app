@@ -27,9 +27,11 @@ class ProcessRegistrationScreen extends StatefulWidget {
 class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
   final _discountCodeController = TextEditingController();
 
-  // Get registration fee from event, or default to 350.0
-  double get _registrationFee => widget.event.amount ?? 350.0;
+  // Get registration fee per player from event, or default to 350.0
+  double get _pricePerPlayer => widget.event.amount ?? 350.0;
   bool get _isFreeEvent => widget.event.amount == null || widget.event.amount == 0;
+  // Total registration fee = price per player * number of players
+  double get _totalRegistrationFee => _isFreeEvent ? 0.0 : (_pricePerPlayer * widget.team.players.length);
   
   bool _discountApplied = false;
   double _discountPercentage = 0.0;
@@ -150,7 +152,7 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                                 text: TextSpan(
                                   children: [
                                     const TextSpan(
-                                      text: 'Team: ',
+                                      text: 'Team name: ',
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
@@ -283,6 +285,9 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                                       }
                                     }
                                     
+                                    // Price per player is the event amount
+                                    final pricePerPlayer = _pricePerPlayer;
+                                    
                                     return Padding(
                                       padding: const EdgeInsets.only(bottom: 8),
                                       child: Row(
@@ -309,26 +314,38 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                                                     color: Colors.black87,
                                                   ),
                                                 ),
-                                                if (player.userId != null && linkedUser != null)
-                                                  Text(
-                                                    'ID: ${player.userId}',
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color: Colors.grey[600],
+                                                Row(
+                                                  children: [
+                                                    Text(
+                                                      'Age: ${player.age}',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.grey[600],
+                                                      ),
                                                     ),
-                                                  )
-                                                else if (player.userId == null)
-                                                  Text(
-                                                    'Guest',
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color: Colors.grey[600],
-                                                      fontStyle: FontStyle.italic,
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      player.userId != null && linkedUser != null ? 'Registered' : 'Guest',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.grey[600],
+                                                        fontStyle: player.userId == null ? FontStyle.italic : FontStyle.normal,
+                                                      ),
                                                     ),
-                                                  ),
+                                                  ],
+                                                ),
                                               ],
                                             ),
                                           ),
+                                          if (!_isFreeEvent)
+                                            Text(
+                                              '\$${pricePerPlayer.toStringAsFixed(2)}',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.black87,
+                                              ),
+                                            ),
                                         ],
                                       ),
                                     );
@@ -349,15 +366,31 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                               bottomRight: Radius.circular(12),
                             ),
                           ),
-                          child: Text(
-                            _isFreeEvent 
-                                ? 'Total: Free'
-                                : 'Total: \$${_registrationFee.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (!_isFreeEvent && widget.team.players.isNotEmpty) ...[
+                                Text(
+                                  'Price per player: \$${_pricePerPlayer.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.normal,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                              ],
+                              Text(
+                                _isFreeEvent 
+                                    ? 'Total: Free'
+                                    : 'Total: \$${_totalRegistrationFee.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -562,7 +595,7 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                           // Event and Team info
                           _buildPaymentRow('Event', widget.event.title, false),
                           const SizedBox(height: 4),
-                          _buildPaymentRow('Team', widget.team.name, false),
+                          _buildPaymentRow('Team name', widget.team.name, false),
                           const SizedBox(height: 16),
                           if (_isFreeEvent) ...[
                             _buildPaymentRow(
@@ -573,7 +606,7 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                           ] else ...[
                             _buildPaymentRow(
                               'Total',
-                              '\$${_registrationFee.toStringAsFixed(2)}',
+                              '\$${_totalRegistrationFee.toStringAsFixed(2)}',
                               true,
                             ),
                             if (_discountApplied) ...[
@@ -679,7 +712,7 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
       setState(() {
         _discountApplied = true;
         _discountPercentage = 35.0;
-        _discountAmount = _registrationFee * (_discountPercentage / 100);
+        _discountAmount = _totalRegistrationFee * (_discountPercentage / 100);
         _appliedDiscountCode = 'hello';
         _isTypingDiscount = false;
         _isProcessingDiscount = false;
@@ -695,7 +728,7 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
       setState(() {
         _discountApplied = true;
         _discountPercentage = 50.0;
-        _discountAmount = _registrationFee * (_discountPercentage / 100);
+        _discountAmount = _totalRegistrationFee * (_discountPercentage / 100);
         _appliedDiscountCode = 'hello2';
         _isTypingDiscount = false;
         _isProcessingDiscount = false;
@@ -745,9 +778,9 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
 
   double _getPayableAmount() {
     if (_discountApplied) {
-      return _registrationFee - _discountAmount;
+      return _totalRegistrationFee - _discountAmount;
     }
-    return _registrationFee;
+    return _totalRegistrationFee;
   }
 
   void _processPayment() {

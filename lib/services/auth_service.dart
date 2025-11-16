@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide User;
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_core/firebase_core.dart';
 import '../models/user.dart';
 
 class AuthService {
@@ -521,7 +523,7 @@ class AuthService {
     return (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
   }
 
-  // Send verification code via SMS (simulated)
+  // Send verification code via SMS using Cloud Function
   Future<String?> sendVerificationCode(String phone) async {
     try {
       // Normalize phone number
@@ -546,12 +548,35 @@ class AuthService {
         'expiresAt': expiresAt.toIso8601String(),
       };
       
-      // In a real app, you would send an actual SMS here
-      // For now, we'll just print it (in production, use an SMS service like Twilio)
-      print('SMS sent to $phone: Your LevelUpSports Code is: $code');
-      
-      // Simulate sending SMS (in production, replace this with actual SMS sending)
-      await Future.delayed(const Duration(seconds: 1));
+      // Send SMS via Cloud Function
+      try {
+        // Check if Firebase is initialized
+        if (Firebase.apps.isEmpty) {
+          print('⚠️ Firebase not initialized, SMS will not be sent. Code: $code');
+          // Still return the code for testing purposes
+          return code;
+        }
+
+        final functions = FirebaseFunctions.instance;
+        final callable = functions.httpsCallable('sendVerificationSMS');
+        
+        final result = await callable.call({
+          'phone': phone,
+          'code': code,
+        });
+
+        if (result.data['success'] == true) {
+          print('✅ SMS sent successfully to $phone via Twilio. Message SID: ${result.data['messageSid']}');
+        } else {
+          print('⚠️ SMS sending returned unsuccessful result: ${result.data}');
+        }
+      } catch (e) {
+        // If Cloud Function fails, log error but still return code for testing
+        print('⚠️ Error calling Cloud Function to send SMS: $e');
+        print('⚠️ Verification code generated: $code (SMS not sent - check Cloud Function setup)');
+        // In production, you might want to return null here to prevent code from being used
+        // For now, we'll return the code so the feature still works during setup
+      }
       
       return code;
     } catch (e) {

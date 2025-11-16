@@ -191,28 +191,53 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
     // Add listeners to track form changes and validate in real-time
     _teamNameController.addListener(() {
       _onFormChanged();
+      // Enable validation immediately when user starts typing
+      if (!_hasAttemptedValidation && _teamNameController.text.isNotEmpty) {
+        _hasAttemptedValidation = true;
+      }
       _validateField('teamName', _teamNameController.text);
+      // Trigger form validation to update error display
+      _formKey.currentState?.validate();
     });
     _coachNameController.addListener(() {
       _onFormChanged();
+      if (!_hasAttemptedValidation && _coachNameController.text.isNotEmpty) {
+        _hasAttemptedValidation = true;
+      }
       _validateField('coachName', _coachNameController.text);
+      _formKey.currentState?.validate();
     });
     _coachPhoneController.addListener(() {
       _onFormChanged();
+      if (!_hasAttemptedValidation && _coachPhoneController.text.isNotEmpty) {
+        _hasAttemptedValidation = true;
+      }
       _validateField('coachPhone', _coachPhoneController.text);
+      _formKey.currentState?.validate();
     });
     _coachEmailController.addListener(() {
       _onFormChanged();
+      if (!_hasAttemptedValidation && _coachEmailController.text.isNotEmpty) {
+        _hasAttemptedValidation = true;
+      }
       _validateField('coachEmail', _coachEmailController.text);
+      _formKey.currentState?.validate();
     });
     _coachAgeController.addListener(() {
       _onFormChanged();
+      // Enable validation immediately when user starts typing
+      if (!_hasAttemptedValidation && _coachAgeController.text.isNotEmpty) {
+        _hasAttemptedValidation = true;
+      }
       _validateField('coachAge', _coachAgeController.text);
+      // Trigger form validation to update error display
+      _formKey.currentState?.validate();
     });
   }
   
   void _validateField(String fieldName, String value) {
-    if (!_hasAttemptedValidation) return;
+    // Always validate if user has started typing in any field
+    if (!_hasAttemptedValidation && value.isEmpty) return;
     
     String? error;
     switch (fieldName) {
@@ -308,6 +333,16 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
             selectedDivision: _selectedDivision ?? 'Adult 18+',
             allowGuest: false, // Only allow registered users
             onSave: (player) {
+              // Validate age against division before adding
+              if (_selectedDivision == 'Youth (18 or under)' && player.age > 18) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Cannot add player: Age must be 18 or under for Youth division'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
               print('Adding registered player to team: ${player.name}'); // Debug print
               setState(() {
                 _players.add(player);
@@ -328,6 +363,16 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
             selectedDivision: _selectedDivision ?? 'Adult 18+',
             allowGuest: true, // Force guest mode
             onSave: (player) {
+              // Validate age against division before adding
+              if (_selectedDivision == 'Youth (18 or under)' && player.age > 18) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Cannot add player: Age must be 18 or under for Youth division'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
               print('Adding guest player to team: ${player.name}'); // Debug print
               setState(() {
                 _players.add(player);
@@ -897,6 +942,33 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                // Team Name Field (at the top)
+                TextFormField(
+                  controller: _teamNameController,
+                  textCapitalization: TextCapitalization.words,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  maxLength: 30,
+                  inputFormatters: [LengthLimitingTextInputFormatter(30)],
+                  decoration: InputDecoration(
+                    labelText: 'Team Name',
+                    prefixIcon: const Icon(Icons.sports_basketball),
+                    border: const OutlineInputBorder(),
+                    counterText: '',
+                    errorText: _hasAttemptedValidation ? _fieldErrors['teamName'] : null,
+                    errorStyle: const TextStyle(color: Colors.red),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter team name';
+                    }
+                    if (value.length > 30) {
+                      return 'Team name must be 30 characters or less';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
                 // Division Field - Only show for Basketball and Pickleball
                 // For Volleyball and Soccer, hide division field
                 Builder(
@@ -1163,38 +1235,11 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Section 1 - Registered Players',
+                  'Registered Players',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     color: const Color(0xFF1976D2),
                     fontWeight: FontWeight.bold,
                   ),
-                ),
-                const SizedBox(height: 16),
-                // Team Name Field (in Section 1)
-                TextFormField(
-                  controller: _teamNameController,
-                  textCapitalization: TextCapitalization.words,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  maxLength: 30,
-                  inputFormatters: [LengthLimitingTextInputFormatter(30)],
-                  decoration: InputDecoration(
-                    labelText: 'Team Name',
-                    prefixIcon: const Icon(Icons.sports_basketball),
-                    border: const OutlineInputBorder(),
-                    counterText: '',
-                    errorText: _hasAttemptedValidation ? _fieldErrors['teamName'] : null,
-                    errorStyle: const TextStyle(color: Colors.red),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter team name';
-                    }
-                    if (value.length > 30) {
-                      return 'Team name must be 30 characters or less';
-                    }
-                    return null;
-                  },
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -1363,16 +1408,10 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Age: ${player.age}'),
-                              if (player.userId != null && linkedUser != null)
-                                Text(
-                                  'ID: ${player.userId}',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                                )
-                              else if (player.userId == null)
-                                Text(
-                                  'Guest',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey[600], fontStyle: FontStyle.italic),
-                                ),
+                              Text(
+                                player.userId != null && linkedUser != null ? 'Registered Player' : 'Guest',
+                                style: TextStyle(fontSize: 12, color: Colors.grey[600], fontStyle: player.userId == null ? FontStyle.italic : FontStyle.normal),
+                              ),
                             ],
                           ),
                           onTap: player.userId != null && linkedUser != null
@@ -1676,17 +1715,50 @@ class _PlayerDialogState extends State<_PlayerDialog> {
       _isSearching = true;
       final allUsers = _authService.users;
       _searchResults = allUsers.where((user) {
+        // First check if user matches search query
         final queryLower = query.toLowerCase();
-        return user.name.toLowerCase().contains(queryLower) ||
+        final matchesQuery = user.name.toLowerCase().contains(queryLower) ||
                user.username.toLowerCase().contains(queryLower) ||
                user.email.toLowerCase().contains(queryLower) ||
                user.id.toLowerCase().contains(queryLower) ||
                user.phone.replaceAll(RegExp(r'[^\d]'), '').contains(query.replaceAll(RegExp(r'[^\d]'), ''));
+        
+        if (!matchesQuery) return false;
+        
+        // Then check if user age matches division requirement
+        final userAge = user.age ?? 25;
+        if (widget.selectedDivision == 'Youth (18 or under)') {
+          return userAge <= 18;
+        } else if (widget.selectedDivision == 'Adult 18+') {
+          return userAge >= 18;
+        }
+        return true; // If no division requirement, show all
       }).toList();
     });
   }
 
   void _selectUser(User user) {
+    // Validate user age against division before selecting
+    final userAge = user.age ?? 25;
+    if (widget.selectedDivision == 'Youth (18 or under)' && userAge > 18) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot select this player: Age must be 18 or under for Youth division'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (widget.selectedDivision == 'Adult 18+' && userAge < 18) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot select this player: Age must be 18 or older for Adult division'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
     setState(() {
       _selectedUser = user;
       _isGuest = false;

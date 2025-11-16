@@ -1143,6 +1143,13 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         return;
       }
 
+      // For preliminary matches, check if it's best of 3 format
+      if (!isPlayoffMatch && _preliminaryMatchFormat == 'bestof3') {
+        // Use the preliminary scoring dialog which handles best of 3 correctly
+        _showPreliminaryScoringDialog(_selectedMatch!);
+        return;
+      }
+      
       // Navigate to semi-finals scoring screen with 1 game format for preliminary matches
       // Convert preliminary scores from team-level to game-level format
       Map<String, dynamic>? initialScoresToPass;
@@ -3313,34 +3320,35 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
         // Show games per team dialog on first load if not shown yet and no scores exist
         // After scores are loaded, check if any scores exist
         // If scores exist, don't show dialog; if no scores, show dialog
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
           // Wait for scores to be loaded, then check
-          Future.delayed(Duration(milliseconds: 100), () {
-            if (mounted && _teams.isNotEmpty) {
-              final currentDivision = _selectedDivision ?? 'all';
-              final hasShownForDivision =
-                  _hasShownGamesPerTeamDialogByDivision[currentDivision] ??
-                  false;
+          await Future.delayed(Duration(milliseconds: 200));
+          if (mounted && _teams.isNotEmpty) {
+            // Ensure scores are loaded before checking
+            await _loadScores();
+            final currentDivision = _selectedDivision ?? 'all';
+            final hasShownForDivision =
+                _hasShownGamesPerTeamDialogByDivision[currentDivision] ??
+                false;
 
-              if (!hasShownForDivision) {
-                // Check if there are no scores for this division - only show dialog if no scores exist
-                // Only show dialog for scoring users (management, owner, scoring)
-                final hasNoScores = _hasNoScoresForCurrentDivision();
-                if (hasNoScores && _authService.canScore) {
-                  _hasShownGamesPerTeamDialogByDivision[currentDivision] = true;
-                  _showGamesPerTeamDialog(
-                    isFirstLoad: _isFirstLoad,
-                    currentTabIndex: _tabController.index,
-                  );
-                } else {
-                  // Scores exist or user can't score, mark as shown to prevent showing dialog
-                  _hasShownGamesPerTeamDialogByDivision[currentDivision] = true;
-                }
+            if (!hasShownForDivision) {
+              // Check if there are no scores for this division - only show dialog if no scores exist
+              // Only show dialog for scoring users (management, owner, scoring)
+              final hasNoScores = _hasNoScoresForCurrentDivision();
+              if (hasNoScores && _authService.canScore) {
+                _hasShownGamesPerTeamDialogByDivision[currentDivision] = true;
+                _showGamesPerTeamDialog(
+                  isFirstLoad: _isFirstLoad,
+                  currentTabIndex: _tabController.index,
+                );
+              } else {
+                // Scores exist or user can't score, mark as shown to prevent showing dialog
+                _hasShownGamesPerTeamDialogByDivision[currentDivision] = true;
               }
-              // Mark that we've completed the first load
-              _isFirstLoad = false;
             }
-          });
+            // Mark that we've completed the first load
+            _isFirstLoad = false;
+          }
         });
 
         for (String key in cacheKeys) {
@@ -6755,10 +6763,7 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
                             onPressed: (_playoffsStartedByDivision[_selectedDivision ?? ''] ?? false)
                                 ? null
                                 : () {
-                                    _showGamesPerTeamDialog(
-                                      isFirstLoad: false,
-                                      currentTabIndex: _tabController.index,
-                                    );
+                                    _showSettingsMenu();
                                   },
                           ),
                         ),
@@ -8706,6 +8711,44 @@ class _SportScheduleScreenState extends State<SportScheduleScreen>
               child: const Text('YES'),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  // Show settings menu with options
+  void _showSettingsMenu() {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.settings, color: Color(0xFF2196F3)),
+                title: const Text('Preliminary Rounds Settings'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showGamesPerTeamDialog(
+                    isFirstLoad: false,
+                    currentTabIndex: _tabController.index,
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.calendar_today, color: Color(0xFF2196F3)),
+                title: const Text('Create Custom Schedule'),
+                onTap: () {
+                  Navigator.pop(context);
+                  final selectedGames = _gamesPerTeam;
+                  final selectedScore = _preliminaryGameWinningScore;
+                  _showCustomScheduleDialog(selectedGames, selectedScore);
+                },
+              ),
+            ],
+          ),
         );
       },
     );

@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../models/event.dart';
+import 'team_service.dart';
+import 'pickleball_team_service.dart';
 
 class EventService {
   static final EventService _instance = EventService._internal();
@@ -304,6 +306,28 @@ class EventService {
         if (completedIds.contains(eventId)) {
           completedIds.remove(eventId);
           await prefs.setStringList(_completedEventsKey, completedIds);
+        }
+        
+        // Remove teams associated with this event
+        try {
+          final teamService = TeamService();
+          await teamService.loadTeams();
+          final teamsToRemove = teamService.teams.where((team) => team.eventId == eventId).toList();
+          for (var team in teamsToRemove) {
+            await teamService.deleteTeam(team.id);
+          }
+          
+          final pickleballTeamService = PickleballTeamService();
+          await pickleballTeamService.loadTeams();
+          final pickleballTeamsToRemove = pickleballTeamService.teams.where((team) => team.eventId == eventId).toList();
+          for (var team in pickleballTeamsToRemove) {
+            await pickleballTeamService.deleteTeam(team.id);
+          }
+          
+          print('Removed ${teamsToRemove.length + pickleballTeamsToRemove.length} teams associated with event $eventId');
+        } catch (e) {
+          print('Error removing teams for event: $e');
+          // Continue even if team deletion fails
         }
         
         print('Event deleted successfully: $eventId');

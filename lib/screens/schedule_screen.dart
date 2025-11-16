@@ -65,6 +65,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     super.didChangeDependencies();
     // Reload expansion state when screen becomes visible
     _loadExpansionState();
+    // Reload teams to ensure we have the latest count (shared across accounts)
+    _teamService.loadTeams();
+    _pickleballTeamService.loadTeams();
     _loadEvents();
   }
 
@@ -387,11 +390,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 children: [
                   Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      teamCount == 0
-                          ? 'Not enough teams registered. Waiting for 8 more teams to start the game'
-                          : 'Not enough teams registered. Waiting for ${8 - teamCount} more team${8 - teamCount == 1 ? '' : 's'} to start the game',
+                    Expanded(
+                      child: Text(
+                        teamCount == 0
+                          ? 'Not enough teams registered. Waiting for 8 more teams to view the schedule'
+                          : 'Not enough teams registered. Waiting for ${8 - teamCount} more team${8 - teamCount == 1 ? '' : 's'} to view the schedule',
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.orange[700],

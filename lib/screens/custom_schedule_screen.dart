@@ -181,7 +181,8 @@ class _CustomScheduleScreenState extends State<CustomScheduleScreen> {
       ]);
 
       if (mounted) {
-        Navigator.of(context).pop();
+        // Navigate back to home screen (MainNavigationScreen)
+        Navigator.of(context).popUntil((route) => route.isFirst);
       }
     }
   }
