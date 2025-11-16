@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:square_in_app_payments/in_app_payments.dart';
+import 'package:square_in_app_payments/models.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'dart:math';
 import '../models/team.dart';
 import '../models/pickleball_team.dart';
 import '../models/event.dart';
@@ -26,6 +31,9 @@ class PaymentScreen extends StatefulWidget {
 class _PaymentScreenState extends State<PaymentScreen> {
   bool _isProcessing = false;
   bool _paymentCompleted = false;
+  bool _squareInitialized = false;
+  bool _applePayAvailable = false;
+  bool _googlePayAvailable = false;
   final _cardNumberController = TextEditingController();
   final _expiryController = TextEditingController();
   final _cvvController = TextEditingController();
@@ -37,6 +45,64 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   String _cardType = 'unknown';
   int _maxCvvLength = 3;
+
+  // Square Application ID - Replace with your actual ID
+  static const String _squareApplicationId = 'sandbox-sq0idb-X0C_ewi4_MT4Xd-bqO_hew';
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeSquare();
+  }
+
+  Future<void> _initializeSquare() async {
+    try {
+      await InAppPayments.setSquareApplicationId(_squareApplicationId);
+      
+      // Check for Apple Pay availability (iOS only)
+      try {
+        final applePayAvailable = await InAppPayments.canUseApplePay();
+        setState(() {
+          _applePayAvailable = applePayAvailable;
+        });
+        print('Apple Pay available: $applePayAvailable');
+      } catch (e) {
+        print('Apple Pay check failed (may not be iOS): $e');
+        setState(() {
+          _applePayAvailable = false;
+        });
+      }
+
+      // Check for Google Pay availability (Android only)
+      try {
+        final googlePayAvailable = await InAppPayments.canUseGooglePay();
+        setState(() {
+          _googlePayAvailable = googlePayAvailable;
+        });
+        print('Google Pay available: $googlePayAvailable');
+      } catch (e) {
+        print('Google Pay check failed (may not be Android): $e');
+        setState(() {
+          _googlePayAvailable = false;
+        });
+      }
+
+      setState(() {
+        _squareInitialized = true;
+      });
+      print('✅ Square initialized successfully');
+    } catch (e) {
+      print('❌ Error initializing Square: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error initializing payment system: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -122,9 +188,21 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
-  void _processPayment() async {
-    // Validate all form fields
-    if (!_formKey.currentState!.validate()) {
+  // Generate a unique idempotency key for the payment
+  String _generateIdempotencyKey() {
+    final random = Random();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    return 'payment_${timestamp}_${random.nextInt(10000)}';
+  }
+
+  Future<void> _processPaymentWithApplePay() async {
+    if (!_squareInitialized || !_applePayAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Apple Pay is not available. Please use another payment method.'),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
@@ -132,9 +210,258 @@ class _PaymentScreenState extends State<PaymentScreen> {
       _isProcessing = true;
     });
 
-    // Simulate payment processing
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      // Start Apple Pay flow
+      await InAppPayments.startApplePayFlow(
+        amount: widget.amount,
+        currencyCode: 'USD',
+        onApplePayNonceRequestSuccess: (CardDetails result) async {
+          try {
+            // Process payment with the nonce
+            await _processPaymentWithNonce(result.nonce);
+            
+            // Complete Apple Pay
+            await InAppPayments.completeApplePayAuthorization(
+              isSuccess: true,
+            );
+            print('✅ Apple Pay completed successfully');
+          } catch (e) {
+            print('❌ Error processing Apple Pay: $e');
+            // Complete with error
+            await InAppPayments.completeApplePayAuthorization(
+              isSuccess: false,
+            );
+            print('Apple Pay authorization failed');
+          }
+        },
+        onApplePayCancel: () {
+          print('Apple Pay cancelled by user');
+          setState(() {
+            _isProcessing = false;
+          });
+        },
+      );
+    } catch (e) {
+      print('❌ Error starting Apple Pay: $e');
+      setState(() {
+        _isProcessing = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error starting Apple Pay: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
+  Future<void> _processPaymentWithGooglePay() async {
+    if (!_squareInitialized || !_googlePayAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Google Pay is not available. Please use another payment method.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      // Start Google Pay flow
+      await InAppPayments.startGooglePayFlow(
+        price: widget.amount.toStringAsFixed(2),
+        priceStatus: 'FINAL',
+        currencyCode: 'USD',
+        onGooglePayNonceRequestSuccess: (CardDetails result) async {
+          try {
+            // Process payment with the nonce
+            await _processPaymentWithNonce(result.nonce);
+            
+            // Complete Google Pay
+            await InAppPayments.completeGooglePayAuthorization(
+              isSuccess: true,
+            );
+            print('✅ Google Pay completed successfully');
+          } catch (e) {
+            print('❌ Error processing Google Pay: $e');
+            // Complete with error
+            await InAppPayments.completeGooglePayAuthorization(
+              isSuccess: false,
+            );
+            print('Google Pay authorization failed');
+          }
+        },
+        onGooglePayCancel: () {
+          print('Google Pay cancelled by user');
+          setState(() {
+            _isProcessing = false;
+          });
+        },
+      );
+    } catch (e) {
+      print('❌ Error starting Google Pay: $e');
+      setState(() {
+        _isProcessing = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error starting Google Pay: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _processPaymentWithCard() async {
+    if (!_squareInitialized) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment system not ready. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      // Start Square's card entry flow
+      await InAppPayments.startCardEntryFlow(
+        onCardNonceRequestSuccess: (CardDetails result) async {
+          try {
+            // Process payment with the card nonce
+            await _processPaymentWithNonce(result.nonce);
+            
+            // Complete the card entry
+            await InAppPayments.completeCardEntry(
+              onCardEntryComplete: () {
+                print('✅ Card entry completed successfully');
+              },
+            );
+          } catch (e) {
+            print('❌ Error processing payment: $e');
+            // Show error to user
+            await InAppPayments.showCardNonceProcessingError(e.toString());
+          }
+        },
+        onCardEntryCancel: () {
+          print('Card entry cancelled by user');
+          setState(() {
+            _isProcessing = false;
+          });
+        },
+      );
+    } catch (e) {
+      print('❌ Error starting card entry: $e');
+      setState(() {
+        _isProcessing = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error starting payment: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _processPaymentWithNonce(String nonce) async {
+    try {
+      // Check if Firebase is initialized
+      if (Firebase.apps.isEmpty) {
+        throw Exception('Firebase not initialized');
+      }
+
+      // Generate idempotency key
+      final idempotencyKey = _generateIdempotencyKey();
+
+      // Call Cloud Function to process payment
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('processSquarePayment');
+
+      final result = await callable.call({
+        'sourceId': nonce,
+        'amount': widget.amount.toStringAsFixed(2),
+        'idempotencyKey': idempotencyKey,
+        'teamId': widget.team.id,
+        'eventId': widget.event.id,
+      });
+
+      if (result.data['success'] == true) {
+        print('✅ Payment processed successfully. Payment ID: ${result.data['paymentId']}');
+        
+        // Save the team after successful payment
+        await _saveTeam();
+
+        setState(() {
+          _isProcessing = false;
+          _paymentCompleted = true;
+        });
+
+        // Show success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Payment successful! Your team has been registered.',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+              backgroundColor: const Color(0xFF4CAF50),
+              duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              margin: const EdgeInsets.all(16),
+            ),
+          );
+        }
+
+        // Navigate to home after a short delay
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
+              (route) => false,
+            );
+          }
+        });
+      } else {
+        throw Exception('Payment processing returned unsuccessful result');
+      }
+    } catch (e) {
+      print('❌ Error processing payment with nonce: $e');
+      setState(() {
+        _isProcessing = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Payment failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _saveTeam() async {
     // Save the team to the appropriate service with correct eventId
     if (widget.team is Team) {
       final team = widget.team as Team;
@@ -184,40 +511,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
       );
       print('Pickleball team saved successfully');
     }
-
-    setState(() {
-      _isProcessing = false;
-      _paymentCompleted = true;
-    });
-
-    // Show success snackbar and navigate to home
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Payment successful! Your team has been registered.',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-          ),
-          backgroundColor: const Color(0xFF4CAF50),
-          duration: const Duration(seconds: 3),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          margin: const EdgeInsets.all(16),
-        ),
-      );
-    }
-
-    // Navigate to home after a short delay
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
-          (route) => false,
-        );
-      }
-    });
   }
 
   @override
@@ -293,7 +586,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
             const SizedBox(height: 24),
 
-            // Payment Form
+            // Payment Methods Card
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
@@ -301,322 +594,218 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Payment Details',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.payment,
+                          color: _squareInitialized ? Colors.green : Colors.grey,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Choose Payment Method',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: _squareInitialized ? const Color(0xFF1976D2) : Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (!_squareInitialized) ...[
+                      const SizedBox(height: 12),
+                      const LinearProgressIndicator(),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Initializing payment system...',
                         style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1976D2),
+                          fontSize: 14,
+                          color: Colors.grey[700],
                         ),
                       ),
-                      const SizedBox(height: 16),
-
-                      // Card Type Indicator
-                      if (_cardType != 'unknown')
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
+                    ] else ...[
+                      const SizedBox(height: 20),
+                      // Apple Pay Button (iOS only)
+                      if (_applePayAvailable) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: (_isProcessing || _paymentCompleted) ? null : _processPaymentWithApplePay,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Center(
+                                    child: Text(
+                                      '🍎',
+                                      style: TextStyle(fontSize: 16),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Pay with Apple Pay',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          decoration: BoxDecoration(
-                            color:
-                                _cardType == 'visa'
-                                    ? Colors.blue.withOpacity(0.1)
-                                    : _cardType == 'mastercard'
-                                    ? Colors.red.withOpacity(0.1)
-                                    : _cardType == 'amex'
-                                    ? Colors.green.withOpacity(0.1)
-                                    : Colors.grey.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color:
-                                  _cardType == 'visa'
-                                      ? Colors.blue
-                                      : _cardType == 'mastercard'
-                                      ? Colors.red
-                                      : _cardType == 'amex'
-                                      ? Colors.green
-                                      : Colors.grey,
-                              width: 1,
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      // Google Pay Button (Android only)
+                      if (_googlePayAvailable) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: (_isProcessing || _paymentCompleted) ? null : _processPaymentWithGooglePay,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF4285F4),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Image.asset(
+                                  'assets/google_pay.png',
+                                  height: 24,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return const Icon(Icons.account_balance_wallet, size: 24);
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Pay with Google Pay',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      // Divider if both Apple Pay and Google Pay are available
+                      if ((_applePayAvailable || _googlePayAvailable)) ...[
+                        Row(
+                          children: [
+                            Expanded(child: Divider(color: Colors.grey[300])),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Text(
+                                'OR',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            Expanded(child: Divider(color: Colors.grey[300])),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      // Card Entry Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: OutlinedButton(
+                          onPressed: (_isProcessing || _paymentCompleted) ? null : _processPaymentWithCard,
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                            foregroundColor: const Color(0xFF1976D2),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
                             ),
                           ),
                           child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.credit_card,
-                                size: 16,
-                                color:
-                                    _cardType == 'visa'
-                                        ? Colors.blue
-                                        : _cardType == 'mastercard'
-                                        ? Colors.red
-                                        : _cardType == 'amex'
-                                        ? Colors.green
-                                        : Colors.grey,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                _cardType.toUpperCase(),
+                              const Icon(Icons.credit_card, size: 24),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Enter Card Details',
                                 style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color:
-                                      _cardType == 'visa'
-                                          ? Colors.blue
-                                          : _cardType == 'mastercard'
-                                          ? Colors.red
-                                          : _cardType == 'amex'
-                                          ? Colors.green
-                                          : Colors.grey,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
                           ),
                         ),
-
-                      if (_cardType != 'unknown') const SizedBox(height: 12),
-
-                      // Card Number
-                      TextFormField(
-                        controller: _cardNumberController,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter card number';
-                          }
-                          // Remove spaces and check if it's a valid card number
-                          String digitsOnly = value.replaceAll(' ', '');
-                          if (digitsOnly.length < 13 ||
-                              digitsOnly.length > 19) {
-                            return 'Please enter a valid card number';
-                          }
-                          return null;
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'Card Number',
-                          hintText:
-                              _cardType == 'amex'
-                                  ? '1234 567890 12345'
-                                  : '1234 5678 9012 3456',
-                          border: const OutlineInputBorder(),
-                          prefixIcon: Icon(
-                            _cardType == 'visa'
-                                ? Icons.credit_card
-                                : _cardType == 'mastercard'
-                                ? Icons.credit_card
-                                : _cardType == 'amex'
-                                ? Icons.credit_card
-                                : Icons.credit_card,
-                          ),
-                          suffixIcon:
-                              _cardType != 'unknown'
-                                  ? Icon(
-                                    _cardType == 'visa'
-                                        ? Icons.credit_card
-                                        : _cardType == 'mastercard'
-                                        ? Icons.credit_card
-                                        : _cardType == 'amex'
-                                        ? Icons.credit_card
-                                        : Icons.credit_card,
-                                    color:
-                                        _cardType == 'visa'
-                                            ? Colors.blue
-                                            : _cardType == 'mastercard'
-                                            ? Colors.red
-                                            : _cardType == 'amex'
-                                            ? Colors.green
-                                            : Colors.grey,
-                                  )
-                                  : null,
-                        ),
-                        keyboardType: TextInputType.number,
-                        onChanged: (value) {
-                          // Remove all non-digit characters first
-                          String digitsOnly = value.replaceAll(
-                            RegExp(r'[^\d]'),
-                            '',
-                          );
-
-                          // Check if we've exceeded the maximum length
-                          int maxLength = _cardType == 'amex' ? 15 : 16;
-                          if (digitsOnly.length > maxLength) {
-                            digitsOnly = digitsOnly.substring(0, maxLength);
-                          }
-
-                          _detectCardType(digitsOnly);
-                          String formatted = _formatCardNumber(digitsOnly);
-
-                          if (formatted != value) {
-                            _cardNumberController.value = TextEditingValue(
-                              text: formatted,
-                              selection: TextSelection.collapsed(
-                                offset: formatted.length,
-                              ),
-                            );
-                          }
-                        },
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(
-                            _cardType == 'amex'
-                                ? 15
-                                : 19, // Allow for spaces in formatted number
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Expiry and CVV
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextFormField(
-                              controller: _expiryController,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter expiry date';
-                                }
-                                if (!RegExp(r'^\d{2}/\d{2}$').hasMatch(value)) {
-                                  return 'Please enter valid expiry (MM/YY)';
-                                }
-                                return null;
-                              },
-                              decoration: const InputDecoration(
-                                labelText: 'Expiry (MM/YY)',
-                                hintText: '12/25',
-                                border: OutlineInputBorder(),
-                              ),
-                              keyboardType: TextInputType.number,
-                              onChanged: (value) {
-                                String formatted = _formatExpiryDate(value);
-                                if (formatted != value) {
-                                  _expiryController.value = TextEditingValue(
-                                    text: formatted,
-                                    selection: TextSelection.collapsed(
-                                      offset: formatted.length,
-                                    ),
-                                  );
-                                }
-                              },
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(4),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: TextFormField(
-                              controller: _cvvController,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter CVV';
-                                }
-                                if (value.length < 3 || value.length > 4) {
-                                  return 'Please enter valid CVV';
-                                }
-                                return null;
-                              },
-                              decoration: InputDecoration(
-                                labelText: 'CVV',
-                                hintText: _cardType == 'amex' ? '1234' : '123',
-                                border: const OutlineInputBorder(),
-                              ),
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(_maxCvvLength),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Cardholder Name
-                      TextFormField(
-                        controller: _nameController,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter cardholder name';
-                          }
-                          if (value.trim().length < 2) {
-                            return 'Please enter full name';
-                          }
-                          return null;
-                        },
-                        decoration: const InputDecoration(
-                          labelText: 'Cardholder Name',
-                          hintText: 'John Doe',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.person),
-                        ),
-                        textCapitalization: TextCapitalization.words,
                       ),
                     ],
-                  ),
+                  ],
                 ),
               ),
             ),
 
-            const SizedBox(height: 24),
-
-            // Process Payment Button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed:
-                    (_isProcessing || _paymentCompleted)
-                        ? null
-                        : _processPayment,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1976D2),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+            if (_isProcessing) ...[
+              const SizedBox(height: 16),
+              const Center(
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 12),
+                    Text(
+                      'Processing Payment...',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF1976D2),
+                      ),
+                    ),
+                  ],
                 ),
-                child:
-                    _isProcessing
-                        ? const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            ),
-                            SizedBox(width: 12),
-                            Text('Processing Payment...'),
-                          ],
-                        )
-                        : _paymentCompleted
-                        ? const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.check_circle, color: Colors.white),
-                            SizedBox(width: 12),
-                            Text('Payment Completed'),
-                          ],
-                        )
-                        : const Text(
-                          'Complete Payment',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
               ),
-            ),
+            ],
+
+            if (_paymentCompleted) ...[
+              const SizedBox(height: 16),
+              const Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 32),
+                    SizedBox(width: 12),
+                    Text(
+                      'Payment Completed',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF4CAF50),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),

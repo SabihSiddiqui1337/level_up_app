@@ -46,6 +46,7 @@ dependencies:
   flutter_local_notifications: ^17.2.2
   image_picker: ^1.0.7
   path_provider: ^2.1.1
+  square_in_app_payments: ^1.1.1
 
 dev_dependencies:
   flutter_test:

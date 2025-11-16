@@ -6,6 +6,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const twilio = require('twilio');
+const { Client, Environment } = require('@square/square-connect');
 
 admin.initializeApp();
 
@@ -17,6 +18,20 @@ const twilioClient = twilio(
   functions.config().twilio?.auth_token || process.env.TWILIO_AUTH_TOKEN
 );
 const twilioPhoneNumber = functions.config().twilio?.phone_number || process.env.TWILIO_PHONE_NUMBER;
+
+// Initialize Square client
+// Get credentials from Firebase Functions config
+// Set these using: firebase functions:config:set square.application_id="YOUR_APP_ID" square.access_token="YOUR_ACCESS_TOKEN" square.location_id="YOUR_LOCATION_ID"
+const squareApplicationId = functions.config().square?.application_id || process.env.SQUARE_APPLICATION_ID;
+const squareAccessToken = functions.config().square?.access_token || process.env.SQUARE_ACCESS_TOKEN;
+const squareLocationId = functions.config().square?.location_id || process.env.SQUARE_LOCATION_ID;
+
+const squareClient = squareApplicationId && squareAccessToken
+  ? new Client({
+      environment: squareApplicationId.includes('sandbox') ? Environment.Sandbox : Environment.Production,
+      accessToken: squareAccessToken,
+    })
+  : null;
 
 // Cloud Function to send notifications when a new event is created
 exports.sendEventNotification = functions.firestore
@@ -109,6 +124,74 @@ exports.sendEventNotification = functions.firestore
       return null;
     }
   });
+
+// Cloud Function to process Square payment
+exports.processSquarePayment = functions.https.onCall(async (data, context) => {
+  const { sourceId, amount, idempotencyKey, teamId, eventId } = data;
+
+  // Validate input
+  if (!sourceId || !amount || !idempotencyKey) {
+    throw new functions.https.HttpsError('invalid-argument', 'sourceId, amount, and idempotencyKey are required.');
+  }
+
+  // Validate amount (must be positive and in cents)
+  const amountInCents = Math.round(parseFloat(amount) * 100);
+  if (isNaN(amountInCents) || amountInCents <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid amount. Amount must be a positive number.');
+  }
+
+  // Check if Square is configured
+  if (!squareClient || !squareLocationId) {
+    console.error('Square not configured. Please set SQUARE_APPLICATION_ID, SQUARE_ACCESS_TOKEN, and SQUARE_LOCATION_ID.');
+    throw new functions.https.HttpsError('failed-precondition', 'Payment service not configured.');
+  }
+
+  try {
+    // Process payment using Square Payments API
+    const paymentsApi = squareClient.paymentsApi;
+    
+    const requestBody = {
+      sourceId: sourceId,
+      idempotencyKey: idempotencyKey,
+      amountMoney: {
+        amount: amountInCents,
+        currency: 'USD',
+      },
+      locationId: squareLocationId,
+      note: `Team Registration - Team ID: ${teamId || 'N/A'}, Event ID: ${eventId || 'N/A'}`,
+    };
+
+    const response = await paymentsApi.createPayment(requestBody);
+
+    if (response.result && response.result.payment) {
+      const payment = response.result.payment;
+      console.log(`Payment processed successfully. Payment ID: ${payment.id}, Status: ${payment.status}`);
+      
+      return {
+        success: true,
+        paymentId: payment.id,
+        status: payment.status,
+        amount: amountInCents,
+        receiptUrl: payment.receiptUrl,
+      };
+    } else {
+      throw new Error('Payment response did not contain payment data');
+    }
+  } catch (error) {
+    console.error('Error processing Square payment:', error);
+    
+    // Handle Square-specific errors
+    if (error.errors && error.errors.length > 0) {
+      const squareError = error.errors[0];
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        `Square payment error: ${squareError.detail || squareError.code || 'Unknown error'}`
+      );
+    } else {
+      throw new functions.https.HttpsError('internal', `Failed to process payment: ${error.message}`);
+    }
+  }
+});
 
 // Cloud Function to send SMS verification code
 exports.sendVerificationSMS = functions.https.onCall(async (data, context) => {
