@@ -75,17 +75,45 @@ workflows:
       - name: Install CocoaPods dependencies
         script: |
           cd ios
+          echo "Cleaning previous CocoaPods installation..."
+          rm -rf Pods Podfile.lock .symlinks
+          
           echo "Installing CocoaPods dependencies..."
-          pod install 2>&1 | tee /tmp/pod_install.log || {
+          pod install --repo-update 2>&1 | tee /tmp/pod_install.log || {
             echo "Pod install failed. Checking logs..."
             cat /tmp/pod_install.log | tail -50
-            echo "Attempting with --no-repo-update..."
-            pod install --no-repo-update || {
-              echo "Pod install failed even without repo update. Full error:"
+            echo "Attempting clean install..."
+            pod deintegrate || true
+            pod install --repo-update || {
+              echo "Pod install failed. Full error:"
               cat /tmp/pod_install.log
               exit 1
             }
           }
+          
+          echo "Verifying CocoaPods installation..."
+          if [ ! -d "Pods" ]; then
+            echo "Error: Pods directory not created"
+            exit 1
+          fi
+          if [ ! -f "Podfile.lock" ]; then
+            echo "Error: Podfile.lock not created"
+            exit 1
+          fi
+          if [ ! -f "Runner.xcworkspace" ]; then
+            echo "Error: Runner.xcworkspace not found"
+            exit 1
+          fi
+          
+          # Verify xcfilelist files exist (these are critical for the build)
+          if [ -d "Pods/Target Support Files/Pods-Runner" ]; then
+            echo "✅ Pods Target Support Files directory exists"
+            ls -la "Pods/Target Support Files/Pods-Runner/" || true
+          else
+            echo "⚠️ Warning: Pods Target Support Files directory not found"
+          fi
+          
+          echo "✅ CocoaPods installed successfully"
           cd ..
 
       - name: Use provisioning profiles
