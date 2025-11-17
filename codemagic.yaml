@@ -74,36 +74,54 @@ workflows:
 
       - name: Install CocoaPods dependencies
         script: |
+          set -e
           cd ios
           echo "Cleaning previous CocoaPods installation..."
           rm -rf Pods Podfile.lock .symlinks
           
+          echo "Removing master repo to suppress warning..."
+          pod repo remove master 2>/dev/null || true
+          
           echo "Installing CocoaPods dependencies..."
-          pod install --repo-update 2>&1 | tee /tmp/pod_install.log || {
-            echo "Pod install failed. Checking logs..."
+          if pod install --repo-update 2>&1 | tee /tmp/pod_install.log; then
+            echo "✅ Pod install completed successfully"
+          else
+            POD_EXIT_CODE=${PIPESTATUS[0]}
+            echo "Pod install failed with exit code $POD_EXIT_CODE. Checking logs..."
             cat /tmp/pod_install.log | tail -50
             echo "Attempting clean install..."
             pod deintegrate || true
-            pod install --repo-update || {
-              echo "Pod install failed. Full error:"
+            if ! pod install --repo-update; then
+              echo "Pod install failed even after deintegration. Full error:"
               cat /tmp/pod_install.log
               exit 1
-            }
-          }
+            fi
+          fi
           
           echo "Verifying CocoaPods installation..."
+          echo "Current directory: $(pwd)"
+          echo "Contents of ios directory:"
+          ls -la
+          
           if [ ! -d "Pods" ]; then
-            echo "Error: Pods directory not created"
+            echo "❌ Error: Pods directory not created"
             exit 1
           fi
+          echo "✅ Pods directory exists"
+          
           if [ ! -f "Podfile.lock" ]; then
-            echo "Error: Podfile.lock not created"
+            echo "❌ Error: Podfile.lock not created"
             exit 1
           fi
-          if [ ! -f "Runner.xcworkspace" ]; then
-            echo "Error: Runner.xcworkspace not found"
+          echo "✅ Podfile.lock exists"
+          
+          if [ ! -d "Runner.xcworkspace" ] && [ ! -f "Runner.xcworkspace" ]; then
+            echo "❌ Error: Runner.xcworkspace not found"
+            echo "Checking if workspace exists with different name..."
+            ls -la *.xcworkspace 2>/dev/null || echo "No .xcworkspace files found"
             exit 1
           fi
+          echo "✅ Runner.xcworkspace exists"
           
           # Verify xcfilelist files exist (these are critical for the build)
           if [ -d "Pods/Target Support Files/Pods-Runner" ]; then
@@ -113,7 +131,7 @@ workflows:
             echo "⚠️ Warning: Pods Target Support Files directory not found"
           fi
           
-          echo "✅ CocoaPods installed successfully"
+          echo "✅ CocoaPods installed and verified successfully"
           cd ..
 
       - name: Use provisioning profiles
