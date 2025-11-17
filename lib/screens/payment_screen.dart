@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:square_in_app_payments/in_app_payments.dart';
-import 'package:square_in_app_payments/models.dart';
+import 'package:square_in_app_payments/models.dart' hide Card;
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'dart:math';
@@ -38,13 +37,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
   final _expiryController = TextEditingController();
   final _cvvController = TextEditingController();
   final _nameController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
 
   final _teamService = TeamService();
   final _pickleballTeamService = PickleballTeamService();
 
   String _cardType = 'unknown';
-  int _maxCvvLength = 3;
 
   // Square Application ID - Replace with your actual ID
   static const String _squareApplicationId = 'sandbox-sq0idb-X0C_ewi4_MT4Xd-bqO_hew';
@@ -61,7 +58,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       
       // Check for Apple Pay availability (iOS only)
       try {
-        final applePayAvailable = await InAppPayments.canUseApplePay();
+        final applePayAvailable = await InAppPayments.canUseApplePay;
         setState(() {
           _applePayAvailable = applePayAvailable;
         });
@@ -75,7 +72,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
       // Check for Google Pay availability (Android only)
       try {
-        final googlePayAvailable = await InAppPayments.canUseGooglePay();
+        final googlePayAvailable = await InAppPayments.canUseGooglePay;
         setState(() {
           _googlePayAvailable = googlePayAvailable;
         });
@@ -120,29 +117,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
     if (digitsOnly.startsWith('4')) {
       setState(() {
         _cardType = 'visa';
-        _maxCvvLength = 3;
       });
     } else if (digitsOnly.startsWith('5') || digitsOnly.startsWith('2')) {
       setState(() {
         _cardType = 'mastercard';
-        _maxCvvLength = 3;
       });
     } else if (digitsOnly.startsWith('3')) {
       if (digitsOnly.startsWith('34') || digitsOnly.startsWith('37')) {
         setState(() {
           _cardType = 'amex';
-          _maxCvvLength = 4;
         });
       } else {
         setState(() {
           _cardType = 'diners';
-          _maxCvvLength = 3;
         });
       }
     } else {
       setState(() {
         _cardType = 'unknown';
-        _maxCvvLength = 3;
       });
     }
   }
@@ -196,10 +188,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Future<void> _processPaymentWithApplePay() async {
-    if (!_squareInitialized || !_applePayAvailable) {
+    if (!_squareInitialized) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Apple Pay is not available. Please use another payment method.'),
+          content: Text('Payment system not initialized. Please try again.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -211,45 +203,41 @@ class _PaymentScreenState extends State<PaymentScreen> {
     });
 
     try {
-      // Start Apple Pay flow
-      await InAppPayments.startApplePayFlow(
-        amount: widget.amount,
-        currencyCode: 'USD',
-        onApplePayNonceRequestSuccess: (CardDetails result) async {
+      // Start card entry flow (automatically shows Apple Pay on iOS if available)
+      await InAppPayments.startCardEntryFlow(
+        onCardNonceRequestSuccess: (CardDetails result) async {
           try {
             // Process payment with the nonce
             await _processPaymentWithNonce(result.nonce);
             
-            // Complete Apple Pay
-            await InAppPayments.completeApplePayAuthorization(
-              isSuccess: true,
+            // Complete the card entry
+            await InAppPayments.completeCardEntry(
+              onCardEntryComplete: () {
+                print('✅ Payment completed successfully');
+              },
             );
-            print('✅ Apple Pay completed successfully');
           } catch (e) {
-            print('❌ Error processing Apple Pay: $e');
-            // Complete with error
-            await InAppPayments.completeApplePayAuthorization(
-              isSuccess: false,
-            );
-            print('Apple Pay authorization failed');
+            print('❌ Error processing payment: $e');
+            // Show error to user
+            await InAppPayments.showCardNonceProcessingError(e.toString());
           }
         },
-        onApplePayCancel: () {
-          print('Apple Pay cancelled by user');
+        onCardEntryCancel: () {
+          print('Payment cancelled by user');
           setState(() {
             _isProcessing = false;
           });
         },
       );
     } catch (e) {
-      print('❌ Error starting Apple Pay: $e');
+      print('❌ Error starting payment: $e');
       setState(() {
         _isProcessing = false;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error starting Apple Pay: $e'),
+            content: Text('Error starting payment: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -258,10 +246,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Future<void> _processPaymentWithGooglePay() async {
-    if (!_squareInitialized || !_googlePayAvailable) {
+    if (!_squareInitialized) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Google Pay is not available. Please use another payment method.'),
+          content: Text('Payment system not initialized. Please try again.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -273,46 +261,41 @@ class _PaymentScreenState extends State<PaymentScreen> {
     });
 
     try {
-      // Start Google Pay flow
-      await InAppPayments.startGooglePayFlow(
-        price: widget.amount.toStringAsFixed(2),
-        priceStatus: 'FINAL',
-        currencyCode: 'USD',
-        onGooglePayNonceRequestSuccess: (CardDetails result) async {
+      // Start card entry flow (automatically shows Google Pay on Android if available)
+      await InAppPayments.startCardEntryFlow(
+        onCardNonceRequestSuccess: (CardDetails result) async {
           try {
             // Process payment with the nonce
             await _processPaymentWithNonce(result.nonce);
             
-            // Complete Google Pay
-            await InAppPayments.completeGooglePayAuthorization(
-              isSuccess: true,
+            // Complete the card entry
+            await InAppPayments.completeCardEntry(
+              onCardEntryComplete: () {
+                print('✅ Payment completed successfully');
+              },
             );
-            print('✅ Google Pay completed successfully');
           } catch (e) {
-            print('❌ Error processing Google Pay: $e');
-            // Complete with error
-            await InAppPayments.completeGooglePayAuthorization(
-              isSuccess: false,
-            );
-            print('Google Pay authorization failed');
+            print('❌ Error processing payment: $e');
+            // Show error to user
+            await InAppPayments.showCardNonceProcessingError(e.toString());
           }
         },
-        onGooglePayCancel: () {
-          print('Google Pay cancelled by user');
+        onCardEntryCancel: () {
+          print('Payment cancelled by user');
           setState(() {
             _isProcessing = false;
           });
         },
       );
     } catch (e) {
-      print('❌ Error starting Google Pay: $e');
+      print('❌ Error starting payment: $e');
       setState(() {
         _isProcessing = false;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error starting Google Pay: $e'),
+            content: Text('Error starting payment: $e'),
             backgroundColor: Colors.red,
           ),
         );
