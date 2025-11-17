@@ -19,48 +19,41 @@ workflows:
         APP_STORE_APPLE_ID: 6754937234
 
     scripts:
-      - name: Clean Flutter and iOS folders
+      - name: Set up local.properties
         script: |
-          flutter clean
-          rm -rf ios/Pods ios/Podfile.lock ios/.symlinks
+          flutter sdk-path | xargs -I {} echo "sdk.dir={}" > $CM_BUILD_DIR/android/local.properties || true
+
+      - name: 🔢 Auto increment version & build number
+        script: |
+          INFO_PLIST=$INFO_PLIST_PATH
+          CURRENT_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST" || echo "1.0.0")
+          CURRENT_BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST" || echo "0")
+          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
+          NEW_PATCH=$((patch + 1))
+          NEW_VERSION="${major}.${minor}.${NEW_PATCH}"
+          NEW_BUILD=$((CURRENT_BUILD + 1))
+          echo "🔧 Updating Info.plist → Version=$NEW_VERSION Build=$NEW_BUILD"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
+
+      - name: Get Flutter dependencies
+        script: |
           flutter pub get
 
-      - name: Install CocoaPods
+      - name: Install CocoaPods dependencies
         script: |
-          set -e
-          echo "Ensuring Flutter dependencies are ready..."
-          flutter pub get
-          
-          echo "Verifying Flutter Generated.xcconfig exists..."
-          if [ ! -f "ios/Flutter/Generated.xcconfig" ]; then
-            echo "Error: Flutter/Generated.xcconfig not found after flutter pub get"
-            exit 1
-          fi
-          
           cd ios
           echo "Installing CocoaPods dependencies..."
-          pod install --verbose 2>&1 || {
-            echo "Pod install failed, checking for errors..."
-            echo "Attempting to update pod repo and retry..."
-            pod repo update
-            pod install --verbose
+          pod install 2>&1 | tee /tmp/pod_install.log || {
+            echo "Pod install failed. Checking logs..."
+            cat /tmp/pod_install.log | tail -50
+            echo "Attempting with --no-repo-update..."
+            pod install --no-repo-update || {
+              echo "Pod install failed even without repo update. Full error:"
+              cat /tmp/pod_install.log
+              exit 1
+            }
           }
-          
-          echo "Verifying installation..."
-          if [ ! -d "Pods" ]; then
-            echo "Error: Pods directory not created"
-            echo "Contents of ios directory:"
-            ls -la
-            exit 1
-          fi
-          if [ ! -f "Podfile.lock" ]; then
-            echo "Error: Podfile.lock not created"
-            echo "Contents of ios directory:"
-            ls -la
-            exit 1
-          fi
-          
-          echo "✅ CocoaPods installed successfully"
           cd ..
 
       - name: Use provisioning profiles
