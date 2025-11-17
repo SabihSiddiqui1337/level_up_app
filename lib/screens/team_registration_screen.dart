@@ -1077,12 +1077,14 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                             _coachEmailController.text = currentUser.email;
                             _hasUnsavedChanges = true;
                             _hasAttemptedValidation = true; // Enable validation
+                            // Clear team name error if it exists
+                            _fieldErrors.remove('teamName');
                           });
                           // Trigger validation after filling
                           _validateField('coachName', currentUser.name);
                           _validateField('coachPhone', currentUser.phone);
                           _validateField('coachEmail', currentUser.email);
-                          // Also validate team name field
+                          // Also validate team name field (this will clear error if valid)
                           _validateField('teamName', _teamNameController.text);
                           if (_formKey.currentState != null) {
                             _formKey.currentState!.validate();
@@ -1392,6 +1394,11 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                         }
                       }
                       
+                      final currentUser = _authService.currentUser;
+                      final isCurrentUser = currentUser != null && player.userId == currentUser.id;
+                      final isManagement = _authService.isManagement;
+                      final canEditDelete = isManagement || !isCurrentUser;
+                      
                       return Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
@@ -1403,7 +1410,7 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                                 ? Text(player.name[0].toUpperCase())
                                 : null,
                           ),
-                          title: Text(player.name),
+                          title: Text(isCurrentUser ? '${player.name} (me)' : player.name),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1424,32 +1431,34 @@ class _TeamRegistrationScreenState extends State<TeamRegistrationScreen> {
                                   );
                                 }
                               : null,
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (player.userId != null && linkedUser != null)
-                                IconButton(
-                                  icon: const Icon(Icons.person, size: 20),
-                                  tooltip: 'View Profile',
-                                  onPressed: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => PlayerStatsScreen(user: linkedUser!),
+                          trailing: canEditDelete
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (player.userId != null && linkedUser != null)
+                                      IconButton(
+                                        icon: const Icon(Icons.person, size: 20),
+                                        tooltip: 'View Profile',
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => PlayerStatsScreen(user: linkedUser!),
+                                            ),
+                                          );
+                                        },
                                       ),
-                                    );
-                                  },
-                                ),
-                              IconButton(
-                                icon: const Icon(Icons.edit),
-                                onPressed: () => _editPlayer(index),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete),
-                                onPressed: () => _removePlayer(index),
-                              ),
-                            ],
-                          ),
+                                    IconButton(
+                                      icon: const Icon(Icons.edit),
+                                      onPressed: () => _editPlayer(index),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete),
+                                      onPressed: () => _removePlayer(index),
+                                    ),
+                                  ],
+                                )
+                              : null,
                         ),
                       );
                     },
@@ -1902,6 +1911,7 @@ class _PlayerDialogState extends State<_PlayerDialog> {
                       ),
                       child: ListView.builder(
                         shrinkWrap: true,
+                        physics: const ClampingScrollPhysics(),
                         itemCount: _searchResults.length,
                         itemBuilder: (context, index) {
                           final user = _searchResults[index];

@@ -400,9 +400,9 @@ class _PickleballProcessRegistrationScreenState
                           const SizedBox(height: 20),
 
                           // Event and Team info
-                          _buildPaymentRow('Event', widget.event.title, false),
+                          _buildPaymentRow('Event Name', widget.event.title, false),
                           const SizedBox(height: 4),
-                          _buildPaymentRow('Team', widget.team.name, false),
+                          _buildPaymentRow('Team Name', widget.team.name, false),
                           const SizedBox(height: 16),
 
                           // Discount Code Section (only show if not free event)

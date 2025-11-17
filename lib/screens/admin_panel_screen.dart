@@ -1307,7 +1307,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                             vertical: 14,
                                             horizontal: 16,
                                           ),
-                                      prefixText: '\$ ',
+                                      prefixText: amountController.text.toUpperCase().trim() == 'FREE' ? '' : '\$ ',
                                     ),
                                     onChanged: (value) {
                                       if (amountError && value.trim().isNotEmpty) {
@@ -1315,6 +1315,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                                           amountError = false;
                                         });
                                       }
+                                      // Update prefix when typing
+                                      setDialogState(() {
+                                        // Force rebuild to update prefixText
+                                      });
                                     },
                                     onTap: () {
                                       FocusScope.of(context).unfocus();

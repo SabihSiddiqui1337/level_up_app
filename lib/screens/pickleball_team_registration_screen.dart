@@ -884,6 +884,11 @@ class _PickleballTeamRegistrationScreenState
                     itemCount: _players.length,
                     itemBuilder: (context, index) {
                       final player = _players[index];
+                      final currentUser = _authService.currentUser;
+                      final isCurrentUser = currentUser != null && player.userId == currentUser.id;
+                      final isManagement = _authService.isManagement;
+                      final canEditDelete = isManagement || !isCurrentUser;
+                      
                       return Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
@@ -897,23 +902,25 @@ class _PickleballTeamRegistrationScreenState
                               ),
                             ),
                           ),
-                          title: Text(player.name),
+                          title: Text(isCurrentUser ? '${player.name} (me)' : player.name),
                           subtitle: Text('DUPR: ${player.duprRating}'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                onPressed: () => _editPlayer(index),
-                                icon: const Icon(Icons.edit),
-                                color: const Color(0xFF2196F3),
-                              ),
-                              IconButton(
-                                onPressed: () => _deletePlayer(index),
-                                icon: const Icon(Icons.delete),
-                                color: Colors.red,
-                              ),
-                            ],
-                          ),
+                          trailing: canEditDelete
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      onPressed: () => _editPlayer(index),
+                                      icon: const Icon(Icons.edit),
+                                      color: const Color(0xFF2196F3),
+                                    ),
+                                    IconButton(
+                                      onPressed: () => _deletePlayer(index),
+                                      icon: const Icon(Icons.delete),
+                                      color: Colors.red,
+                                    ),
+                                  ],
+                                )
+                              : null,
                         ),
                       );
                     },
@@ -1083,7 +1090,7 @@ class _PickleballPlayerDialogState extends State<_PickleballPlayerDialog> {
                 ),
                 const SizedBox(height: 8),
                 
-                // Search results
+                  // Search results
                 if (_isSearching && _searchResults.isNotEmpty)
                   Container(
                     constraints: const BoxConstraints(maxHeight: 200),
@@ -1093,6 +1100,7 @@ class _PickleballPlayerDialogState extends State<_PickleballPlayerDialog> {
                     ),
                     child: ListView.builder(
                       shrinkWrap: true,
+                      physics: const ClampingScrollPhysics(),
                       itemCount: _searchResults.length,
                       itemBuilder: (context, index) {
                         final user = _searchResults[index];

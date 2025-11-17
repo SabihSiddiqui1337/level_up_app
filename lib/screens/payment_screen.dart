@@ -432,15 +432,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
       });
       
       if (mounted) {
+        String errorMessage = 'Payment failed. Please try again.';
+        if (e.toString().contains('network') || e.toString().contains('connection')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (e.toString().contains('card') || e.toString().contains('declined')) {
+          errorMessage = 'Card declined. Please check your card details and try again.';
+        } else if (e.toString().contains('Firebase')) {
+          errorMessage = 'Service error. Please try again later.';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Payment failed: ${e.toString()}'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 5),
           ),
         );
       }
-      rethrow;
+      // Don't rethrow to prevent showing system error dialogs
     }
   }
 
@@ -539,8 +548,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Text('Team: ${widget.team.name}'),
-                    Text('Event: ${widget.event.title}'),
+                    Text('Team Name: ${widget.team.name}'),
+                    Text('Event Name: ${widget.event.title}'),
                     const Divider(),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,

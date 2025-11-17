@@ -152,7 +152,7 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                                 text: TextSpan(
                                   children: [
                                     const TextSpan(
-                                      text: 'Team name: ',
+                                      text: 'Team Name: ',
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
@@ -276,6 +276,7 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                                     // Get user profile if player is linked to a user
                                     User? linkedUser;
                                     final authService = AuthService();
+                                    final currentUser = authService.currentUser;
                                     if (player.userId != null) {
                                       final users = authService.users;
                                       try {
@@ -284,6 +285,8 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                                         linkedUser = null;
                                       }
                                     }
+                                    
+                                    final isCurrentUser = currentUser != null && player.userId == currentUser.id;
                                     
                                     // Price per player is the event amount
                                     final pricePerPlayer = _pricePerPlayer;
@@ -307,7 +310,7 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  player.name,
+                                                  isCurrentUser ? '${player.name} (me)' : player.name,
                                                   style: const TextStyle(
                                                     fontSize: 14,
                                                     fontWeight: FontWeight.w600,
@@ -593,9 +596,9 @@ class _ProcessRegistrationScreenState extends State<ProcessRegistrationScreen> {
                       child: Column(
                         children: [
                           // Event and Team info
-                          _buildPaymentRow('Event', widget.event.title, false),
+                          _buildPaymentRow('Event Name', widget.event.title, false),
                           const SizedBox(height: 4),
-                          _buildPaymentRow('Team name', widget.team.name, false),
+                          _buildPaymentRow('Team Name', widget.team.name, false),
                           const SizedBox(height: 16),
                           if (_isFreeEvent) ...[
                             _buildPaymentRow(

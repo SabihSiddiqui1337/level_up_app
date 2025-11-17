@@ -31,7 +31,7 @@ android {
 
     defaultConfig {
         applicationId = "com.levelupsports.app"
-        minSdk = flutter.minSdkVersion
+        minSdk = 28
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
