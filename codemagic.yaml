@@ -28,27 +28,35 @@ workflows:
       - name: Install CocoaPods
         script: |
           set -e
-          echo "Checking Flutter Generated.xcconfig..."
+          echo "Ensuring Flutter dependencies are ready..."
+          flutter pub get
+          
+          echo "Verifying Flutter Generated.xcconfig exists..."
           if [ ! -f "ios/Flutter/Generated.xcconfig" ]; then
-            echo "Error: Flutter/Generated.xcconfig not found. Running flutter pub get..."
-            flutter pub get
+            echo "Error: Flutter/Generated.xcconfig not found after flutter pub get"
+            exit 1
           fi
           
           cd ios
-          echo "Deintegrating existing pods..."
-          pod deintegrate || true
-          echo "Cleaning pod cache..."
-          pod cache clean --all || true
-          echo "Installing pods..."
-          pod install --repo-update --verbose
+          echo "Installing CocoaPods dependencies..."
+          pod install --verbose 2>&1 || {
+            echo "Pod install failed, checking for errors..."
+            echo "Attempting to update pod repo and retry..."
+            pod repo update
+            pod install --verbose
+          }
           
-          echo "Checking installation results..."
+          echo "Verifying installation..."
           if [ ! -d "Pods" ]; then
             echo "Error: Pods directory not created"
+            echo "Contents of ios directory:"
+            ls -la
             exit 1
           fi
           if [ ! -f "Podfile.lock" ]; then
             echo "Error: Podfile.lock not created"
+            echo "Contents of ios directory:"
+            ls -la
             exit 1
           fi
           
