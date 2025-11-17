@@ -25,16 +25,48 @@ workflows:
 
       - name: 🔢 Auto increment version & build number
         script: |
-          INFO_PLIST=$INFO_PLIST_PATH
-          CURRENT_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST" || echo "1.0.0")
-          CURRENT_BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST" || echo "0")
+          set -e
+          
+          # Read current version from pubspec.yaml (Flutter's source of truth)
+          VERSION_LINE=$(grep "^version:" pubspec.yaml || echo "version: 2.0.0+45")
+          CURRENT_VERSION=$(echo "$VERSION_LINE" | sed 's/version: //' | sed 's/+.*//')
+          CURRENT_BUILD=$(echo "$VERSION_LINE" | sed 's/.*+//')
+          
+          # Ensure we have valid values
+          if [ -z "$CURRENT_VERSION" ]; then
+            CURRENT_VERSION="2.0.0"
+          fi
+          if [ -z "$CURRENT_BUILD" ]; then
+            CURRENT_BUILD="45"
+          fi
+          
+          # Parse version components
           IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
+          
+          # Ensure patch is a number
+          if ! [[ "$patch" =~ ^[0-9]+$ ]]; then
+            patch=0
+          fi
+          if ! [[ "$CURRENT_BUILD" =~ ^[0-9]+$ ]]; then
+            CURRENT_BUILD=45
+          fi
+          
+          # Increment patch version and build number
           NEW_PATCH=$((patch + 1))
           NEW_VERSION="${major}.${minor}.${NEW_PATCH}"
           NEW_BUILD=$((CURRENT_BUILD + 1))
-          echo "🔧 Updating Info.plist → Version=$NEW_VERSION Build=$NEW_BUILD"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$INFO_PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" "$INFO_PLIST"
+          
+          echo "🔧 Current: Version=$CURRENT_VERSION Build=$CURRENT_BUILD"
+          echo "🔧 Updating to: Version=$NEW_VERSION Build=$NEW_BUILD"
+          
+          # Update pubspec.yaml (works on both macOS and Linux)
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s/^version: .*/version: $NEW_VERSION+$NEW_BUILD/" pubspec.yaml
+          else
+            sed -i "s/^version: .*/version: $NEW_VERSION+$NEW_BUILD/" pubspec.yaml
+          fi
+          
+          echo "✅ Updated pubspec.yaml to version $NEW_VERSION+$NEW_BUILD"
 
       - name: Get Flutter dependencies
         script: |
